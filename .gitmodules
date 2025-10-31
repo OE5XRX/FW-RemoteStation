@@ -1,0 +1,33 @@
+[submodule "extern/CMSIS"]
+	path = extern/arm/CMSIS
+	url = ../../ARM-software/CMSIS_5.git
+
+[submodule "extern/CMSIS-DEVICE-F3"]
+	path = extern/arm/CMSIS-DEVICE-F3
+	url = ../../STMicroelectronics/cmsis-device-f3.git
+
+[submodule "extern/STM32F3xx_HAL_Driver"]
+	path = extern/arm/STM32F3xx_HAL_Driver
+	url = ../../STMicroelectronics/stm32f3xx-hal-driver.git
+
+#[submodule "extern/unity"]
+#	path = extern/unity
+#	url = ../../ThrowTheSwitch/Unity.git
+
+[submodule "extern/tinyusb"]
+	path = extern/arm/tinyusb
+	url = ../../hathach/tinyusb.git
+	
+[submodule "extern/FreeRTOS"]
+	path = extern/arm/FreeRTOS
+	url = ../../FreeRTOS/FreeRTOS-Kernel.git
+	
+[submodule "extern/FreeRTOS-Cpp"]
+	path = extern/common/FreeRTOS-Cpp
+	url = ../../jonenz/FreeRTOS-Cpp.git
+[submodule "extern/cpputest-for-freertos"]
+	path = extern/host/cpputest-for-freertos
+	url = ../../covemountainsoftware/cpputest-for-freertos.git
+[submodule "extern/host/fake-timers"]
+	path = extern/host/fake-timers
+	url = ../../covemountainsoftware/fake-timers

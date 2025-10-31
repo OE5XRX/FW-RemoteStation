@@ -1,0 +1,37 @@
+// Name these taks the way you want
+// Configure command in make to use desired amount of threads (now 4)
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build all",
+      "group": "build",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "build",
+        "--target",
+        "all"
+      ]
+    },
+    {
+      "label": "Build clean",
+      "group": "build",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "build",
+        "--target",
+        "clean"
+      ]
+    },
+    {
+      "label": "Build Unittest",
+      "group": "build",
+      "type": "shell",
+      "command": "cmake -S . -B build-ut --preset unittest -DCMAKE_BUILD_TYPE=Debug && cmake --build build-ut --target all"
+    }
+  ]
+}

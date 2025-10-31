@@ -1,0 +1,5 @@
+if(CMAKE_CROSSCOMPILING MATCHES TRUE)
+  add_subdirectory(stm32)
+else()
+  add_subdirectory(host)
+endif()

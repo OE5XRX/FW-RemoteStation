@@ -1,0 +1,10 @@
+checkersReport
+unmatchedSuppression
+missingIncludeSystem
+internalAstError
+noExplicitConstructor
+
+cstyleCast:*/hal/stm32/*
+*:*/extern/*
+
+unusedFunction

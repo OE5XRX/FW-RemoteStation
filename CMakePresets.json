@@ -1,0 +1,156 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 26,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "cross-compile-debug",
+      "displayName": "Cross-Compile Debug",
+      "description": "Build Firmware for STM32 (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "installDir": "${sourceDir}/build",
+      "toolchainFile": "${sourceDir}/cmake/gcc-arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "cross-compile-release",
+      "displayName": "Cross-Compile Release",
+      "description": "Build Firmware for STM32 (Release)",
+      "inherits": "cross-compile-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "unittest-debug",
+      "displayName": "Unittest Debug",
+      "description": "Build Unittests for the host system (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-ut",
+      "installDir": "${sourceDir}/build-ut",
+      "cacheVariables": {
+        "UNITTEST": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "unittest-release",
+      "displayName": "Unittest Release",
+      "description": "Build Unittests for the host system (Release)",
+      "inherits": "unittest-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-cross-debug",
+      "configurePreset": "cross-compile-debug"
+    },
+    {
+      "name": "build-unittest-debug",
+      "configurePreset": "unittest-debug"
+    },
+    {
+      "name": "build-cross-release",
+      "configurePreset": "cross-compile-release"
+    },
+    {
+      "name": "build-unittest-release",
+      "configurePreset": "unittest-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-unittest-debug",
+      "configurePreset": "unittest-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": true
+      }
+    },
+    {
+      "name": "test-unittest-release",
+      "configurePreset": "unittest-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": true
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "cross-compile-debug",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "cross-compile-debug"
+        },
+        {
+          "type": "build",
+          "name": "build-cross-debug"
+        }
+      ]
+    },
+    {
+      "name": "unittest-debug",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "unittest-debug"
+        },
+        {
+          "type": "build",
+          "name": "build-unittest-debug"
+        },
+        {
+          "type": "test",
+          "name": "test-unittest-debug"
+        }
+      ]
+    },
+    {
+      "name": "cross-compile-release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "cross-compile-release"
+        },
+        {
+          "type": "build",
+          "name": "build-cross-release"
+        }
+      ]
+    },
+    {
+      "name": "unittest-release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "unittest-release"
+        },
+        {
+          "type": "build",
+          "name": "build-unittest-release"
+        },
+        {
+          "type": "test",
+          "name": "test-unittest-release"
+        }
+      ]
+    }
+  ]
+}

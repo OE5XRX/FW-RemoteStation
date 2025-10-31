@@ -1,0 +1,71 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  IMAGE_NAME: ghcr.io/peterus/oe5xrx-fw
+
+jobs:
+  cmake-build:
+    strategy:
+      matrix:
+        CMAKE_PRESET: [cross-compile, unittest]
+        BUILD_TYPE: [release, debug]
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+      
+    - name: Run CMake
+      uses: devcontainers/ci@v0.3
+      with:
+        cacheFrom: ${{ env.IMAGE_NAME }}
+        push: never
+        runCmd: cmake --workflow --preset ${{ matrix.CMAKE_PRESET }}-${{ matrix.BUILD_TYPE }}
+    
+  formatting-check:
+    name: clang-format check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run clang-format style check for C/C++ programs.
+        uses: jidicula/clang-format-action@v4.15.0
+        with:
+          clang-format-version: '18'
+          check-path: src
+
+  # build docker container again and push it if everything is okay
+  devcontainer-build:
+    runs-on: ubuntu-latest
+    needs: [cmake-build, formatting-check]
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2 
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Pre-build dev container image
+      uses: devcontainers/ci@v0.3
+      with:
+        imageName: ${{ env.IMAGE_NAME }}
+        push: always
