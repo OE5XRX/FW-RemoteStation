@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 env:
-  IMAGE_NAME: ghcr.io/peterus/oe5xrx-fw
+  IMAGE_NAME: ghcr.io/oe5xrx/fw-remotestation
 
 jobs:
   cmake-build:
