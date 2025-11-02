@@ -8,6 +8,7 @@ add_executable(
   test-${PROJECT_NAME}
   fixed_string_test.cpp
   history_test.cpp
+  ring_buffer_test.cpp
 )
 
 target_link_libraries(
