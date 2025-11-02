@@ -2,32 +2,73 @@
 #include "../../shell/log.h"
 #include "stm32f3xx_hal.h"
 
+#include <optional>
+
 Uart *Uart::s_instance = nullptr;
 
-Uart::Uart(FreeRTOS::QueueBase<char> *inputQueue, FreeRTOS::QueueBase<char> *outputQueue) : StaticTask<UART_STACK_SIZE>(tskIDLE_PRIORITY + 2, "UartTask"), _inputQueue(inputQueue), _outputQueue(outputQueue) {
+static uint8_t s_rxByte = 0;
+static uint8_t s_txByte = 0;
+
+Uart::Uart(FreeRTOS::QueueBase<LINE_STRING> *inputQueue, FreeRTOS::QueueBase<LINE_STRING> *outputQueue) : StaticTask<UART_STACK_SIZE>(tskIDLE_PRIORITY + 2, "UartTask"), _inputQueue(inputQueue), _outputQueue(outputQueue) {
   logger.assert(s_instance == nullptr, "Only one Uart instance supported");
   s_instance = this;
   initSerial();
 }
 
 void Uart::taskFunction() {
-  // Starte Byteweises RX per Interrupt
-  static uint8_t rxByte;
-  HAL_UART_Receive_IT(&_huart, &rxByte, 1);
+  // Starte Byteweises RX per Interrupt (einmalig)
+  HAL_UART_Receive_IT(&_huart, &s_rxByte, 1);
 
   while (true) {
-    // 1) RX Buffer -> Input Queue
-    while (auto rxByte = _rxBuffer.try_pop()) {
-      _inputQueue->sendToBack(static_cast<char>(*rxByte));
+    // 1) RX Buffer -> Zeilen bilden -> Input Queue
+    while (auto rb = _rxBuffer.try_pop()) {
+      uint8_t b = *rb;
+      if (b == '\n' || b == '\r') {
+        if (_rxLine.length() > 0) {
+          _inputQueue->sendToBack(_rxLine);
+          _rxLine.clear();
+        } else {
+          LINE_STRING empty;
+          _inputQueue->sendToBack(empty);
+        }
+      } else {
+        // Normales Zeichen anhängen (falls Platz)
+        if (_rxLine.length() < CLI_MAX_LINE_LENGTH) {
+          _rxLine.append(static_cast<char>(b));
+        } else {
+          // Zeile voll -> abschicken und neuen Beginn mit aktuellem Zeichen
+          _inputQueue->sendToBack(_rxLine);
+          _rxLine.clear();
+          _rxLine.append(static_cast<char>(b));
+        }
+      }
     }
 
-    // 2) Output Queue -> TX Buffer
+    // 2) Output Queue (LINE_STRING) -> TX RingBuffer (byteweise)
     while (!_txBuffer.full() && _outputQueue->isValid()) {
-      auto txOpt = _outputQueue->receive(0);
-      if (!txOpt.has_value())
+      auto optLine = _outputQueue->receive(0);
+      if (!optLine.has_value())
         break;
 
-      _txBuffer.try_push(static_cast<uint8_t>(*txOpt));
+      LINE_STRING line = *optLine;
+      // Versuche alle Bytes der Linie in den TX-Ring zu pushen.
+      size_t i = 0;
+      for (; i < line.length(); ++i) {
+        if (!_txBuffer.try_push(static_cast<uint8_t>(line.get(i)))) {
+          break; // ring voll
+        }
+      }
+
+      if (i < line.length()) {
+        // Rest der Linie zurück in die Output-Queue (ans Ende)
+        LINE_STRING rem;
+        for (size_t j = i; j < line.length(); ++j) {
+          rem.append(line.get(j));
+        }
+        _outputQueue->sendToBack(rem);
+        vTaskDelay(pdMS_TO_TICKS(1));
+        break; // TX-Ring voll, weiter in nächster Iteration
+      }
     }
 
     // 3) TX Buffer -> UART (falls nicht busy)
@@ -46,14 +87,16 @@ void Uart::startTxIfIdle() {
   if (!nextByte.has_value())
     return;
 
-  // Starte non-blocking TX
-  uint8_t txByte           = *nextByte;
-  _txBusy                  = true;
-  HAL_StatusTypeDef status = HAL_UART_Transmit_IT(&_huart, &txByte, 1);
+  // Lege Byte in stabilen Speicher und starte non-blocking TX
+  s_txByte = *nextByte;
+  _txBusy  = true;
+
+  HAL_StatusTypeDef status = HAL_UART_Transmit_IT(&_huart, &s_txByte, 1);
 
   if (status != HAL_OK) {
+    // Bei Fehler zurück in Buffer
     _txBusy = false;
-    _txBuffer.try_push(txByte); // Zurück in Buffer
+    _txBuffer.try_push(s_txByte);
   }
 }
 
@@ -109,25 +152,32 @@ void Uart::initSerial() {
 
 // C-Callbacks
 extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-  if (Uart::s_instance && huart == &Uart::s_instance->_huart) {
-    Uart::s_instance->onTxComplete();
-  }
+  Uart *inst = Uart::getInstance();
+  if (inst == nullptr)
+    return;
+  if (huart != &inst->_huart)
+    return;
+
+  inst->onTxComplete();
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  if (!Uart::s_instance || huart != &Uart::s_instance->_huart)
+  Uart *inst = Uart::getInstance();
+  if (inst == nullptr)
+    return;
+  if (huart != &inst->_huart)
     return;
 
-  // Das empfangene Byte aus dem HAL Buffer holen
-  uint8_t rxByte = *(reinterpret_cast<uint8_t *>(huart->pRxBuffPtr) - (huart->RxXferCount ? 0 : 1));
-
-  Uart::s_instance->onRxByte(rxByte);
+  // s_rxByte enthält das empfangene Byte (stabiler Speicher)
+  inst->onRxByte(s_rxByte);
 
   // Nächsten Empfang starten
-  static uint8_t nextByte;
-  HAL_UART_Receive_IT(huart, &nextByte, 1);
+  HAL_UART_Receive_IT(&inst->_huart, &s_rxByte, 1);
 }
 
 extern "C" void USART1_IRQHandler(void) {
-  HAL_UART_IRQHandler(&(Uart::s_instance->_huart));
+  Uart *inst = Uart::getInstance();
+  if (inst == nullptr)
+    return;
+  HAL_UART_IRQHandler(&inst->_huart);
 }
