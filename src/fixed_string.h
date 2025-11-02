@@ -20,6 +20,21 @@ public:
     append(data);
   }
 
+  // Zuweisungsoperatoren
+  FixedString &operator=(const FixedString &other) {
+    if (this != &other) {
+      _data[0] = '\0';
+      append(other);
+    }
+    return *this;
+  }
+
+  FixedString &operator=(char const *const data) {
+    _data[0] = '\0';
+    append(data);
+    return *this;
+  }
+
   // return a new FixedString which is concatenation of lhs and rhs
   FixedString operator+(const FixedString &data) const {
     FixedString tmp(*this);
@@ -96,6 +111,10 @@ public:
     if (len > 0) {
       _data[len - 1] = '\0';
     }
+  }
+
+  bool operator==(const FixedString &other) const {
+    return compare(other._data);
   }
 
 private:

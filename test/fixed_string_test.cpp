@@ -165,3 +165,65 @@ TEST(StringTestGroup, Compare_Case_Sensitive) {
   CHECK_FALSE(s.compare("hello"));
   CHECK_TRUE(s.compare("Hello"));
 }
+
+TEST(StringTestGroup, AssignFromFixedStringCopiesValue) {
+  FixedString<16> src("original");
+  FixedString<16> dst;
+  dst = src;
+  STRCMP_EQUAL("original", dst.data());
+  LONGS_EQUAL(8, dst.length());
+
+  // Änderungen an src dürfen dst nicht beeinflussen (deep copy semantics)
+  src.append("X");
+  CHECK(strcmp(src.data(), dst.data()) != 0);
+}
+
+TEST(StringTestGroup, AssignFromCString) {
+  FixedString<16> s;
+  s = "hello";
+  STRCMP_EQUAL("hello", s.data());
+  LONGS_EQUAL(5, s.length());
+}
+
+TEST(StringTestGroup, SelfAssignmentIsSafe) {
+  FixedString<16> s("self");
+  s = s; // self assignment should not corrupt
+  STRCMP_EQUAL("self", s.data());
+  LONGS_EQUAL(4, s.length());
+}
+
+TEST(StringTestGroup, AssignNullptrClearsString) {
+  FixedString<8> s("keep");
+  s = (const char *)nullptr;
+  STRCMP_EQUAL("", s.data());
+  LONGS_EQUAL(0, s.length());
+}
+
+TEST(StringTestGroup, EqualityOperatorTrueFalse) {
+  FixedString<12> a("match");
+  FixedString<12> b("match");
+  FixedString<12> c("different");
+
+  CHECK_TRUE(a == b);
+  CHECK_FALSE(a == c);
+
+  // empty equality
+  FixedString<4> e1;
+  FixedString<4> e2;
+  CHECK_TRUE(e1 == e2);
+}
+
+TEST(StringTestGroup, AssignFixedStringTruncatesToCapacity) {
+  FixedString<5> a("123");
+  FixedString<5> b("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  a = b; // assign long fixedstring -> truncated
+  LONGS_EQUAL(5, a.length());
+  STRCMP_EQUAL("ABCDE", a.data());
+}
+
+TEST(StringTestGroup, AssignCStringTruncatesToCapacity) {
+  FixedString<4> s;
+  s = "overflow";
+  LONGS_EQUAL(4, s.length());
+  STRCMP_EQUAL("over", s.data());
+}
