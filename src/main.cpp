@@ -45,7 +45,6 @@ int main(void) {
   shell.registerCommand(&logCmd);
 
   FreeRTOS::Kernel::startScheduler();
-
   return 0;
 }
 #endif
