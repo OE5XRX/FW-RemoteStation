@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <task.h>
 
 struct NoCrit {
   static inline void enter() {

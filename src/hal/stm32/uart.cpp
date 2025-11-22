@@ -1,21 +1,18 @@
 #include "uart.h"
 #include "../../shell/log.h"
-#include "stm32f3xx_hal.h"
 
 #include <optional>
-
-Uart *Uart::s_instance = nullptr;
 
 static uint8_t s_rxByte = 0;
 static uint8_t s_txByte = 0;
 
-Uart::Uart(FreeRTOS::QueueBase<LINE_STRING> *inputQueue, FreeRTOS::QueueBase<LINE_STRING> *outputQueue) : StaticTask<UART_STACK_SIZE>(tskIDLE_PRIORITY + 2, "UartTask"), _inputQueue(inputQueue), _outputQueue(outputQueue) {
-  logger.assert(s_instance == nullptr, "Only one Uart instance supported");
-  s_instance = this;
-  initSerial();
+Uart::Uart(FreeRTOS::QueueBase<LINE_STRING> *inputQueue, FreeRTOS::QueueBase<LINE_STRING> *outputQueue) : iUart(inputQueue, outputQueue) {
+  iUart::registerInstance(this);
 }
 
 void Uart::taskFunction() {
+  initSerial();
+
   // Starte Byteweises RX per Interrupt (einmalig)
   HAL_UART_Receive_IT(&_huart, &s_rxByte, 1);
 
@@ -152,32 +149,36 @@ void Uart::initSerial() {
 
 // C-Callbacks
 extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-  Uart *inst = Uart::getInstance();
-  if (inst == nullptr)
+  iUart *base = iUart::getInstance();
+  if (base == nullptr) {
     return;
-  if (huart != &inst->_huart)
+  }
+  if (huart != &static_cast<Uart *>(base)->_huart) {
     return;
-
-  inst->onTxComplete();
+  }
+  static_cast<Uart *>(base)->onTxComplete();
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  Uart *inst = Uart::getInstance();
-  if (inst == nullptr)
+  iUart *base = iUart::getInstance();
+  if (base == nullptr) {
     return;
-  if (huart != &inst->_huart)
+  }
+  if (huart != &static_cast<Uart *>(base)->_huart) {
     return;
+  }
 
   // s_rxByte enthält das empfangene Byte (stabiler Speicher)
-  inst->onRxByte(s_rxByte);
+  static_cast<Uart *>(base)->onRxByte(s_rxByte);
 
   // Nächsten Empfang starten
-  HAL_UART_Receive_IT(&inst->_huart, &s_rxByte, 1);
+  HAL_UART_Receive_IT(&static_cast<Uart *>(base)->_huart, &s_rxByte, 1);
 }
 
 extern "C" void USART1_IRQHandler(void) {
-  Uart *inst = Uart::getInstance();
-  if (inst == nullptr)
+  iUart *base = iUart::getInstance();
+  if (base == nullptr) {
     return;
-  HAL_UART_IRQHandler(&inst->_huart);
+  }
+  HAL_UART_IRQHandler(&static_cast<Uart *>(base)->_huart);
 }
