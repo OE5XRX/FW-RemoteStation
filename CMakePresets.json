@@ -38,15 +38,6 @@
         "UNITTEST": "ON",
         "CMAKE_BUILD_TYPE": "Debug"
       }
-    },
-    {
-      "name": "unittest-release",
-      "displayName": "Unittest Release",
-      "description": "Build Unittests for the host system (Release)",
-      "inherits": "unittest-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
     }
   ],
   "buildPresets": [
@@ -61,27 +52,12 @@
     {
       "name": "build-cross-release",
       "configurePreset": "cross-compile-release"
-    },
-    {
-      "name": "build-unittest-release",
-      "configurePreset": "unittest-release"
     }
   ],
   "testPresets": [
     {
       "name": "test-unittest-debug",
       "configurePreset": "unittest-debug",
-      "output": {
-        "outputOnFailure": true
-      },
-      "execution": {
-        "noTestsAction": "error",
-        "stopOnFailure": true
-      }
-    },
-    {
-      "name": "test-unittest-release",
-      "configurePreset": "unittest-release",
       "output": {
         "outputOnFailure": true
       },
@@ -132,23 +108,6 @@
         {
           "type": "build",
           "name": "build-cross-release"
-        }
-      ]
-    },
-    {
-      "name": "unittest-release",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "unittest-release"
-        },
-        {
-          "type": "build",
-          "name": "build-unittest-release"
-        },
-        {
-          "type": "test",
-          "name": "test-unittest-release"
         }
       ]
     }
