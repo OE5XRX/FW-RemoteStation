@@ -10,7 +10,7 @@ project(
 include(CTest)
 
 # Option to force building tests even when cross-compiling
-option(UNITTEST "Build unit tests for host" OFF)
+option(UNITTEST_BUILD "Build unit tests for host" OFF)
 
 # Default build type if not specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -25,9 +25,9 @@ add_compile_options(-Wall -Wextra -Werror)
 # Export compile commands for editors/tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Ensure sources see the UNITTEST preprocessor macro when UNITTEST option is enabled
-if(UNITTEST)
-  add_compile_definitions(UNITTEST)
+# Ensure sources see the UNITTEST_BUILD preprocessor macro when UNITTEST_BUILD option is enabled
+if(UNITTEST_BUILD)
+  add_compile_definitions(UNITTEST_BUILD)
 endif()
 
 add_subdirectory(extern)
@@ -37,8 +37,7 @@ add_subdirectory(extern)
 # -------------------
 add_subdirectory(src)
 
-# Build tests when UNITTEST is ON or when building for host
-if(UNITTEST OR (CMAKE_CROSSCOMPILING MATCHES FALSE))
+if(UNITTEST_BUILD)
   add_subdirectory(test)
 endif()
 

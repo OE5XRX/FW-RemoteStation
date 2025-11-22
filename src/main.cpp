@@ -1,6 +1,6 @@
 #include <FreeRTOS/Kernel.hpp>
 
-#ifndef UNITTEST
+#ifndef UNITTEST_BUILD
 #include "hal/stm32/board.h"
 #include "hal/stm32/usb/cdc.h"
 #endif
@@ -35,7 +35,7 @@ public:
   }
 };
 
-#ifndef UNITTEST
+#ifndef UNITTEST_BUILD
 int main(void) {
   board_init();
 

@@ -35,7 +35,7 @@
       "binaryDir": "${sourceDir}/build-ut",
       "installDir": "${sourceDir}/build-ut",
       "cacheVariables": {
-        "UNITTEST": "ON",
+        "UNITTEST_BUILD": "ON",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     }
@@ -46,12 +46,12 @@
       "configurePreset": "cross-compile-debug"
     },
     {
-      "name": "build-unittest-debug",
-      "configurePreset": "unittest-debug"
-    },
-    {
       "name": "build-cross-release",
       "configurePreset": "cross-compile-release"
+    },
+    {
+      "name": "build-unittest-debug",
+      "configurePreset": "unittest-debug"
     }
   ],
   "testPresets": [
@@ -82,6 +82,19 @@
       ]
     },
     {
+      "name": "cross-compile-release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "cross-compile-release"
+        },
+        {
+          "type": "build",
+          "name": "build-cross-release"
+        }
+      ]
+    },
+    {
       "name": "unittest-debug",
       "steps": [
         {
@@ -95,19 +108,6 @@
         {
           "type": "test",
           "name": "test-unittest-debug"
-        }
-      ]
-    },
-    {
-      "name": "cross-compile-release",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "cross-compile-release"
-        },
-        {
-          "type": "build",
-          "name": "build-cross-release"
         }
       ]
     }
