@@ -31,7 +31,7 @@ void TopCommand::handle(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
-#if defined(INCLUDE_vTaskList) || defined(configUSE_TRACE_FACILITY)
+#if (configUSE_STATS_FORMATTING_FUNCTIONS > 0)
   constexpr size_t BUF_SZ = 2048;
   char             buf[BUF_SZ];
 

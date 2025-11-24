@@ -91,7 +91,6 @@ extern uint32_t ulGetRunTimeCounterValue(void);
 #define configRECORD_STACK_HIGH_ADDRESS      1
 #define configUSE_TRACE_FACILITY             1 // legacy trace
 #define configUSE_STATS_FORMATTING_FUNCTIONS 1
-// #define configUSE_STATS_FORMATTING_FUNCTIONS 0
 
 #ifndef HOST_BUILD
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() vConfigureTimerForRunTimeStats()
