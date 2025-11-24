@@ -13,8 +13,7 @@ jobs:
   cmake-build:
     strategy:
       matrix:
-        CMAKE_PRESET: [cross-compile, unittest]
-        BUILD_TYPE: [release, debug]
+        CMAKE_PRESET: [cross-compile-release, cross-compile-debug, unittest-debug, host-debug]
 
     runs-on: ubuntu-latest
 
@@ -28,7 +27,7 @@ jobs:
       with:
         cacheFrom: ${{ env.IMAGE_NAME }}
         push: never
-        runCmd: cmake --workflow --preset ${{ matrix.CMAKE_PRESET }}-${{ matrix.BUILD_TYPE }}
+        runCmd: cmake --workflow --preset ${{ matrix.CMAKE_PRESET }}
     
   formatting-check:
     name: clang-format check
