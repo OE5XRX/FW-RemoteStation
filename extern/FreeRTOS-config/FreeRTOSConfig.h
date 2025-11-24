@@ -41,12 +41,14 @@
  * See http://www.freertos.org/a00110.html.
  *----------------------------------------------------------*/
 
+#ifdef HOST_BUILD
+extern uint32_t SystemCoreClock;
+#else
 #include "stm32f3xx.h"
+#endif
 
 extern void     vConfigureTimerForRunTimeStats(void);
 extern uint32_t ulGetRunTimeCounterValue(void);
-
-extern uint32_t SystemCoreClock;
 
 /* Cortex M23/M33 port configuration. */
 #define configENABLE_MPU                0
@@ -88,10 +90,13 @@ extern uint32_t SystemCoreClock;
 #define configGENERATE_RUN_TIME_STATS        1
 #define configRECORD_STACK_HIGH_ADDRESS      1
 #define configUSE_TRACE_FACILITY             1 // legacy trace
-#define configUSE_STATS_FORMATTING_FUNCTIONS 0
+#define configUSE_STATS_FORMATTING_FUNCTIONS 1
+// #define configUSE_STATS_FORMATTING_FUNCTIONS 0
 
+#ifndef HOST_BUILD
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() vConfigureTimerForRunTimeStats()
 #define portGET_RUN_TIME_COUNTER_VALUE()         ulGetRunTimeCounterValue()
+#endif
 
 /* Co-routine definitions. */
 #define configUSE_CO_ROUTINES           0

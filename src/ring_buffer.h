@@ -16,7 +16,7 @@ struct NoCrit {
   }
 };
 
-#ifndef UNITTEST_BUILD
+#if !(defined(UNITTEST_BUILD) || defined(HOST_BUILD))
 struct RtosCrit {
   static inline void enter() {
     taskENTER_CRITICAL();

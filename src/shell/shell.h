@@ -3,6 +3,7 @@
 
 #include <FreeRTOS/Queue.hpp>
 #include <array>
+#include <atomic>
 
 #include "constant.h"
 #include "history.h"
@@ -30,6 +31,8 @@ public:
   void printHelp();
 
   void checkLog();
+  void exit();              // löst Shutdown-Request aus (Ctrl-C)
+  bool shutdownRequested(); // Abfrage ob Interrupt gesetzt wurde
 
 private:
   LINE_STRING _lineBuffer;
@@ -40,10 +43,14 @@ private:
   std::array<CommandBase *, CLI_MAX_COMMANDS> _commands;
   size_t                                      _commandCount;
 
+  std::atomic<bool> _shutdownRequested;
+
   void executeLine();
   void parseLine(const char *line, size_t &argc, std::array<const char *, CLI_MAX_ARGS> &argv);
   void redrawLine();
   void showPrompt();
 };
+
+extern Shell shell;
 
 #endif

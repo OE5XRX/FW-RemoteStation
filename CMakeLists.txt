@@ -9,8 +9,8 @@ project(
 
 include(CTest)
 
-# Option to force building tests even when cross-compiling
 option(UNITTEST_BUILD "Build unit tests for host" OFF)
+option(HOST_BUILD "Build for host" OFF)
 
 # Default build type if not specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -28,6 +28,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Ensure sources see the UNITTEST_BUILD preprocessor macro when UNITTEST_BUILD option is enabled
 if(UNITTEST_BUILD)
   add_compile_definitions(UNITTEST_BUILD)
+endif()
+if(HOST_BUILD)
+  add_compile_definitions(HOST_BUILD)
 endif()
 
 add_subdirectory(extern)

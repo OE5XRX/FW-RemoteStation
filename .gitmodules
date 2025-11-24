@@ -19,15 +19,15 @@
 	url = ../../hathach/tinyusb.git
 	
 [submodule "extern/FreeRTOS"]
-	path = extern/arm/FreeRTOS
+	path = extern/FreeRTOS
 	url = ../../FreeRTOS/FreeRTOS-Kernel.git
 	
 [submodule "extern/FreeRTOS-Cpp"]
 	path = extern/common/FreeRTOS-Cpp
 	url = ../../jonenz/FreeRTOS-Cpp.git
 [submodule "extern/cpputest-for-freertos"]
-	path = extern/host/cpputest-for-freertos
+	path = extern/unittest/cpputest-for-freertos
 	url = ../../covemountainsoftware/cpputest-for-freertos.git
 [submodule "extern/host/fake-timers"]
-	path = extern/host/fake-timers
+	path = extern/unittest/fake-timers
 	url = ../../covemountainsoftware/fake-timers

@@ -38,6 +38,18 @@
         "UNITTEST_BUILD": "ON",
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "host-debug",
+      "displayName": "Host Debug",
+      "description": "Build for the host system (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-host",
+      "installDir": "${sourceDir}/build-host",
+      "cacheVariables": {
+        "HOST_BUILD": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     }
   ],
   "buildPresets": [
@@ -52,6 +64,10 @@
     {
       "name": "build-unittest-debug",
       "configurePreset": "unittest-debug"
+    },
+    {
+      "name": "build-host-debug",
+      "configurePreset": "host-debug"
     }
   ],
   "testPresets": [
@@ -108,6 +124,19 @@
         {
           "type": "test",
           "name": "test-unittest-debug"
+        }
+      ]
+    },
+    {
+      "name": "host-debug",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "host-debug"
+        },
+        {
+          "type": "build",
+          "name": "build-host-debug"
         }
       ]
     }

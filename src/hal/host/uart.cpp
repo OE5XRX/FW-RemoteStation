@@ -5,7 +5,8 @@ HostUart::HostUart(FreeRTOS::QueueBase<LINE_STRING> *inputQueue, FreeRTOS::Queue
   if (!openPty()) {
     logger.info("HostUart: failed to open pty");
   } else {
-    logger.info("HostUart slave is: %s", _slavePath.c_str());
+    logger.info("HostUart slave is:");
+    logger.info(_slavePath.c_str());
   }
 
   // Registriere Instanz für gemeinsame Callbacks falls benötigt

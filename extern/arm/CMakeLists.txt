@@ -33,11 +33,3 @@ target_compile_options(tinyusb PRIVATE -Wno-error -w)
 # FreeRTOS
 # -------------------
 set(FREERTOS_PORT GCC_ARM_CM4F CACHE STRING "")
-
-add_library(freertos_config INTERFACE)
-target_include_directories(freertos_config INTERFACE FreeRTOS-config)
-target_compile_definitions(freertos_config INTERFACE projCOVERAGE_TEST=0)
-target_link_libraries(freertos_config INTERFACE stm32_hal)
-
-add_subdirectory(FreeRTOS)
-target_compile_options(freertos_kernel PRIVATE -Wno-error -w)

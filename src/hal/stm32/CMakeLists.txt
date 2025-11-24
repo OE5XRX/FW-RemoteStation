@@ -1,8 +1,6 @@
 target_sources(
   ${PROJECT_NAME} PRIVATE
-  freertos_hook.cpp
   syscalls.cpp
-  heap_4.c
   timer_stats.cpp
   board.cpp
   uart.cpp
@@ -17,3 +15,5 @@ target_link_libraries(
   ${PROJECT_NAME} PUBLIC
   tinyusb
 )
+
+target_include_directories(${PROJECT_NAME} PRIVATE .)

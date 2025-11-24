@@ -1,6 +1,6 @@
 #include "shell.h"
-
 #include "history.h"
+#include "log.h"
 
 extern void cli_write(const char *str);
 extern void cli_write_char(char c);
@@ -8,7 +8,7 @@ extern void cli_write_char(char c);
 CommandBase::CommandBase(const CMD_STRING &_name, const HELP_STRING &_help) : name(_name), help(_help) {
 }
 
-Shell::Shell(FreeRTOS::QueueBase<LINE_STRING> *logQueue) : _logQueue(logQueue), _commandCount(0) {
+Shell::Shell(FreeRTOS::QueueBase<LINE_STRING> *logQueue) : _logQueue(logQueue), _commandCount(0), _shutdownRequested(false) {
 }
 
 void Shell::registerCommand(CommandBase *command) {
@@ -109,4 +109,13 @@ void Shell::checkLog() {
     cli_write("\n\r");
     redrawLine();
   }
+}
+
+void Shell::exit() {
+  logger.info("Shell: exit requested (Ctrl-C)");
+  _shutdownRequested.store(true, std::memory_order_release);
+}
+
+bool Shell::shutdownRequested() {
+  return _shutdownRequested.load(std::memory_order_acquire);
 }

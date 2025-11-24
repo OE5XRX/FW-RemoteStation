@@ -10,7 +10,7 @@ constexpr size_t CLI_CMD_MAX_HELP = 30;
 constexpr size_t CLI_MAX_LINE_LENGTH = 100;
 constexpr size_t CLI_MAX_ARGS        = 5;
 constexpr size_t CLI_HISTORY_DEPTH   = 10;
-constexpr size_t CLI_MAX_COMMANDS    = 2;
+constexpr size_t CLI_MAX_COMMANDS    = 5;
 
 #include "../fixed_string.h"
 

@@ -1,24 +1,24 @@
-#ifndef CDC_H_
-#define CDC_H_
+#ifndef STM32_CDC_H_
+#define STM32_CDC_H_
 
 #include <FreeRTOS/Queue.hpp>
 #include <FreeRTOS/Task.hpp>
 #include <cstdint>
 
-constexpr uint32_t CDC_STACK_SIZE = 2 * configMINIMAL_STACK_SIZE;
+#include "../../cdc_base.h"
 
-class CdcTask : public FreeRTOS::StaticTask<CDC_STACK_SIZE> {
+class CdcTask : public CdcBase {
 public:
   CdcTask();
 
 private:
-  void taskFunction() final;
+  ssize_t readBytes(uint8_t *buf, size_t maxlen, uint32_t /*timeout_ms*/) override;
+  void    flushOutput() override;
 };
 
 extern CdcTask cdcTask;
 
 #include "../../../shell/shell.h"
-
 extern Shell shell;
 
 #endif

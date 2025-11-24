@@ -1,48 +1,34 @@
 #include <FreeRTOS/Kernel.hpp>
 
-#ifndef UNITTEST_BUILD
-#include "hal/stm32/board.h"
+#include "board.h"
+
+#if !(defined(UNITTEST_BUILD) || defined(HOST_BUILD))
 #include "hal/stm32/usb/cdc.h"
 #endif
 
+#include "commands.h"
 #include "shell/log.h"
-#include "shell/shell.h"
 
-class HelpCommand : public CommandBase {
-public:
-  HelpCommand() : CommandBase("help", "Show help information") {
-  }
+// neue Includes für Task-Liste
+#include "FreeRTOS.h"
+#include "task.h"
 
-  void handle(int argc, const char *argv[]) override {
-    (void)argc;
-    (void)argv;
-    // shell.printHelp();
-  }
-};
-
-class LogCommand : public CommandBase {
-public:
-  LogCommand() : CommandBase("log", "Print Log Text") {
-  }
-
-  void handle(int argc, const char *argv[]) override {
-    (void)argc;
-    (void)argv;
-    logger.debug("I am Debugging");
-    logger.info("I am an Info");
-    logger.warning("oooopppsss");
-    logger.error("And I am a error");
-  }
-};
+FreeRTOS::StaticQueue<LINE_STRING, 5> logQueue;
+Shell                                 shell(&logQueue);
+Log                                   logger(&logQueue);
 
 #ifndef UNITTEST_BUILD
 int main(void) {
   board_init();
 
-  static HelpCommand helpCmd;
+  HelpCommand helpCmd;
   shell.registerCommand(&helpCmd);
-  static LogCommand logCmd;
+  LogCommand logCmd;
   shell.registerCommand(&logCmd);
+  TopCommand topCmd;
+  shell.registerCommand(&topCmd);
+  ExitCommand exitCmd;
+  shell.registerCommand(&exitCmd);
 
   FreeRTOS::Kernel::startScheduler();
   return 0;

@@ -5,16 +5,19 @@ set(CMAKE_CXX_CPPCHECK ${cppcheck_exe} --std=c++20 ${cppcheck_opts})
 
 # Liste der Quell-Dateien zentral verwalten
 set(SRC_FILES
+  commands.cpp
   main.cpp
+  heap_4.c
   shell/shell.cpp
   shell/history.cpp
   shell/log.cpp
 )
 
-if(CMAKE_CROSSCOMPILING)
+if(CMAKE_CROSSCOMPILING OR HOST_BUILD)
   add_executable(
     ${PROJECT_NAME}
     ${SRC_FILES}
+    freertos_hook.cpp
   )
 else()
   add_library(
