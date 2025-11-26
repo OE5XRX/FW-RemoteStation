@@ -1,7 +1,10 @@
 
 #include "commands.h"
+#include "VariableRegistry.h"
 #include "shell/log.h"
 #include "shell/shell.h"
+
+extern void cli_write(const char *str);
 
 HelpCommand::HelpCommand() : CommandBase("help", "Show help information") {
 }
@@ -35,8 +38,6 @@ void TopCommand::handle(int argc, const char *argv[]) {
   constexpr size_t BUF_SZ = 2048;
   char             buf[BUF_SZ];
 
-  extern void cli_write(const char *str);
-
   vTaskList(buf);
   cli_write("Name          State  Priority  Stack   Num\r\n");
   cli_write("******************************************\r\n");
@@ -63,4 +64,75 @@ void ExitCommand::handle(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
   shell.exit();
+}
+
+SetCommand::SetCommand() : CommandBase("set", "set <name> <value>  - set a registered variable") {
+}
+
+void SetCommand::handle(int argc, const char *argv[]) {
+  // Erwartet: set <name> <value>
+  if (argc < 3) {
+    cli_write("Usage: set <name> <value>\r\n");
+    return;
+  }
+
+  const char *varName  = argv[1];
+  const char *varValue = argv[2];
+
+  if (!variableRegistry.set(varName, varValue)) {
+    cli_write("Error: unknown variable or invalid value: ");
+    cli_write(varName);
+    cli_write("\r\n");
+    return;
+  }
+
+  cli_write("OK\r\n");
+}
+
+GetCommand::GetCommand() : CommandBase("get", "get <name>  - read a registered variable") {
+}
+
+void GetCommand::handle(int argc, const char *argv[]) {
+  // Erwartet: get <name>
+  if (argc < 2) {
+    cli_write("Usage: get <name>\r\n");
+    return;
+  }
+
+  const char *varName = argv[1];
+  char        buffer[32];
+
+  if (!variableRegistry.get(varName, buffer, sizeof(buffer))) {
+    cli_write("Error: unknown variable: ");
+    cli_write(varName);
+    cli_write("\r\n");
+    return;
+  }
+
+  cli_write(varName);
+  cli_write(" = ");
+  cli_write(buffer);
+  cli_write("\r\n");
+}
+
+ListCommand::ListCommand() : CommandBase("list", "list  - list all registered variables") {
+}
+
+void ListCommand::handle(int argc, const char *argv[]) {
+  (void)argc;
+  (void)argv;
+
+  size_t      index   = 0;
+  const char *varName = variableRegistry.getName(index);
+  while (varName != nullptr) {
+    char buffer[32];
+    if (variableRegistry.get(varName, buffer, sizeof(buffer))) {
+      cli_write(varName);
+      cli_write(" = ");
+      cli_write(buffer);
+      cli_write("\r\n");
+    }
+    index++;
+    varName = variableRegistry.getName(index);
+  }
 }

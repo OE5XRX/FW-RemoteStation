@@ -8,6 +8,7 @@ set(SRC_FILES
   commands.cpp
   main.cpp
   heap_4.c
+  VariableRegistry.cpp
   shell/shell.cpp
   shell/history.cpp
   shell/log.cpp

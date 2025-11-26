@@ -13,6 +13,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "VariableRegistry.h"
+
 FreeRTOS::StaticQueue<LINE_STRING, 5> logQueue;
 Shell                                 shell(&logQueue);
 Log                                   logger(&logQueue);
@@ -29,6 +31,13 @@ int main(void) {
   shell.registerCommand(&topCmd);
   ExitCommand exitCmd;
   shell.registerCommand(&exitCmd);
+
+  SetCommand setCmd;
+  shell.registerCommand(&setCmd);
+  GetCommand getCmd;
+  shell.registerCommand(&getCmd);
+  ListCommand listCmd;
+  shell.registerCommand(&listCmd);
 
   FreeRTOS::Kernel::startScheduler();
   return 0;

@@ -27,4 +27,22 @@ public:
   void handle(int argc, const char *argv[]) override;
 };
 
+class SetCommand : public CommandBase {
+public:
+  SetCommand();
+  void handle(int argc, const char *argv[]) override;
+};
+
+class GetCommand : public CommandBase {
+public:
+  GetCommand();
+  void handle(int argc, const char *argv[]) override;
+};
+
+class ListCommand : public CommandBase {
+public:
+  ListCommand();
+  void handle(int argc, const char *argv[]) override;
+};
+
 #endif

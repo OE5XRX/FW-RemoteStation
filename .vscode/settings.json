@@ -53,7 +53,9 @@
     "text_encoding": "cpp",
     "cinttypes": "cpp",
     "typeinfo": "cpp",
-    "variant": "cpp"
+    "variant": "cpp",
+    "iostream": "cpp",
+    "istream": "cpp"
   },
   "cpputestTestAdapter.testExecutable": "${workspaceFolder}/build-ut/test/test-OE5XRX"
 }
