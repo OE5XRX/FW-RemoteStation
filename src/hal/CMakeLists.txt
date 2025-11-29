@@ -7,4 +7,5 @@ endif()
 target_sources(
   ${PROJECT_NAME} PRIVATE
   cdc_base.cpp
+  cat24c32.cpp
 )

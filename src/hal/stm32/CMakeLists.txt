@@ -1,8 +1,9 @@
 target_sources(
   ${PROJECT_NAME} PRIVATE
+  board.cpp
+  cat24c32_stm32.cpp
   syscalls.cpp
   timer_stats.cpp
-  board.cpp
   uart.cpp
   usb/cdc.cpp
   usb/dfu.cpp
