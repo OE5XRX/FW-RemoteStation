@@ -11,13 +11,9 @@ public:
   explicit CAT24C325_Sim(unsigned writeCycleMs = 5);
   ~CAT24C325_Sim();
 
-  // Direct synchronous access (for tests)
-  // addr: 0..SIZE-1
-  // returns number of bytes actually written/read
   std::size_t write(std::uint16_t addr, const std::uint8_t *data, std::size_t len) final;
   std::size_t read(std::uint16_t addr, std::uint8_t *buf, std::size_t len) final;
 
-  // Utilities
   void loadFromFile(const std::string &path);
   void dumpToFile(const std::string &path) const;
 
@@ -25,7 +21,6 @@ private:
   std::array<std::uint8_t, SIZE> _mem;
   unsigned                       _writeCycleMs;
 
-  // Reset to erased state (0xFF typical for EEPROM)
   void reset(uint8_t fill = 0xFF);
 };
 
