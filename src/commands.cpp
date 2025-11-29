@@ -70,7 +70,6 @@ SetCommand::SetCommand() : CommandBase("set", "set <name> <value>  - set a regis
 }
 
 void SetCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
-  // Erwartet: set <name> <value>
   if (argc < 3) {
     cli_write("Usage: set <name> <value>\r\n");
     return;
@@ -93,7 +92,6 @@ GetCommand::GetCommand() : CommandBase("get", "get <name>  - read a registered v
 }
 
 void GetCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
-  // Erwartet: get <name>
   if (argc < 2) {
     cli_write("Usage: get <name>\r\n");
     return;

@@ -31,8 +31,8 @@ public:
   void printHelp();
 
   void checkLog();
-  void exit();              // löst Shutdown-Request aus (Ctrl-C)
-  bool shutdownRequested(); // Abfrage ob Interrupt gesetzt wurde
+  void exit();
+  bool shutdownRequested();
 
 private:
   LINE_STRING _lineBuffer;
