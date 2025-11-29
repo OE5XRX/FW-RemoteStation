@@ -20,6 +20,7 @@ void Shell::registerCommand(CommandBase *command) {
 
 void Shell::inputChar(char c) {
   if (c == '\r' || c == '\n') {
+    cli_write("\r\n");
     _history.add(_lineBuffer);
     executeLine();
     _lineBuffer.clear();
@@ -73,7 +74,7 @@ void Shell::parseLine(const char *line, size_t &argc, std::array<const char *, C
 }
 
 void Shell::redrawLine() {
-  cli_write("\r");
+  cli_write("\33[2K\r");
   showPrompt();
   cli_write(_lineBuffer.c_str());
 }

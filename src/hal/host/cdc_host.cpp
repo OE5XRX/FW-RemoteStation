@@ -64,10 +64,12 @@ ssize_t CdcTask::readBytes(uint8_t *buf, size_t maxlen, uint32_t timeout_ms) {
   pfd.fd     = STDIN_FILENO;
   pfd.events = POLLIN;
   int rc     = poll(&pfd, 1, static_cast<int>(timeout_ms));
-  if (rc <= 0)
+  if (rc <= 0) {
     return 0;
-  if (!(pfd.revents & POLLIN))
+  }
+  if (!(pfd.revents & POLLIN)) {
     return 0;
+  }
   ssize_t r = ::read(STDIN_FILENO, buf, maxlen);
   return r;
 }
