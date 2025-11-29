@@ -55,7 +55,15 @@
     "typeinfo": "cpp",
     "variant": "cpp",
     "iostream": "cpp",
-    "istream": "cpp"
+    "istream": "cpp",
+    "chrono": "cpp",
+    "list": "cpp",
+    "fstream": "cpp",
+    "iomanip": "cpp",
+    "semaphore": "cpp",
+    "sstream": "cpp",
+    "stop_token": "cpp",
+    "thread": "cpp"
   },
   "cpputestTestAdapter.testExecutable": "${workspaceFolder}/build-ut/test/test-OE5XRX"
 }
