@@ -9,7 +9,7 @@ extern void cli_write(const char *str);
 HelpCommand::HelpCommand() : CommandBase("help", "Show help information") {
 }
 
-void HelpCommand::handle(int argc, const char *argv[]) {
+void HelpCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   (void)argc;
   (void)argv;
   shell.printHelp();
@@ -18,7 +18,7 @@ void HelpCommand::handle(int argc, const char *argv[]) {
 LogCommand::LogCommand() : CommandBase("log", "Print Log Text") {
 }
 
-void LogCommand::handle(int argc, const char *argv[]) {
+void LogCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   (void)argc;
   (void)argv;
   logger.debug("I am Debugging");
@@ -30,7 +30,7 @@ void LogCommand::handle(int argc, const char *argv[]) {
 TopCommand::TopCommand() : CommandBase("top", "Show processes") {
 }
 
-void TopCommand::handle(int argc, const char *argv[]) {
+void TopCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   (void)argc;
   (void)argv;
 
@@ -60,7 +60,7 @@ void TopCommand::handle(int argc, const char *argv[]) {
 ExitCommand::ExitCommand() : CommandBase("exit", "stop execution") {
 }
 
-void ExitCommand::handle(int argc, const char *argv[]) {
+void ExitCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   (void)argc;
   (void)argv;
   shell.exit();
@@ -69,7 +69,7 @@ void ExitCommand::handle(int argc, const char *argv[]) {
 SetCommand::SetCommand() : CommandBase("set", "set <name> <value>  - set a registered variable") {
 }
 
-void SetCommand::handle(int argc, const char *argv[]) {
+void SetCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   // Erwartet: set <name> <value>
   if (argc < 3) {
     cli_write("Usage: set <name> <value>\r\n");
@@ -92,7 +92,7 @@ void SetCommand::handle(int argc, const char *argv[]) {
 GetCommand::GetCommand() : CommandBase("get", "get <name>  - read a registered variable") {
 }
 
-void GetCommand::handle(int argc, const char *argv[]) {
+void GetCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   // Erwartet: get <name>
   if (argc < 2) {
     cli_write("Usage: get <name>\r\n");
@@ -118,7 +118,7 @@ void GetCommand::handle(int argc, const char *argv[]) {
 ListCommand::ListCommand() : CommandBase("list", "list  - list all registered variables") {
 }
 
-void ListCommand::handle(int argc, const char *argv[]) {
+void ListCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   (void)argc;
   (void)argv;
 

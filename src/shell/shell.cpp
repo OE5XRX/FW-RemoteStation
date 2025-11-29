@@ -19,49 +19,44 @@ void Shell::registerCommand(CommandBase *command) {
 }
 
 void Shell::inputChar(char c) {
-  if (c == '\r') {
-    cli_write("\r\n");
-    _history.add(_lineBuffer.data());
+  if (c == '\r' || c == '\n') {
+    _history.add(_lineBuffer);
     executeLine();
     _lineBuffer.clear();
     _history.reset();
     showPrompt();
   } else if (c == '\b' || c == 127) {
-    if (_lineBuffer.length() > 0) {
-      _lineBuffer.pop();
-      cli_write("\b \b");
+    if (_lineBuffer.size() > 0) {
+      _lineBuffer.pop_back();
+      redrawLine();
     }
-  } else if (c >= 32 && c < 127 && _lineBuffer.length() < (CLI_MAX_LINE_LENGTH - 1)) {
-    _lineBuffer.append(c);
+  } else if (c >= 32 && c < 127 && _lineBuffer.size() < (CLI_MAX_LINE_LENGTH - 1)) {
+    _lineBuffer.push_back(c);
     cli_write_char(c);
-  } else if (c == '\n') {
-  } else {
-    cli_write("something is wrong...");
   }
 }
 
 void Shell::navigateHistory(int direction) {
-  _lineBuffer.copy_from(_history.get(direction));
+  _lineBuffer = _history.get(direction);
   redrawLine();
 }
 
 void Shell::executeLine() {
   size_t                                 argc = 0;
   std::array<const char *, CLI_MAX_ARGS> argv;
-  parseLine(_lineBuffer.data(), argc, argv);
+  parseLine(_lineBuffer.c_str(), argc, argv);
+  _lineBuffer.clear();
+  _history.reset();
 
-  if (argc == 0) {
-    return;
-  }
-
-  for (size_t i = 0; i < _commandCount; i++) {
-    if (argv[0] && _commands[i]->name.compare(argv[0])) {
-      _commands[i]->handle(argc, argv.data());
-      return;
+  if (argc > 0) {
+    for (size_t i = 0; i < _commandCount; i++) {
+      if (_commands[i]->name.equals(argv[0])) {
+        _commands[i]->handle(argc, argv);
+        return;
+      }
     }
+    cli_write("Unknown command. Type 'help' for list.\r\n");
   }
-
-  cli_write("Unknown command. Type 'help' for list.\r\n");
 }
 
 void Shell::parseLine(const char *line, size_t &argc, std::array<const char *, CLI_MAX_ARGS> &argv) {
@@ -80,7 +75,7 @@ void Shell::parseLine(const char *line, size_t &argc, std::array<const char *, C
 void Shell::redrawLine() {
   cli_write("\r");
   showPrompt();
-  cli_write(_lineBuffer.data());
+  cli_write(_lineBuffer.c_str());
 }
 
 void Shell::showPrompt() {
@@ -88,26 +83,26 @@ void Shell::showPrompt() {
 }
 
 void Shell::printHelp() {
-  cli_write("Available commands:\r\n");
   for (size_t i = 0; i < _commandCount; i++) {
-    cli_write("  ");
-    cli_write(_commands[i]->name.data());
-    cli_write(": ");
-    cli_write(_commands[i]->help.data());
+    cli_write(_commands[i]->name.c_str());
+    cli_write(" - ");
+    cli_write(_commands[i]->help.c_str());
     cli_write("\r\n");
   }
 }
 
 void Shell::checkLog() {
-  if (std::optional<LINE_STRING> log = _logQueue->receive(pdMS_TO_TICKS(10))) {
-    if (_lineBuffer.length() == 0) {
-      cli_write("\r");
-    } else {
-      cli_write("\n\r");
+  std::optional<LINE_STRING> log = _logQueue->receive(0);
+  if (log) {
+    if (!_lineBuffer.empty()) {
+      redrawLine();
     }
-    cli_write((*log).data());
-    cli_write("\n\r");
-    redrawLine();
+    cli_write((*log).c_str());
+    cli_write("\r\n");
+    if (!_lineBuffer.empty()) {
+      showPrompt();
+      cli_write(_lineBuffer.c_str());
+    }
   }
 }
 

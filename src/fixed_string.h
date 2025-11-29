@@ -1,124 +1,180 @@
 #ifndef FIXED_STRING_H_
 #define FIXED_STRING_H_
 
+#include <array>
 #include <cstddef>
 #include <cstring>
+#include <type_traits>
 
 template <size_t N> class FixedString {
 public:
-  FixedString() {
-    _data[0] = '\0';
+  static_assert(N > 0, "FixedString template parameter N must be greater than 0");
+
+  using storage_t      = std::array<char, N>;
+  using iterator       = typename storage_t::iterator;
+  using const_iterator = typename storage_t::const_iterator;
+
+  static constexpr std::size_t STORAGE_SIZE = N;
+  static constexpr std::size_t CAPACITY     = (N > 0 ? N - 1 : 0);
+
+  FixedString() noexcept : _length(0) {
+    storage_[0] = '\0';
   }
 
-  FixedString(char const *const data) {
-    _data[0] = '\0';
-    append(data);
+  FixedString(const char *str) noexcept : _length(0) {
+    storage_[0] = '\0';
+    append(str);
   }
 
-  FixedString(const FixedString &data) {
-    _data[0] = '\0';
-    append(data);
+  FixedString(const FixedString &other) noexcept : _length(0) {
+    storage_[0] = '\0';
+    append(other);
   }
 
-  // Zuweisungsoperatoren
-  FixedString &operator=(const FixedString &other) {
+  FixedString(FixedString &&other) noexcept : _length(other._length) {
+    std::copy(other.storage_.begin(), other.storage_.end(), storage_.begin());
+    other._length     = 0;
+    other.storage_[0] = '\0';
+  }
+
+  FixedString &operator=(FixedString &&other) noexcept {
     if (this != &other) {
-      _data[0] = '\0';
+      _length = other._length;
+      std::copy(other.storage_.begin(), other.storage_.end(), storage_.begin());
+      other._length     = 0;
+      other.storage_[0] = '\0';
+    }
+    return *this;
+  }
+
+  FixedString &operator=(const FixedString &other) noexcept {
+    if (this != &other) {
+      storage_[0] = '\0';
+      _length     = 0;
       append(other);
     }
     return *this;
   }
 
-  FixedString &operator=(char const *const data) {
-    _data[0] = '\0';
-    append(data);
+  FixedString &operator=(const char *str) noexcept {
+    storage_[0] = '\0';
+    _length     = 0;
+    append(str);
     return *this;
   }
 
-  // return a new FixedString which is concatenation of lhs and rhs
-  FixedString operator+(const FixedString &data) const {
+  FixedString operator+(const FixedString &rhs) const noexcept {
     FixedString tmp(*this);
-    tmp.append(data);
+    tmp.append(rhs);
     return tmp;
   }
 
-  FixedString &operator+=(const FixedString &data) {
-    append(data);
+  FixedString &operator+=(const FixedString &rhs) noexcept {
+    append(rhs);
     return *this;
   }
 
-  bool compare(const char *data) const {
-    if (data == nullptr)
+  std::size_t size() const noexcept {
+    return _length;
+  }
+
+  bool empty() const noexcept {
+    return _length == 0;
+  }
+
+  char const *c_str() const noexcept {
+    return storage_.data();
+  }
+
+  bool equals(const char *str) const noexcept {
+    if (str == nullptr) {
       return false;
-    return std::strcmp(this->_data, data) == 0;
-  }
-
-  void append(char c) {
-    size_t len = length();
-    if (len < N) {
-      _data[len]     = c;
-      _data[len + 1] = '\0';
     }
+    return std::strcmp(c_str(), str) == 0;
   }
 
-  void append(const FixedString &data) {
-    append(data._data);
-  }
-
-  void append(char const *const data) {
-    if (data == nullptr)
-      return;
-    size_t i = 0;
-    while (data[i]) {
-      if (length() >= N)
-        break;
-      append(data[i]);
-      i++;
-    }
-  }
-
-  size_t length() const {
-    for (size_t i = 0; i <= N; i++) {
-      if (_data[i] == '\0') {
+  std::size_t find(char c) const noexcept {
+    for (std::size_t i = 0; i < _length; ++i) {
+      if (storage_[i] == c) {
         return i;
       }
     }
-    return N;
+    return CAPACITY + 1;
   }
 
-  char get(const size_t pos) const {
-    if (pos >= length()) {
+  void push_back(char c) noexcept {
+    if (_length < CAPACITY) {
+      storage_[_length]   = c;
+      storage_[++_length] = '\0';
+    }
+  }
+
+  void append(const FixedString &other) noexcept {
+    append(other.c_str());
+  }
+
+  void append(char const *str) noexcept {
+    if (str == nullptr) {
+      return;
+    }
+    std::size_t i = 0;
+    while (str[i] && _length < CAPACITY) {
+      storage_[_length++] = str[i++];
+    }
+    storage_[_length] = '\0';
+  }
+
+  char at(std::size_t pos) const noexcept {
+    if (pos >= _length) {
       return 0;
     }
-    return _data[pos];
+    return storage_[pos];
   }
 
-  char const *data() const {
-    return _data;
+  char operator[](std::size_t pos) const noexcept {
+    return at(pos);
   }
 
-  void clear() {
-    _data[0] = '\0';
+  void pop_back() noexcept {
+    if (_length > 0) {
+      storage_[--_length] = '\0';
+    }
   }
 
-  void copy_from(const FixedString &s) {
-    _data[0] = '\0';
+  void clear() noexcept {
+    storage_[0] = '\0';
+    _length     = 0;
+  }
+
+  void assignFrom(const FixedString &s) noexcept {
+    storage_[0] = '\0';
+    _length     = 0;
     append(s);
   }
 
-  void pop() {
-    size_t len = length();
-    if (len > 0) {
-      _data[len - 1] = '\0';
-    }
+  bool operator==(const FixedString &other) const noexcept {
+    return equals(other.c_str());
   }
 
-  bool operator==(const FixedString &other) const {
-    return compare(other._data);
+  const_iterator begin() const noexcept {
+    return storage_.begin();
+  }
+
+  const_iterator end() const noexcept {
+    return storage_.begin() + _length;
+  }
+
+  const_iterator cbegin() const noexcept {
+    return storage_.cbegin();
+  }
+
+  const_iterator cend() const noexcept {
+    return storage_.cbegin() + _length;
   }
 
 private:
-  char _data[N + 1];
+  storage_t   storage_{};
+  std::size_t _length = 0;
 };
 
 #endif

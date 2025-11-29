@@ -93,7 +93,7 @@ void HostUart::taskFunction() {
   pfd.fd     = _masterFd;
   pfd.events = POLLIN;
 
-  for (;;) {
+  while (true) {
     // 1) Read from PTY master if available
     if (_masterFd >= 0) {
       pfd.revents = 0;
@@ -105,7 +105,7 @@ void HostUart::taskFunction() {
           for (ssize_t i = 0; i < r; ++i) {
             uint8_t b = buf[i];
             if (b == '\n' || b == '\r') {
-              if (_rxLine.length() > 0) {
+              if (_rxLine.size() > 0) {
                 _inputQueue->sendToBack(_rxLine);
                 _rxLine.clear();
               } else {
@@ -113,13 +113,13 @@ void HostUart::taskFunction() {
                 _inputQueue->sendToBack(empty);
               }
             } else {
-              if (_rxLine.length() < CLI_MAX_LINE_LENGTH) {
-                _rxLine.append(static_cast<char>(b));
+              if (_rxLine.size() < CLI_MAX_LINE_LENGTH) {
+                _rxLine.push_back(static_cast<char>(b));
               } else {
                 // Zeile voll -> abschicken und neu beginnen
                 _inputQueue->sendToBack(_rxLine);
                 _rxLine.clear();
-                _rxLine.append(static_cast<char>(b));
+                _rxLine.push_back(static_cast<char>(b));
               }
             }
           }
@@ -136,8 +136,8 @@ void HostUart::taskFunction() {
       if (opt.has_value()) {
         LINE_STRING line = *opt;
         // Schreibe Zeile, optional Newline anhängen
-        if (line.length() > 0) {
-          writeAll(reinterpret_cast<const uint8_t *>(line.data()), line.length());
+        if (line.size() > 0) {
+          writeAll(reinterpret_cast<const uint8_t *>(line.c_str()), line.size());
         }
         // Newline senden
         const char nl = '\n';

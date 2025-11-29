@@ -21,7 +21,7 @@ void Uart::taskFunction() {
     while (auto rb = _rxBuffer.try_pop()) {
       uint8_t b = *rb;
       if (b == '\n' || b == '\r') {
-        if (_rxLine.length() > 0) {
+        if (_rxLine.size() > 0) {
           _inputQueue->sendToBack(_rxLine);
           _rxLine.clear();
         } else {
@@ -30,13 +30,13 @@ void Uart::taskFunction() {
         }
       } else {
         // Normales Zeichen anhängen (falls Platz)
-        if (_rxLine.length() < CLI_MAX_LINE_LENGTH) {
-          _rxLine.append(static_cast<char>(b));
+        if (_rxLine.size() < CLI_MAX_LINE_LENGTH) {
+          _rxLine.push_back(static_cast<char>(b));
         } else {
           // Zeile voll -> abschicken und neuen Beginn mit aktuellem Zeichen
           _inputQueue->sendToBack(_rxLine);
           _rxLine.clear();
-          _rxLine.append(static_cast<char>(b));
+          _rxLine.push_back(static_cast<char>(b));
         }
       }
     }
@@ -50,17 +50,17 @@ void Uart::taskFunction() {
       LINE_STRING line = *optLine;
       // Versuche alle Bytes der Linie in den TX-Ring zu pushen.
       size_t i = 0;
-      for (; i < line.length(); ++i) {
-        if (!_txBuffer.try_push(static_cast<uint8_t>(line.get(i)))) {
+      for (; i < line.size(); ++i) {
+        if (!_txBuffer.try_push(static_cast<uint8_t>(line.at(i)))) {
           break; // ring voll
         }
       }
 
-      if (i < line.length()) {
+      if (i < line.size()) {
         // Rest der Linie zurück in die Output-Queue (ans Ende)
         LINE_STRING rem;
-        for (size_t j = i; j < line.length(); ++j) {
-          rem.append(line.get(j));
+        for (size_t j = i; j < line.size(); ++j) {
+          rem.push_back(line.at(j));
         }
         _outputQueue->sendToBack(rem);
         vTaskDelay(pdMS_TO_TICKS(1));

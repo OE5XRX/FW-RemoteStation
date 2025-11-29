@@ -7,8 +7,8 @@ TEST_GROUP(HistoryTest){};
 TEST(HistoryTest, EmptyGetReturnsEmpty) {
   History     h;
   LINE_STRING s = h.get(0);
-  STRCMP_EQUAL("", s.data());
-  LONGS_EQUAL(0, s.length());
+  STRCMP_EQUAL("", s.c_str());
+  LONGS_EQUAL(0, s.size());
 }
 
 TEST(HistoryTest, AddAndGetNewest) {
@@ -17,8 +17,8 @@ TEST(HistoryTest, AddAndGetNewest) {
   h.add(one);
 
   LINE_STRING latest = h.get(0);
-  STRCMP_EQUAL("first", latest.data());
-  LONGS_EQUAL(5, latest.length());
+  STRCMP_EQUAL("first", latest.c_str());
+  LONGS_EQUAL(5, latest.size());
 }
 
 TEST(HistoryTest, NavigateHistoryBounds) {
@@ -28,17 +28,17 @@ TEST(HistoryTest, NavigateHistoryBounds) {
   h.add(LINE_STRING("three"));
 
   // newest
-  STRCMP_EQUAL("three", h.get(0).data());
+  STRCMP_EQUAL("three", h.get(0).c_str());
   // older
-  STRCMP_EQUAL("two", h.get(1).data());
-  STRCMP_EQUAL("one", h.get(1).data());
+  STRCMP_EQUAL("two", h.get(1).c_str());
+  STRCMP_EQUAL("one", h.get(1).c_str());
   // further older stays clamped to oldest available
-  STRCMP_EQUAL("one", h.get(1).data());
+  STRCMP_EQUAL("one", h.get(1).c_str());
   // go back towards newest
-  STRCMP_EQUAL("two", h.get(-1).data());
-  STRCMP_EQUAL("three", h.get(-1).data());
+  STRCMP_EQUAL("two", h.get(-1).c_str());
+  STRCMP_EQUAL("three", h.get(-1).c_str());
   // further newer stays clamped to newest
-  STRCMP_EQUAL("three", h.get(-1).data());
+  STRCMP_EQUAL("three", h.get(-1).c_str());
 }
 
 TEST(HistoryTest, OverflowDropsOldest) {
@@ -53,7 +53,7 @@ TEST(HistoryTest, OverflowDropsOldest) {
   }
 
   // newest should be last added
-  STRCMP_EQUAL("E12", h.get(0).data());
+  STRCMP_EQUAL("E12", h.get(0).c_str());
 
   // navigate to the last kept (oldest within depth)
   // index depth-1 should give the oldest retained entry: E( (depth+3)-depth ) == E3
@@ -61,7 +61,7 @@ TEST(HistoryTest, OverflowDropsOldest) {
   for (size_t i = 1; i < depth; ++i) {
     h.get(1);
   }
-  STRCMP_EQUAL("E3", h.get(0).data()); // after clamping, current index points to oldest retained
+  STRCMP_EQUAL("E3", h.get(0).c_str()); // after clamping, current index points to oldest retained
 }
 
 TEST(HistoryTest, AddEmptyLineAndDuplicates) {
@@ -71,11 +71,11 @@ TEST(HistoryTest, AddEmptyLineAndDuplicates) {
   h.add(LINE_STRING("dup"));
 
   // newest is last "dup"
-  STRCMP_EQUAL("dup", h.get(0).data());
+  STRCMP_EQUAL("dup", h.get(0).c_str());
   // older is empty string
-  STRCMP_EQUAL("", h.get(1).data());
+  STRCMP_EQUAL("", h.get(1).c_str());
   // older is first "dup"
-  STRCMP_EQUAL("dup", h.get(1).data());
+  STRCMP_EQUAL("dup", h.get(1).c_str());
 }
 
 TEST(HistoryTest, ResetResetsIndex) {
@@ -84,10 +84,10 @@ TEST(HistoryTest, ResetResetsIndex) {
   h.add(LINE_STRING("b"));
 
   // walk to older entry
-  STRCMP_EQUAL("b", h.get(0).data());
-  STRCMP_EQUAL("a", h.get(1).data());
+  STRCMP_EQUAL("b", h.get(0).c_str());
+  STRCMP_EQUAL("a", h.get(1).c_str());
 
   h.reset();
   // after reset, get(0) should return newest again
-  STRCMP_EQUAL("b", h.get(0).data());
+  STRCMP_EQUAL("b", h.get(0).c_str());
 }

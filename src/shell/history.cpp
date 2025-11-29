@@ -21,9 +21,9 @@ LINE_STRING History::get(int direction) {
 
 void History::add(const LINE_STRING &line) {
   for (int32_t i = CLI_HISTORY_DEPTH - 2; i >= 0; i--) {
-    _data[i + 1].copy_from(_data[i]);
+    _data[i + 1] = _data[i];
   }
-  _data[0].copy_from(line);
+  _data[0] = line;
   _count++;
   if (_count > CLI_HISTORY_DEPTH) {
     _count = CLI_HISTORY_DEPTH;

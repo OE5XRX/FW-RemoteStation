@@ -15,7 +15,7 @@ public:
 
   CommandBase(const CMD_STRING &name, const HELP_STRING &help);
 
-  virtual void handle(int argc, const char *argv[]) = 0;
+  virtual void handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) = 0;
 
   const CMD_STRING  name;
   const HELP_STRING help;
