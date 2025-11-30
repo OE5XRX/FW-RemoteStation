@@ -7,5 +7,5 @@ endif()
 target_sources(
   ${PROJECT_NAME} PRIVATE
   cdc_base.cpp
-  system_services.cpp
+  system_manager.cpp
 )

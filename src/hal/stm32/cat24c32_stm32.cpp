@@ -29,10 +29,10 @@ std::size_t CAT24C325_stm32::write(std::uint16_t addr, const std::uint8_t *data,
   if (!data || len == 0) {
     return 0;
   }
-  if (addr >= SIZE) {
+  if (!rangeOk(addr, len)) {
     return 0;
   }
-  std::size_t maxlen  = SIZE - addr;
+  std::size_t maxlen  = TOTAL_SIZE - addr;
   std::size_t towrite = std::min(len, maxlen);
 
   std::size_t written = 0;
@@ -55,10 +55,10 @@ std::size_t CAT24C325_stm32::read(std::uint16_t addr, std::uint8_t *buf, std::si
   if (!buf || len == 0) {
     return 0;
   }
-  if (addr >= SIZE) {
+  if (!rangeOk(addr, len)) {
     return 0;
   }
-  std::size_t maxlen = SIZE - addr;
+  std::size_t maxlen = TOTAL_SIZE - addr;
   std::size_t toread = std::min(len, maxlen);
 
   uint16_t          devAddr8 = static_cast<uint16_t>(_devAddr7 << 1);

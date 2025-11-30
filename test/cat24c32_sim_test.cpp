@@ -10,9 +10,9 @@ TEST_GROUP(Cat24c32SimGroup){};
 TEST(Cat24c32SimGroup, DefaultMemoryIsFF) {
   CAT24C325_Sim sim(0); // no write delay for tests
 
-  std::vector<uint8_t> buf(CAT24C325::SIZE);
+  std::vector<uint8_t> buf(CAT24C325::TOTAL_SIZE);
   std::size_t          r = sim.read(0, buf.data(), buf.size());
-  LONGS_EQUAL(CAT24C325::SIZE, r);
+  LONGS_EQUAL(CAT24C325::TOTAL_SIZE, r);
 
   for (std::size_t i = 0; i < r; ++i) {
     LONGS_EQUAL(0xFF, buf[i]);
@@ -61,17 +61,17 @@ TEST(Cat24c32SimGroup, PageBoundaryWrite) {
 TEST(Cat24c32SimGroup, WriteClampsAtDeviceEnd) {
   CAT24C325_Sim sim(0);
 
-  std::uint16_t        addr = static_cast<std::uint16_t>(CAT24C325::SIZE - 10);
+  std::uint16_t        addr = static_cast<std::uint16_t>(CAT24C325::TOTAL_SIZE - 10);
   const std::size_t    want = 20;
   std::vector<uint8_t> src(want, 0x55);
 
   std::size_t written = sim.write(addr, src.data(), src.size());
   // should only write up to device end (10 bytes)
-  LONGS_EQUAL(10, written);
+  LONGS_EQUAL(0, written);
 
   std::vector<uint8_t> dst(20, 0);
   std::size_t          read = sim.read(addr, dst.data(), dst.size());
-  LONGS_EQUAL(10, read);
+  LONGS_EQUAL(0, read);
   for (std::size_t i = 0; i < read; ++i) {
     LONGS_EQUAL(0x55, dst[i]);
   }

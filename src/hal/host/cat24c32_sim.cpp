@@ -15,12 +15,10 @@ std::size_t CAT24C325_Sim::write(std::uint16_t addr, const std::uint8_t *data, s
   if (!data || len == 0) {
     return 0;
   }
-
-  // clamp length to device size
-  if (addr >= SIZE) {
+  if (!rangeOk(addr, len)) {
     return 0;
   }
-  std::size_t maxlen  = SIZE - addr;
+  std::size_t maxlen  = TOTAL_SIZE - addr;
   std::size_t towrite = std::min(len, maxlen);
 
   // emulate page writes: wrap within page boundary
@@ -47,10 +45,10 @@ std::size_t CAT24C325_Sim::read(std::uint16_t addr, std::uint8_t *buf, std::size
   if (!buf || len == 0) {
     return 0;
   }
-  if (addr >= SIZE) {
+  if (!rangeOk(addr, len)) {
     return 0;
   }
-  std::size_t maxlen = SIZE - addr;
+  std::size_t maxlen = TOTAL_SIZE - addr;
   std::size_t toread = std::min(len, maxlen);
   std::copy_n(_mem.begin() + addr, toread, buf);
   return toread;
@@ -61,7 +59,7 @@ void CAT24C325_Sim::loadFromFile(const std::string &path) {
   if (!ifs) {
     throw std::runtime_error("open failed");
   }
-  ifs.read(reinterpret_cast<char *>(_mem.data()), SIZE);
+  ifs.read(reinterpret_cast<char *>(_mem.data()), TOTAL_SIZE);
 }
 
 void CAT24C325_Sim::dumpToFile(const std::string &path) const {
@@ -69,7 +67,7 @@ void CAT24C325_Sim::dumpToFile(const std::string &path) const {
   if (!ofs) {
     throw std::runtime_error("open failed");
   }
-  ofs.write(reinterpret_cast<const char *>(_mem.data()), SIZE);
+  ofs.write(reinterpret_cast<const char *>(_mem.data()), TOTAL_SIZE);
 }
 
 void CAT24C325_Sim::reset(uint8_t fill) {

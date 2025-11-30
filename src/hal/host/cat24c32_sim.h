@@ -18,8 +18,8 @@ public:
   void dumpToFile(const std::string &path) const;
 
 private:
-  std::array<std::uint8_t, SIZE> _mem;
-  unsigned                       _writeCycleMs;
+  std::array<std::uint8_t, TOTAL_SIZE> _mem;
+  unsigned                             _writeCycleMs;
 
   void reset(uint8_t fill = 0xFF);
 };
