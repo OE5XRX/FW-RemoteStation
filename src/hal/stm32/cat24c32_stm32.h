@@ -16,6 +16,7 @@ public:
 
   std::size_t write(std::uint16_t addr, const std::uint8_t *data, std::size_t len) final;
   std::size_t read(std::uint16_t addr, std::uint8_t *buf, std::size_t len) final;
+  void        reset(uint8_t fill = 0xFF) final;
 
 private:
   I2C_HandleTypeDef *_i2c;

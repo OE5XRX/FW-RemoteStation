@@ -1,6 +1,7 @@
 #include "cat24c32_stm32.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 
 #include <FreeRTOS/Task.hpp>
@@ -67,4 +68,22 @@ std::size_t CAT24C325_stm32::read(std::uint16_t addr, std::uint8_t *buf, std::si
     return 0;
   }
   return toread;
+}
+
+void CAT24C325_stm32::reset(uint8_t fill) {
+  std::array<uint8_t, PAGE_SIZE> pageBuf;
+  pageBuf.fill(fill);
+
+  std::size_t addr    = 0;
+  std::size_t towrite = TOTAL_SIZE;
+
+  while (addr < towrite) {
+    std::size_t chunk = std::min(static_cast<std::size_t>(PAGE_SIZE), towrite - addr);
+    std::size_t w     = writePage(static_cast<std::uint16_t>(addr), pageBuf.data(), chunk);
+    if (w == 0) {
+      break; // hardware error
+    }
+    addr += w;
+    // next chunk will handle page boundary and delay
+  }
 }

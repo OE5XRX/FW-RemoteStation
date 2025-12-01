@@ -10,7 +10,7 @@
       "request": "launch",
       "program": "${workspaceRoot}/build-ut/test/test-OE5XRX",
       "cwd": "${workspaceRoot}",
-      "preLaunchTask": "Build Unittest"
+      //"preLaunchTask": "Build Unittest"
     },
     {
       "name": "STlink launch",

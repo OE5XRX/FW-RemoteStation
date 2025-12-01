@@ -7,6 +7,8 @@ set(CMAKE_CXX_CPPCHECK ${cppcheck_exe} --std=c++20 ${cppcheck_opts})
 add_executable(
   test-${PROJECT_NAME}
   cat24c32_sim_test.cpp
+  config_storage_more_tests.cpp
+  config_storage_test.cpp
   fixed_string_test.cpp
   history_test.cpp
   ring_buffer_test.cpp

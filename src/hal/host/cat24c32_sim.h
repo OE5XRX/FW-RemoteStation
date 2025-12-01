@@ -13,6 +13,7 @@ public:
 
   std::size_t write(std::uint16_t addr, const std::uint8_t *data, std::size_t len) final;
   std::size_t read(std::uint16_t addr, std::uint8_t *buf, std::size_t len) final;
+  void        reset(uint8_t fill = 0xFF) final;
 
   void loadFromFile(const std::string &path);
   void dumpToFile(const std::string &path) const;
@@ -20,8 +21,6 @@ public:
 private:
   std::array<std::uint8_t, TOTAL_SIZE> _mem;
   unsigned                             _writeCycleMs;
-
-  void reset(uint8_t fill = 0xFF);
 };
 
 #endif

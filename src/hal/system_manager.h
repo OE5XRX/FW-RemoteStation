@@ -1,9 +1,10 @@
 #ifndef SYSTEM_MANAGER_H_
 #define SYSTEM_MANAGER_H_
 
-#include "cat24c32.h"
 #include <cstddef>
 #include <cstdint>
+
+#include "cat24c32.h"
 
 class SystemManager {
 public:

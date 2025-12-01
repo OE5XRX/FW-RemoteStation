@@ -11,6 +11,7 @@ public:
 
   virtual std::size_t write(std::uint16_t addr, const std::uint8_t *data, std::size_t len) = 0;
   virtual std::size_t read(std::uint16_t addr, std::uint8_t *buf, std::size_t len)         = 0;
+  virtual void        reset(uint8_t fill = 0xFF)                                           = 0;
 
 protected:
   bool rangeOk(uint32_t addr, std::size_t len) const {

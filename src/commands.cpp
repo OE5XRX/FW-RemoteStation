@@ -1,6 +1,9 @@
+#include <stdio.h>
+#include <string.h>
 
-#include "commands.h"
 #include "VariableRegistry.h"
+#include "commands.h"
+#include "config.h"
 #include "shell/log.h"
 #include "shell/shell.h"
 
@@ -133,4 +136,76 @@ void ListCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) 
     index++;
     varName = variableRegistry.getName(index);
   }
+}
+
+CommandConfigLoad::CommandConfigLoad() : CommandBase(CMD_STRING("config_load"), HELP_STRING("Lädt Config aus persistentem Speicher.")) {
+}
+
+void CommandConfigLoad::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
+  (void)argc;
+  (void)argv;
+
+  if (!Config::load()) {
+    cli_write("Config load FAILED – Defaults bleiben aktiv.\r\n");
+    return;
+  }
+  cli_write("Config loaded. Sequence: ");
+  char buffer[10];
+  std::snprintf(buffer, sizeof(buffer), "%d", Config::currentSequence());
+  cli_write(buffer);
+  cli_write("\r\n");
+}
+
+CommandConfigSave::CommandConfigSave() : CommandBase(CMD_STRING("config_save"), HELP_STRING("Speichert aktuelle Config persistent.")) {
+}
+
+void CommandConfigSave::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
+  (void)argc;
+  (void)argv;
+
+  if (!Config::save()) {
+    cli_write("Config save FAILED!\r\n");
+    return;
+  }
+  cli_write("Config saved.\r\n");
+}
+
+CommandConfigReset::CommandConfigReset() : CommandBase(CMD_STRING("config_reset"), HELP_STRING("Setzt Config auf Defaults [optional: save].")) {
+}
+
+void CommandConfigReset::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
+  Config::resetToDefaults();
+  cli_write("Config reset -> defaults applied.\r\n");
+
+  if (argc > 1 && std::strcmp(argv[1], "save") == 0) {
+    if (Config::save()) {
+      cli_write("Config saved.\r\n");
+    } else {
+      cli_write("Config save FAILED!\r\n");
+    }
+  }
+}
+
+CommandConfigDump::CommandConfigDump() : CommandBase(CMD_STRING("config_dump"), HELP_STRING("Zeigt aktuelle Config und CRC32 an.")) {
+}
+
+void CommandConfigDump::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
+  (void)argc;
+  (void)argv;
+
+  const AppConfig &cfg = Config::currentConst();
+
+  char line[64];
+
+  std::snprintf(line, sizeof(line), "volume    = %u\r\n", cfg.volume);
+  cli_write(line);
+
+  std::snprintf(line, sizeof(line), "frequency = %.3f\r\n", cfg.frequency);
+  cli_write(line);
+
+  std::snprintf(line, sizeof(line), "tx_enable = %s\r\n", cfg.txEnable ? "true" : "false");
+  cli_write(line);
+
+  std::snprintf(line, sizeof(line), "Sequence = %d\r\n", Config::currentSequence());
+  cli_write(line);
 }

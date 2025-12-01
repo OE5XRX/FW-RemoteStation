@@ -45,4 +45,28 @@ public:
   void handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) override;
 };
 
+class CommandConfigLoad : public CommandBase {
+public:
+  CommandConfigLoad();
+  void handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) override;
+};
+
+class CommandConfigSave : public CommandBase {
+public:
+  CommandConfigSave();
+  void handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) override;
+};
+
+class CommandConfigReset : public CommandBase {
+public:
+  CommandConfigReset();
+  void handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) override;
+};
+
+class CommandConfigDump : public CommandBase {
+public:
+  CommandConfigDump();
+  void handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) override;
+};
+
 #endif
