@@ -18,7 +18,8 @@ TEST(ConfigStorageTest, LoadInitiallyNoConfig) {
   // genügend Platz für Header + Config
   ConfigStorage cs(CAT24C325::TOTAL_SIZE / 2, 0, CAT24C325::TOTAL_SIZE / 2, 1);
   AppConfig     cfg;
-  CHECK_FALSE(cs.load(cfg));
+  uint32_t      sequence;
+  CHECK_FALSE(cs.load(cfg, sequence));
 }
 
 TEST(ConfigStorageTest, SaveAndLoadRoundtrip) {
@@ -36,7 +37,8 @@ TEST(ConfigStorageTest, SaveAndLoadRoundtrip) {
   CHECK_TRUE(cs.save(out));
 
   AppConfig in;
-  CHECK_TRUE(cs.load(in));
+  uint32_t  sequence;
+  CHECK_TRUE(cs.load(in, sequence));
 
   MEMCMP_EQUAL(&out, &in, sizeof(AppConfig));
 }
