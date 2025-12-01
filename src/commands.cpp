@@ -81,7 +81,7 @@ void SetCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   const char *varName  = argv[1];
   const char *varValue = argv[2];
 
-  if (!variableRegistry.set(varName, varValue)) {
+  if (!VariableRegistry::instance().set(varName, varValue)) {
     cli_write("Error: unknown variable or invalid value: ");
     cli_write(varName);
     cli_write("\r\n");
@@ -103,7 +103,7 @@ void GetCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) {
   const char *varName = argv[1];
   char        buffer[32];
 
-  if (!variableRegistry.get(varName, buffer, sizeof(buffer))) {
+  if (!VariableRegistry::instance().get(varName, buffer, sizeof(buffer))) {
     cli_write("Error: unknown variable: ");
     cli_write(varName);
     cli_write("\r\n");
@@ -124,17 +124,17 @@ void ListCommand::handle(int argc, std::array<const char *, CLI_MAX_ARGS> argv) 
   (void)argv;
 
   size_t      index   = 0;
-  const char *varName = variableRegistry.getName(index);
+  const char *varName = VariableRegistry::instance().getName(index);
   while (varName != nullptr) {
     char buffer[32];
-    if (variableRegistry.get(varName, buffer, sizeof(buffer))) {
+    if (VariableRegistry::instance().get(varName, buffer, sizeof(buffer))) {
       cli_write(varName);
       cli_write(" = ");
       cli_write(buffer);
       cli_write("\r\n");
     }
     index++;
-    varName = variableRegistry.getName(index);
+    varName = VariableRegistry::instance().getName(index);
   }
 }
 
@@ -193,19 +193,28 @@ void CommandConfigDump::handle(int argc, std::array<const char *, CLI_MAX_ARGS> 
   (void)argc;
   (void)argv;
 
-  const AppConfig &cfg = Config::currentConst();
+  VariableRegistry &reg = VariableRegistry::instance();
+
+  cli_write("Config variables:\r\n");
+
+  const std::size_t n = reg.size();
+  char              valueBuf[32];
+  char              lineBuf[64];
+
+  for (std::size_t i = 0; i < n; ++i) {
+    VariableBase *var = reg.getVar(i);
+    if (!var) {
+      continue;
+    }
+
+    valueBuf[0] = '\0';
+    var->getAsString(valueBuf, sizeof(valueBuf));
+
+    std::snprintf(lineBuf, sizeof(lineBuf), "  %s = %s\r\n", var->name(), valueBuf);
+    cli_write(lineBuf);
+  }
 
   char line[64];
-
-  std::snprintf(line, sizeof(line), "volume    = %u\r\n", cfg.volume);
-  cli_write(line);
-
-  std::snprintf(line, sizeof(line), "frequency = %.3f\r\n", cfg.frequency);
-  cli_write(line);
-
-  std::snprintf(line, sizeof(line), "tx_enable = %s\r\n", cfg.txEnable ? "true" : "false");
-  cli_write(line);
-
   std::snprintf(line, sizeof(line), "Sequence = %d\r\n", Config::currentSequence());
   cli_write(line);
 }

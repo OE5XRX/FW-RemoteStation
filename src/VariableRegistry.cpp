@@ -42,9 +42,19 @@ bool VariableRegistry::get(const char *name, char *buffer, std::size_t bufferSiz
   return true;
 }
 
+std::size_t VariableRegistry::size() const {
+  return _count;
+}
+
 const char *VariableRegistry::getName(std::size_t index) const {
   if (index >= _count) {
     return nullptr;
   }
   return _variables[index]->name();
+}
+
+VariableBase *VariableRegistry::getVar(std::size_t index) const {
+  if (index >= _count)
+    return nullptr;
+  return _variables[index];
 }

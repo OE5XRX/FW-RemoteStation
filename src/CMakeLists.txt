@@ -5,6 +5,7 @@ set(CMAKE_CXX_CPPCHECK ${cppcheck_exe} --std=c++20 ${cppcheck_opts})
 
 # Liste der Quell-Dateien zentral verwalten
 set(SRC_FILES
+  app_config.cpp
   commands.cpp
   config_storage.cpp
   config.cpp
