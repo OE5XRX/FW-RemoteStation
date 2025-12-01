@@ -151,7 +151,7 @@ void CommandConfigLoad::handle(int argc, std::array<const char *, CLI_MAX_ARGS> 
   }
   cli_write("Config loaded. Sequence: ");
   char buffer[10];
-  std::snprintf(buffer, sizeof(buffer), "%d", Config::currentSequence());
+  std::snprintf(buffer, sizeof(buffer), "%ld", Config::currentSequence());
   cli_write(buffer);
   cli_write("\r\n");
 }
@@ -215,6 +215,6 @@ void CommandConfigDump::handle(int argc, std::array<const char *, CLI_MAX_ARGS> 
   }
 
   char line[64];
-  std::snprintf(line, sizeof(line), "Sequence = %d\r\n", Config::currentSequence());
+  std::snprintf(line, sizeof(line), "Sequence = %ld\r\n", Config::currentSequence());
   cli_write(line);
 }
