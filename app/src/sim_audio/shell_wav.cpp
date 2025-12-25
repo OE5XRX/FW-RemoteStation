@@ -52,11 +52,11 @@ static int cmd_wav_sine(const shell *sh, size_t argc, char **argv) {
   uint32_t rate_hz = sim_audio::default_gen_rate_hz;
 
   if (argc >= 3)
-    freq_hz = (uint32_t)strtoul(argv[2], nullptr, 10);
+    freq_hz = (uint32_t)strtoul(argv[1], nullptr, 10);
   if (argc >= 4)
-    amp_norm = strtof(argv[3], nullptr);
+    amp_norm = strtof(argv[2], nullptr);
   if (argc >= 5)
-    rate_hz = (uint32_t)strtoul(argv[4], nullptr, 10);
+    rate_hz = (uint32_t)strtoul(argv[3], nullptr, 10);
 
   if (rate_hz == 0u || freq_hz == 0u || freq_hz > (rate_hz / 2u)) {
     shell_error(sh, "freq must be 1..%u (Nyquist)", rate_hz / 2u);
