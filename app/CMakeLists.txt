@@ -4,7 +4,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(app LANGUAGES C CXX ASM)
 
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
-target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE src/main.cpp)
 
 if (CONFIG_BOARD_NATIVE_SIM)
     target_sources(app PRIVATE

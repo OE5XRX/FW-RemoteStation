@@ -2,6 +2,6 @@
 #include <zephyr/sys/printk.h>
 
 int main(void) {
-  printk("Hello from Zephyr native_sim!\n");
+  printk("FM Board booted\n");
   return 0;
 }
