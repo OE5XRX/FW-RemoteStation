@@ -29,6 +29,7 @@ jobs:
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: fw
+          ccache-cache-key: zephyr-ccache-${{ runner.os }}-${{ hashFiles('**/fw/west.yml') }}
 
       - name: Build firmware
         working-directory: fw
