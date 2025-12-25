@@ -1,0 +1,10 @@
+sample:
+  description: FM Board Application
+  name: fm-application
+
+tests:
+  fm.app.build:
+    build_only: true
+    integration_platforms:
+      - fm_board
+      - native_sim/native/64

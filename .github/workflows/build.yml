@@ -30,12 +30,12 @@ jobs:
         with:
           app-path: fw
 
-#      - name: Build firmware
-#        working-directory: fw
-#        shell: bash
-#        run: west twister -T app -v --inline-logs --integration $EXTRA_TWISTER_FLAGS
-#
-#      - name: Twister Tests
-#        working-directory: fw
-#        shell: bash
-#        run: west twister -T tests -v --inline-logs --integration $EXTRA_TWISTER_FLAGS
+      - name: Build firmware
+        working-directory: fw
+        shell: bash
+        run: west twister -T app -v --inline-logs --integration
+
+      - name: Twister Tests
+        working-directory: fw
+        shell: bash
+        run: west twister -T tests -v --inline-logs --integration
