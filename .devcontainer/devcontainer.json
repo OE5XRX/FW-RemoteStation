@@ -1,0 +1,21 @@
+{
+  "name": "Zephyr Development Container",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/workspace,type=bind",
+  "workspaceFolder": "/home/user/workspace",
+  "remoteUser": "user",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "xaver.clang-format",
+        "ms-vscode.cpptools-extension-pack",
+        "nordic-semiconductor.nrf-connect-extension-pack"
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  }
+}

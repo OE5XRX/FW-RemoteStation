@@ -1,0 +1,6 @@
+board:
+  name: fm_board
+  full_name: FM-Transceiver for the OE5XRX Remote Station
+  vendor: oe5xrx
+  socs:
+    - name: stm32f302xc

@@ -1,0 +1,21 @@
+# editors
+*.swp
+*~
+
+# python
+.venv
+
+# build
+/build*
+/twister-out*
+/app/build*
+
+__pycache__/
+
+# docs
+/doc/_build*
+
+# implement later
+doc
+scripts
+tests

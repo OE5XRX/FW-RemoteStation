@@ -1,0 +1,163 @@
+/dts-v1/;
+#include <st/f3/stm32f302Xc.dtsi>
+#include <st/f3/stm32f302v(b-c)tx-pinctrl.dtsi>
+
+/ {
+	model = "FM-Transceiver for the OE5XRX Remote Station";
+	compatible = "oe5xrx,fm_board";
+
+	chosen {
+		zephyr,console = &cdc_acm_uart0;
+		zephyr,shell-uart = &cdc_acm_uart0;
+		zephyr,code-partition = &slot0_partition;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+	};
+
+	out_3p3v_pwr: 3p3v-out-pwr-ctrl {
+		compatible = "regulator-fixed";
+		regulator-name = "3p3v-out-pwr-ctrl";
+		enable-gpios = <&gpioe 7 GPIO_ACTIVE_HIGH>;
+		regulator-always-on;
+		regulator-boot-on;
+		status = "okay";
+	};
+
+	out_gpio_bufa_pwr: out-gpio-bufa-pwr-ctrl {
+		compatible = "regulator-fixed";
+		regulator-name = "out-gpio-bufa-pwr-ctrl";
+		enable-gpios = <&gpiof 2 GPIO_ACTIVE_LOW>;
+		regulator-boot-on;
+		status = "okay";
+	};
+
+	out_gpio_bufb_pwr: out-gpio-bufb-pwr-ctrl {
+		compatible = "regulator-fixed";
+		regulator-name = "out-gpio-bufb-pwr-ctrl";
+		enable-gpios = <&gpiof 4 GPIO_ACTIVE_LOW>;
+		regulator-boot-on;
+		status = "okay";
+	};
+
+	in_gpio_buf_pwr: in-gpio-buf-pwr-ctrl {
+		compatible = "regulator-fixed";
+		regulator-name = "in-gpio-buf-pwr-ctrl";
+		enable-gpios = <&gpiof 6 GPIO_ACTIVE_LOW>;
+		regulator-boot-on;
+		status = "okay";
+	};
+};
+
+&clk_lsi {
+	status = "okay";
+};
+
+&clk_hse {
+	clock-frequency = <DT_FREQ_M(8)>;
+	status = "okay";
+};
+
+&pll {
+	prediv = <1>;
+	mul = <9>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(72)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <2>;
+	apb2-prescaler = <1>;
+	status = "okay";
+};
+
+&usart1 {
+	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-0 = <&i2c1_scl_pa15 &i2c1_sda_pb9>;
+	pinctrl-names = "default";
+	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
+
+	eeprom@50 {
+		compatible = "st,m24m01", "st,m24xxx", "atmel,at24";
+		reg = <0x50>;
+		size = <DT_SIZE_K(4)>;
+		pagesize = <8>;
+		address-width = <16>;
+		timeout = <5>;
+	};
+};
+
+&i2c2 {
+	pinctrl-0 = <&i2c2_scl_pa9 &i2c2_sda_pa10>;
+	pinctrl-names = "default";
+	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
+};
+
+zephyr_udc0: &usb {
+	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+&rtc {
+	clocks = <&rcc STM32_CLOCK(APB1, 28)>,
+					 <&rcc STM32_SRC_LSI RTC_SEL(2)>;
+	status = "okay";
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x00010000>;
+			read-only;
+		};
+
+		/*
+		 * The flash starting at 0x00010000 and ending at
+		 * 0x0001ffff (sectors 16-31) is reserved for use
+		 * by the application.
+		 */
+		slot0_partition: partition@20000 {
+			label = "image-0";
+			reg = <0x00020000 0x00008000>;
+		};
+
+		slot1_partition: partition@28000 {
+			label = "image-1";
+			reg = <0x00028000 0x00008000>;
+		};
+
+		storage_partition: partition@30000 {
+			label = "storage";
+			reg = <0x00030000 0x00002000>;
+		};
+
+		scratch_partition: partition@32000 {
+			label = "image-scratch";
+			reg = <0x00032000 0x00008000>;
+		};
+	};
+};
+
+&iwdg {
+	status = "okay";
+};

@@ -1,0 +1,8 @@
+
+build:
+  kconfig: Kconfig
+  cmake: .
+  settings:
+    board_root: .
+runners:
+  - file: scripts/example_runner.py

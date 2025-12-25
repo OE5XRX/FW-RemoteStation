@@ -1,0 +1,11 @@
+{
+  "C_Cpp.default.compileCommands": [
+    "app/build/compile_commands.json"
+  ],
+  "nrf-connect.applications": [
+    "${workspaceFolder}/app"
+  ],
+  "nrf-connect.debugging.bindings": {
+    "${workspaceFolder}/app/build": "Launch build"
+  }
+}
