@@ -1,3 +1,8 @@
+[![CI](https://github.com/OE5XRX/FW-RemoteStation/actions/workflows/ci.yml/badge.svg)](https://github.com/OE5XRX/FW-RemoteStation/actions/workflows/ci.yml)
+[![License: LGPL v3](https://img.shields.io/badge/license-LGPLv3-blue.svg)](LICENSE)
+[![Zephyr RTOS](https://img.shields.io/badge/RTOS-Zephyr-blue)](https://zephyrproject.org/)
+[![C++](https://img.shields.io/badge/language-C%2B%2B20-blue)](#)
+
 # FW-RemoteStation
 
 Firmware für die **OE5XRX Remote Station** auf Basis von **Zephyr RTOS**.
@@ -153,3 +158,109 @@ Fokus: Simulation, Tests, CI-Stabilität
 
 Amateurfunkclub für Remote Stationen  
 Rufzeichen: **OE5XRX**
+
+## Developer Notes
+
+Dieser Abschnitt richtet sich an Entwickler, die aktiv an der Firmware arbeiten
+oder neue Features beitragen möchten.
+
+---
+
+## Entwicklungsumgebung
+
+### Empfohlenes Setup
+
+- Linux Host (getestet mit Ubuntu)
+- Verwendung des bereitgestellten **Devcontainers**
+- Visual Studio Code mit Devcontainer-Erweiterung
+
+Der Devcontainer stellt sicher, dass:
+- alle Toolchains konsistent sind
+- alle Abhängigkeiten reproduzierbar installiert sind
+- lokale Builds dem CI-Verhalten entsprechen
+
+---
+
+## Devcontainer vs. CI
+
+Wichtiges Designprinzip dieses Projekts:
+
+- Der **Devcontainer** ist für lokale Entwicklung optimiert
+- Die **GitHub Actions CI** nutzt bewusst keinen Devcontainer
+- CI verwendet:
+  - offizielle Zephyr GitHub Actions
+  - gecachte Toolchains und Abhängigkeiten
+  - GitHub Free Runners
+
+Dadurch bleibt das Projekt:
+- offen für externe Contributions
+- unabhängig von kostenpflichtiger Infrastruktur
+- reproduzierbar für alle Mitwirkenden
+
+---
+
+## Build & Test Workflow
+
+Empfohlener Ablauf für neue Features:
+
+1. Implementierung zuerst in `native_sim`
+2. Lokale Tests über Shell und Simulation
+3. Unit-Tests für Logik (ztest)
+4. Systemtests (pytest + Twister)
+5. Erst danach Hardware-Tests auf fm_board
+
+---
+
+## Typische Entwickler-Kommandos
+
+--- CODE BLOCK START ---
+# native_sim build
+west build -b native_sim/native/64 app
+
+# fm_board build
+west build -b fm_board app
+
+# Integration Builds
+west twister -T app --integration -v
+
+# Systemtests
+west twister -T tests/sim_shell -p native_sim/native/64 -v
+
+# Unit-Tests
+west twister -T tests/unit_audio -p native_sim/native/64 -v
+--- CODE BLOCK END ---
+
+---
+
+## Code-Qualität
+
+- clang-format wird verpflichtend verwendet
+- Formatierungsfehler führen in CI zu Fehlern
+- Code ohne Heap-Allokation
+- klare Trennung von Logik und Hardware
+
+---
+
+## Erweiterungen & Architektur
+
+Für größere Änderungen (z. B. neue Audio-Quellen, neue Hardware-Backends):
+
+- bitte vorab ein Issue eröffnen
+- Architekturentscheidungen dokumentieren
+- Tests frühzeitig mitdenken
+
+---
+
+## Hinweise für Reviewer
+
+Pull Requests sollten besonders prüfen:
+
+- native_sim-Kompatibilität
+- Testabdeckung
+- Einhaltung der Projektprinzipien
+- keine unnötigen Abhängigkeiten
+
+---
+
+Dieser Abschnitt ergänzt die allgemeinen Projektinformationen
+und richtet sich explizit an Entwickler und Maintainer.
