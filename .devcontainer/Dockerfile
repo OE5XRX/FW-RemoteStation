@@ -8,5 +8,7 @@ RUN sudo apt-get update && sudo apt-get install -y \
     picocom \
     screen \
     dfu-util \
-    clang-format \
+    clang-format-18 \
     && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+
+RUN sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 180

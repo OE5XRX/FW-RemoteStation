@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  devcontainer_image:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.out.outputs.image }}
+      changed: ${{ steps.filter.outputs.devcontainer }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect devcontainer changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            devcontainer:
+              - ".devcontainer/**"
+
+      - name: Set image name
+        id: out
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${OWNER_LC}/${REPO_LC}-devcontainer:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: steps.filter.outputs.devcontainer == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.devcontainer == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push devcontainer image (only if needed)
+        if: steps.filter.outputs.devcontainer == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .devcontainer/Dockerfile
+          push: true
+          tags: ${{ steps.out.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  clang_format:
+    needs: devcontainer_image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.devcontainer_image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format check
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format --version
+          PATHS=("app" "boards" "tests")
+          mapfile -t FILES < <(
+            find "${PATHS[@]}" -type f \( \
+              -name "*.c" -o -name "*.h" \
+              -o -name "*.cc" -o -name "*.hh" \
+              -o -name "*.cpp" -o -name "*.hpp" \
+            \) -print
+          )
+          [ "${#FILES[@]}" -eq 0 ] && exit 0
+          clang-format -i "${FILES[@]}"
+          git diff --quiet || (echo "::error::clang-format produced changes"; git --no-pager diff --name-only; exit 1)
+
+  build_and_tests:
+    needs: devcontainer_image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.devcontainer_image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: West setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          west update
+          west zephyr-export
+      - name: Twister (integration + tests)
+        shell: bash
+        run: |
+          set -euo pipefail
+          west twister -T app --integration -v --inline-logs
+          west twister -T tests/sim_shell -p native_sim/native/64 -v --inline-logs
