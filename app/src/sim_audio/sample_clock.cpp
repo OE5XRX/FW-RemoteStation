@@ -1,4 +1,5 @@
 #include "sample_clock.h"
+
 #include <zephyr/kernel.h>
 
 namespace {

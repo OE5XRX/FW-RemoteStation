@@ -6,7 +6,7 @@ UseTab: Never
 ColumnLimit: 100
 
 Language: Cpp
-Standard: Cpp20
+Standard: Latest
 
 # Braces
 BreakBeforeBraces: Attach
@@ -22,8 +22,8 @@ BraceWrapping:
   IndentBraces: false
 
 # Pointers & references
-PointerAlignment: Left
-ReferenceAlignment: Left
+PointerAlignment: Right
+ReferenceAlignment: Right
 
 # Keep things compact
 AllowShortFunctionsOnASingleLine: Inline

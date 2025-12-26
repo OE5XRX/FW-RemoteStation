@@ -7,16 +7,13 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-
 #include <zephyr/shell/shell.h>
 
 class WavSource final : public SampleSource {
 public:
   int load(const char *path);
 
-  bool loaded() const {
-    return (count_samples_ > 0u) && (sample_rate_hz_ > 0u);
-  }
+  bool loaded() const { return (count_samples_ > 0u) && (sample_rate_hz_ > 0u); }
   uint32_t sample_rate_hz() const override { return sample_rate_hz_; }
   float next_sample_norm() override; // loops
 

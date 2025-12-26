@@ -2,6 +2,7 @@
 #define SIM_AUDIO_SINE_SOURCE_H_
 
 #include "sample_source.h"
+
 #include <cstdint>
 
 class SineSource final : public SampleSource {

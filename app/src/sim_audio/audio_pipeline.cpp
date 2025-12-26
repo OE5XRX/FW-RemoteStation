@@ -1,4 +1,5 @@
 #include "audio_pipeline.h"
+
 #include "constants.h"
 
 AudioPipeline::AudioPipeline(AdcSink sink) : sink_(sink) {}

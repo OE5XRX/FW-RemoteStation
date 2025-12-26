@@ -1,4 +1,5 @@
 #include "wav_source.h"
+
 #include "constants.h"
 
 #include <cerrno>
@@ -26,8 +27,7 @@ uint16_t WavSource::rd_u16_le(const uint8_t *p) {
 
 uint32_t WavSource::rd_u32_le(const uint8_t *p) {
   return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
-         (static_cast<uint32_t>(p[2]) << 16) |
-         (static_cast<uint32_t>(p[3]) << 24);
+         (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
 int WavSource::parse_wav_into_buffer(int fd) {
@@ -36,8 +36,7 @@ int WavSource::parse_wav_into_buffer(int fd) {
   if (rc)
     return rc;
 
-  if (std::memcmp(riff_hdr, "RIFF", 4) != 0 ||
-      std::memcmp(riff_hdr + 8, "WAVE", 4) != 0) {
+  if (std::memcmp(riff_hdr, "RIFF", 4) != 0 || std::memcmp(riff_hdr + 8, "WAVE", 4) != 0) {
     return sim_audio::err_inval;
   }
 
@@ -112,8 +111,7 @@ int WavSource::parse_wav_into_buffer(int fd) {
   if (::lseek(fd, data_off, SEEK_SET) < 0)
     return -errno;
 
-  const std::size_t available_samples =
-      static_cast<std::size_t>(data_bytes / 2u);
+  const std::size_t available_samples = static_cast<std::size_t>(data_bytes / 2u);
   const std::size_t max_samples = buf_.size();
   const std::size_t samples_to_read =
       (available_samples > max_samples) ? max_samples : available_samples;

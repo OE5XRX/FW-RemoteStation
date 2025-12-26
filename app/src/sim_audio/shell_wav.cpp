@@ -4,11 +4,10 @@
 #include "sine_source.h"
 #include "wav_source.h"
 
+#include <cstdlib>
 #include <zephyr/device.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/shell/shell.h>
-
-#include <cstdlib>
 
 namespace {
 constexpr uint8_t adc_channel_id = 0;
@@ -70,8 +69,7 @@ static int cmd_wav_sine(const shell *sh, size_t argc, char **argv) {
   g_sine.configure(freq_hz, amp_norm, rate_hz);
   const int rc = g_pipe.start(g_sine);
   if (rc == 0) {
-    shell_print(sh, "started sine: %u Hz amp=%.3f rate=%u Hz", freq_hz,
-                (double)amp_norm, rate_hz);
+    shell_print(sh, "started sine: %u Hz amp=%.3f rate=%u Hz", freq_hz, (double)amp_norm, rate_hz);
   } else {
     shell_error(sh, "start failed: %d", rc);
   }
@@ -87,12 +85,11 @@ static int cmd_wav_stop(const shell *sh, size_t, char **) {
 static int cmd_wav_info(const shell *sh, size_t, char **) {
   shell_print(sh, "pipeline running=%d", g_pipe.running() ? 1 : 0);
   const auto *src = g_pipe.source();
-  shell_print(sh, "source=%s",
-              (src == &g_wav) ? "wav" : ((src == &g_sine) ? "sine" : "none"));
+  shell_print(sh, "source=%s", (src == &g_wav) ? "wav" : ((src == &g_sine) ? "sine" : "none"));
 
-  shell_print(sh, "wav: loaded=%d rate=%u Hz samples=%u pos=%u",
-              g_wav.loaded() ? 1 : 0, g_wav.sample_rate_hz(),
-              (unsigned)g_wav.count_samples(), (unsigned)g_wav.pos_samples());
+  shell_print(sh, "wav: loaded=%d rate=%u Hz samples=%u pos=%u", g_wav.loaded() ? 1 : 0,
+              g_wav.sample_rate_hz(), (unsigned)g_wav.count_samples(),
+              (unsigned)g_wav.pos_samples());
 
   shell_print(sh, "sine: freq=%u Hz amp=%.3f rate=%u Hz", g_sine.freq_hz(),
               (double)g_sine.amp_norm(), g_sine.sample_rate_hz());
@@ -131,17 +128,15 @@ static int cmd_adc_read(const shell *sh, size_t, char **) {
     return rc;
   }
 
-  shell_print(sh, "adc raw=%d (range %u..%u)", sample_raw,
-              sim_audio::adc_raw_min, sim_audio::adc_raw_max_12bit);
+  shell_print(sh, "adc raw=%d (range %u..%u)", sample_raw, sim_audio::adc_raw_min,
+              sim_audio::adc_raw_max_12bit);
   return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
-    wav_cmds,
-    SHELL_CMD_ARG(load, NULL, "wav load <path.wav>", cmd_wav_load, 2, 0),
+    wav_cmds, SHELL_CMD_ARG(load, NULL, "wav load <path.wav>", cmd_wav_load, 2, 0),
     SHELL_CMD(start, NULL, "wav start", cmd_wav_start),
-    SHELL_CMD_ARG(sine, NULL, "wav sine [freq_hz] [amp 0..1] [rate_hz]",
-                  cmd_wav_sine, 1, 3),
+    SHELL_CMD_ARG(sine, NULL, "wav sine [freq_hz] [amp 0..1] [rate_hz]", cmd_wav_sine, 1, 3),
     SHELL_CMD(stop, NULL, "wav stop", cmd_wav_stop),
     SHELL_CMD(info, NULL, "wav info", cmd_wav_info), SHELL_SUBCMD_SET_END);
 

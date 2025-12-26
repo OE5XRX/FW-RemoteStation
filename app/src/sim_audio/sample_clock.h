@@ -2,7 +2,6 @@
 #define SIM_AUDIO_SAMPLE_CLOCK_H_
 
 #include <cstdint>
-
 #include <zephyr/kernel.h>
 
 class SampleClock {

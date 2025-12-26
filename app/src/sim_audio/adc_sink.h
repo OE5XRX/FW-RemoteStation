@@ -2,6 +2,7 @@
 #define SIM_AUDIO_ADC_SINK_H_
 
 #include "constants.h"
+
 #include <cstdint>
 
 struct device;
