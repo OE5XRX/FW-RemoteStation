@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   devcontainer_image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-2core
     outputs:
       image: ${{ steps.out.outputs.image }}
       changed: ${{ steps.filter.outputs.devcontainer }}
