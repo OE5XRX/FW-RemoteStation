@@ -1,0 +1,61 @@
+name: clang-format
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 180
+
+      - name: Show clang-format version
+        run: clang-format --version
+
+      - name: Run clang-format check (no changes allowed)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Only format YOUR project code (avoid zephyr modules pulled by west)
+          PATHS=("app" "boards" "tests")
+
+          # File patterns to check
+          mapfile -t FILES < <(
+            find "${PATHS[@]}" \
+              -type f \( \
+                -name "*.c" -o -name "*.h" \
+                -o -name "*.cc" -o -name "*.hh" \
+                -o -name "*.cpp" -o -name "*.hpp" \
+              \) \
+              -print
+          )
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "No source files found to format-check."
+            exit 0
+          fi
+
+          # Run clang-format in-place, then fail if git diff is non-empty
+          clang-format -i "${FILES[@]}"
+
+          if ! git diff --quiet; then
+            echo "::error::clang-format produced changes. Please run clang-format locally and commit the result."
+            echo "Changed files:"
+            git --no-pager diff --name-only
+            echo ""
+            echo "Diff (first 200 lines):"
+            git --no-pager diff | sed -n '1,200p'
+            exit 1
+          fi
+
+          echo "clang-format check passed."
