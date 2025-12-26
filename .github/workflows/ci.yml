@@ -40,11 +40,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: fw
 
       - name: Setup Zephyr
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
-          app-path: app
+          app-path: fw
           toolchains: arm-zephyr-eabi
 
       - name: West sanity
@@ -55,24 +57,28 @@ jobs:
           west list
 
       - name: Build native_sim
+        working-directory: fw
         shell: bash
         run: |
           set -euo pipefail
           west build -b native_sim/native/64 app -p always
 
       - name: Twister integration build (app/)
+        working-directory: fw
         shell: bash
         run: |
           set -euo pipefail
           west twister -T app --integration -v --inline-logs
 
       - name: Twister system tests (shell)
+        working-directory: fw
         shell: bash
         run: |
           set -euo pipefail
           west twister -T tests/sim_shell -p native_sim/native/64 -v --inline-logs
 
 #      - name: Twister unit tests
+#        working-directory: fw
 #        shell: bash
 #        run: |
 #          set -euo pipefail
