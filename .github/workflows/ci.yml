@@ -5,70 +5,24 @@ on:
   push:
     branches: main
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
-  devcontainer_image:
-    runs-on: ubuntu-24.04-2core
-    outputs:
-      image: ${{ steps.out.outputs.image }}
-      changed: ${{ steps.filter.outputs.devcontainer }}
+  clang_format:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Detect devcontainer changes
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            devcontainer:
-              - ".devcontainer/**"
-
-      - name: Set image name
-        id: out
+      - name: Install clang-format-18
         run: |
-          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/${OWNER_LC}/${REPO_LC}-devcontainer:latest" >> "$GITHUB_OUTPUT"
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 180
+          clang-format --version
 
-      - name: Log in to GHCR
-        if: steps.filter.outputs.devcontainer == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        if: steps.filter.outputs.devcontainer == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & push devcontainer image (only if needed)
-        if: steps.filter.outputs.devcontainer == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: .devcontainer/Dockerfile
-          push: true
-          tags: ${{ steps.out.outputs.image }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  clang_format:
-    needs: devcontainer_image
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ needs.devcontainer_image.outputs.image }}
-    steps:
-      - uses: actions/checkout@v4
       - name: clang-format check
         shell: bash
         run: |
           set -euo pipefail
-          clang-format --version
           PATHS=("app" "boards" "tests")
           mapfile -t FILES < <(
             find "${PATHS[@]}" -type f \( \
@@ -82,21 +36,44 @@ jobs:
           git diff --quiet || (echo "::error::clang-format produced changes"; git --no-pager diff --name-only; exit 1)
 
   build_and_tests:
-    needs: devcontainer_image
     runs-on: ubuntu-latest
-    container:
-      image: ${{ needs.devcontainer_image.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
-      - name: West setup
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zephyr
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: app
+          toolchains: arm-zephyr-eabi
+
+      - name: West sanity
         shell: bash
         run: |
           set -euo pipefail
-          west update
-          west zephyr-export
-      - name: Twister (integration + tests)
+          west --version
+          west list
+
+      - name: Build native_sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          west build -b native_sim/native/64 app -p always
+
+      - name: Twister integration build (app/)
         shell: bash
         run: |
           set -euo pipefail
           west twister -T app --integration -v --inline-logs
+
+      - name: Twister system tests (shell)
+        shell: bash
+        run: |
+          set -euo pipefail
           west twister -T tests/sim_shell -p native_sim/native/64 -v --inline-logs
+
+#      - name: Twister unit tests
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#          west twister -T tests/unit_audio -p native_sim/native/64 -v --inline-logs
