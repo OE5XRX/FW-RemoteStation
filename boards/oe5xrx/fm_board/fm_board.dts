@@ -47,18 +47,24 @@
 		status = "okay";
 	};
 
-	sa8180: sa818@0 {
-    compatible = "sa818";
+  aliases {
+    sa818 = &sa818;
+  };
+
+	sa818: sa818 {
+    compatible = "sa,sa818";
     status = "okay";
 
     uart = <&usart1>;
-    adc  = <&adc0>;
-    dac  = <&dac1>;
+		
+    io-channels = <&adc1 1>;
+    io-channel-names = "audio_in";
+    audio-out = <&dac1>;
 
-    h-l-power-gpio    = <&gpiob 11 GPIO_ACTIVE_HIGH>;
-    nptt-gpio         = <&gpiob 2 GPIO_ACTIVE_LOW>;
-    npower-down-gpio  = <&gpiob 10 GPIO_ACTIVE_LOW>;
-    nsquelch-gpio     = <&gpiob 1 GPIO_ACTIVE_LOW>;
+    h-l-power-gpios    = <&gpiob 11 GPIO_ACTIVE_HIGH>;
+    nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_LOW>;
+    npower-down-gpios  = <&gpiob 10 GPIO_ACTIVE_LOW>;
+    nsquelch-gpios     = <&gpiob 1 GPIO_ACTIVE_LOW>;
 
     tx-enable-delay-ms = <20>;
     rx-settle-time-ms  = <50>;
@@ -173,6 +179,30 @@ zephyr_udc0: &usb {
 			reg = <0x00032000 0x00008000>;
 		};
 	};
+};
+
+&adc1 {
+	status = "okay";
+	pinctrl-0 = <&adc1_in1_pa0>;
+	pinctrl-names = "default";
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <2>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+&dac1 {
+	status = "okay";
+	pinctrl-0 = <&dac_out1_pa4>;
+	pinctrl-names = "default";
 };
 
 &iwdg {
