@@ -11,6 +11,7 @@
 /app/build*
 
 __pycache__/
+eeprom.bin
 
 # docs
 /doc/_build*
