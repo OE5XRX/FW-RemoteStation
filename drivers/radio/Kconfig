@@ -1,0 +1,5 @@
+menu "Radio drivers"
+
+rsource "sa818/Kconfig"
+
+endmenu

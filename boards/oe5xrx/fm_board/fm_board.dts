@@ -46,6 +46,23 @@
 		regulator-boot-on;
 		status = "okay";
 	};
+
+	sa8180: sa818@0 {
+    compatible = "sa818";
+    status = "okay";
+
+    uart = <&usart1>;
+    adc  = <&adc0>;
+    dac  = <&dac1>;
+
+    h-l-power-gpio    = <&gpiob 11 GPIO_ACTIVE_HIGH>;
+    nptt-gpio         = <&gpiob 2 GPIO_ACTIVE_LOW>;
+    npower-down-gpio  = <&gpiob 10 GPIO_ACTIVE_LOW>;
+    nsquelch-gpio     = <&gpiob 1 GPIO_ACTIVE_LOW>;
+
+    tx-enable-delay-ms = <20>;
+    rx-settle-time-ms  = <50>;
+  };
 };
 
 &clk_lsi {

@@ -1,0 +1,60 @@
+description: SA818 / SA818S FM transceiver module
+
+compatible: "sa,sa818"
+
+include: base.yaml
+
+properties:
+  uart:
+    type: phandle
+    required: true
+    description: UART interface used for SA818 control commands
+
+  io-channels:
+    type: phandle-array
+    required: true
+    description: >
+      ADC input channel(s) used by the SA818. Expected to contain at least one
+      entry for audio input, e.g. <&adc0 0>.
+
+  io-channel-names:
+    type: string-array
+    required: false
+    description: Optional names for io-channels (e.g. "audio_in")
+
+  audio-out:
+    type: phandle
+    required: false
+    description: >
+      Optional audio output sink. On hardware this is typically a DAC.
+      In native_sim this may be omitted.
+
+  h-l-power-gpios:
+    type: phandle-array
+    required: true
+    description: High/Low power select GPIO
+
+  nptt-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low PTT control GPIO
+
+  npower-down-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low power-down GPIO
+
+  nsquelch-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low squelch indicator GPIO
+
+  tx-enable-delay-ms:
+    type: int
+    default: 20
+    description: Delay after enabling TX before audio is considered valid
+
+  rx-settle-time-ms:
+    type: int
+    default: 50
+    description: Delay after RX activation before audio is considered stable

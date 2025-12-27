@@ -4,5 +4,6 @@ build:
   cmake: .
   settings:
     board_root: .
+    dts_root: .
 runners:
   - file: scripts/example_runner.py

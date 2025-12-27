@@ -1,36 +1,59 @@
-
 / {
   aliases {
     config-eeprom0 = &eeprom0;
+    sa818 = &sa818;
   };
 
-  zephyr,user {
-    /* CN9 pin 1 */
-    io-channels = <&adc0 0>;
-  };
-
-  uart2: uart2 {
+  /* Virtueller GPIO-Controller für SA818 */
+  gpio_sa818: gpio_sa818 {
+    compatible = "zephyr,gpio-emul";
     status = "okay";
-    compatible = "zephyr,native-pty-uart";
-    /* Dummy current-speed entry to comply with serial
-     * DTS binding
-     */
-    current-speed = <0>;
+    #gpio-cells = <2>;
+    gpio-controller;
+  };
+
+  /* SA818 Device */
+  sa818: sa818 {
+    compatible = "sa,sa818";
+    status = "okay";
+
+    uart = <&uart1>;
+
+    /* Audio input via ADC channel 0 */
+    io-channels = <&adc0 0>;
+    io-channel-names = "audio_in";
+
+    h-l-power-gpios   = <&gpio_sa818 0 GPIO_ACTIVE_HIGH>;
+    nptt-gpios        = <&gpio_sa818 1 GPIO_ACTIVE_LOW>;
+    npower-down-gpios = <&gpio_sa818 2 GPIO_ACTIVE_LOW>;
+    nsquelch-gpios    = <&gpio_sa818 3 GPIO_ACTIVE_LOW>;
+
+    tx-enable-delay-ms = <20>;
+    rx-settle-time-ms  = <50>;
+
+    /* Optional (Hardware): audio-out = <&dacX>;  (omit in native_sim) */
   };
 };
 
 &adc0 {
+  status = "okay";
+
   nchannels = <2>;
   #address-cells = <1>;
   #size-cells = <0>;
   ref-internal-mv = <3300>;
   ref-external1-mv = <5000>;
 
-  channel@1 {
+  channel@0 {
     reg = <0>;
     zephyr,gain = "ADC_GAIN_1";
     zephyr,reference = "ADC_REF_INTERNAL";
     zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
     zephyr,resolution = <12>;
   };
+};
+
+&uart1 {
+  status = "okay";
+  current-speed = <9600>;
 };
