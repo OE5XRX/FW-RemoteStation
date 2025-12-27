@@ -23,8 +23,7 @@ static SineSource g_sine;
 static int cmd_wav_load(const shell *sh, size_t, char **argv) {
   const int rc = g_wav.load(argv[1]);
   if (rc == 0) {
-    shell_print(sh, "loaded: rate=%u Hz, samples=%u", g_wav.sample_rate_hz(),
-                (unsigned)g_wav.count_samples());
+    shell_print(sh, "loaded: rate=%u Hz, samples=%u", g_wav.sample_rate_hz(), (unsigned)g_wav.count_samples());
   } else {
     shell_error(sh, "load failed: %d", rc);
   }
@@ -87,12 +86,10 @@ static int cmd_wav_info(const shell *sh, size_t, char **) {
   const auto *src = g_pipe.source();
   shell_print(sh, "source=%s", (src == &g_wav) ? "wav" : ((src == &g_sine) ? "sine" : "none"));
 
-  shell_print(sh, "wav: loaded=%d rate=%u Hz samples=%u pos=%u", g_wav.loaded() ? 1 : 0,
-              g_wav.sample_rate_hz(), (unsigned)g_wav.count_samples(),
+  shell_print(sh, "wav: loaded=%d rate=%u Hz samples=%u pos=%u", g_wav.loaded() ? 1 : 0, g_wav.sample_rate_hz(), (unsigned)g_wav.count_samples(),
               (unsigned)g_wav.pos_samples());
 
-  shell_print(sh, "sine: freq=%u Hz amp=%.3f rate=%u Hz", g_sine.freq_hz(),
-              (double)g_sine.amp_norm(), g_sine.sample_rate_hz());
+  shell_print(sh, "sine: freq=%u Hz amp=%.3f rate=%u Hz", g_sine.freq_hz(), (double)g_sine.amp_norm(), g_sine.sample_rate_hz());
 
   return 0;
 }
@@ -128,17 +125,19 @@ static int cmd_adc_read(const shell *sh, size_t, char **) {
     return rc;
   }
 
-  shell_print(sh, "adc raw=%d (range %u..%u)", sample_raw, sim_audio::adc_raw_min,
-              sim_audio::adc_raw_max_12bit);
+  shell_print(sh, "adc raw=%d (range %u..%u)", sample_raw, sim_audio::adc_raw_min, sim_audio::adc_raw_max_12bit);
   return 0;
 }
 
+// clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
-    wav_cmds, SHELL_CMD_ARG(load, NULL, "wav load <path.wav>", cmd_wav_load, 2, 0),
-    SHELL_CMD(start, NULL, "wav start", cmd_wav_start),
-    SHELL_CMD_ARG(sine, NULL, "wav sine [freq_hz] [amp 0..1] [rate_hz]", cmd_wav_sine, 1, 3),
-    SHELL_CMD(stop, NULL, "wav stop", cmd_wav_stop),
-    SHELL_CMD(info, NULL, "wav info", cmd_wav_info), SHELL_SUBCMD_SET_END);
-
+  wav_cmds,
+  SHELL_CMD_ARG(load, NULL, "wav load <path.wav>", cmd_wav_load, 2, 0),
+  SHELL_CMD(start, NULL, "wav start", cmd_wav_start),
+  SHELL_CMD_ARG(sine, NULL, "wav sine [freq_hz] [amp 0..1] [rate_hz]", cmd_wav_sine, 1, 3),
+  SHELL_CMD(stop, NULL, "wav stop", cmd_wav_stop),
+  SHELL_CMD(info, NULL, "wav info", cmd_wav_info),
+  SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(wav, &wav_cmds, "WAV/Sine control", NULL);
 SHELL_CMD_REGISTER(adc_read, NULL, "adc_read", cmd_adc_read);
+// clang-format on

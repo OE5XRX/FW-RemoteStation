@@ -3,8 +3,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/adc/adc_emul.h>
 
-AdcSink::AdcSink(const device *adc_dev, uint8_t channel_id)
-    : adc_dev_(adc_dev), channel_id_(channel_id) {}
+AdcSink::AdcSink(const device *adc_dev, uint8_t channel_id) : adc_dev_(adc_dev), channel_id_(channel_id) {}
 
 bool AdcSink::ready() const {
   return adc_dev_ && device_is_ready(adc_dev_);
