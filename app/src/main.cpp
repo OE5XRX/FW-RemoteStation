@@ -26,10 +26,10 @@ int main(void) {
   printk("===========================================\n");
 
   printk("Schalte SA818 ein...\n");
-  sa818_power_on(sa);
+  sa818_set_power(sa, SA818_DEVICE_ON);
 
   printk("Setze Sendeleistung auf HIGH...\n");
-  sa818_set_high_power(sa, true);
+  sa818_set_power_level(sa, SA818_POWER_HIGH);
 
   printk("SA818 Initialisierung abgeschlossen\n");
 
