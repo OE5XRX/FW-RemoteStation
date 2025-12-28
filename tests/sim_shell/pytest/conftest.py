@@ -11,8 +11,6 @@ Provides fixtures for:
 """
 
 import pytest
-import os
-import subprocess
 import time
 from sa818_simulator import SA818Simulator
 
@@ -33,10 +31,10 @@ def sa818_sim(dut: DeviceAdapter):
     
     Usage:
         @pytest.mark.sa818_sim
-        def test_with_uart(shell, sa818_sim_on_uart):
+        def test_with_uart(shell, sa818_sim):
             # Simulator is connected to firmware UART
             shell.exec_command("sa818 at_volume 7")
-            assert sa818_sim_on_uart.get_state().volume == 7
+            assert sa818_sim.get_state().volume == 7
     """
     import re
     
@@ -59,7 +57,7 @@ def sa818_sim(dut: DeviceAdapter):
                         uart_pty = match.group(0)
                         print(f"✓ Found UART PTY: {uart_pty}")
                         break
-        except:
+        except Exception:
             pass
     
     assert uart_pty, "Could not find native_sim UART PTY in output"

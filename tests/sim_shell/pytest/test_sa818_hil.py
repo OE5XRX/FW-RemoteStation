@@ -10,9 +10,7 @@ These tests verify the complete AT command flow:
 """
 
 import pytest
-import re
 import time
-import os
 
 from test_sa818 import _parse_sa818_status
 
@@ -23,7 +21,7 @@ def _as_text(out) -> str:
         return "\n".join(str(line) for line in out)
     return str(out)
 
-@pytest.mark.sa818_sim  
+@pytest.mark.sa818_sim
 def test_zephyr_at_volume_command_simple(sa818_sim, shell):
     """
     Test volume change via Zephyr shell command WITH firmware.
@@ -39,7 +37,7 @@ def test_zephyr_at_volume_command_simple(sa818_sim, shell):
     This is now simple because simulator uses native_sim's UART PTY directly!
     """
     # Power on device first
-    out = shell.exec_command("sa818 power on")
+    shell.exec_command("sa818 power on")
     time.sleep(0.1)
 
     volume_level = 7

@@ -9,9 +9,9 @@
     "${workspaceFolder}/app/build": "Launch build"
   },
   "python.analysis.extraPaths": [
-    "~/zephyr/scripts/pylib/pytest-twister-harness/src"
+    "${env:ZEPHYR_BASE}/scripts/pylib/pytest-twister-harness/src"
   ],
   "python.autoComplete.extraPaths": [
-    "~/zephyr/scripts/pylib/pytest-twister-harness/src"
+    "${env:ZEPHYR_BASE}/scripts/pylib/pytest-twister-harness/src"
   ]
 }

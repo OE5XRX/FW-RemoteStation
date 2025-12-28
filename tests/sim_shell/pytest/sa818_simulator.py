@@ -9,11 +9,9 @@ Responds to AT commands over a PTY (pseudo-terminal) interface.
 """
 
 import os
-import pty
 import re
 import select
 import threading
-import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -44,7 +42,6 @@ class SA818Simulator:
     
     def __init__(self, pty_path):
         self.master_fd: Optional[int] = None
-        self.slave_fd: Optional[int] = None
         self.pty_path = pty_path
         self.state = SA818State()
         self.running = False
@@ -54,9 +51,9 @@ class SA818Simulator:
     def start(self) -> None:
         """
         Start the simulator.
-        
-        Returns:
-            Path to PTY device (e.g., /dev/pts/5)
+
+        Opens the PTY at ``self.pty_path`` and starts a background thread
+        that processes AT commands.
         """
         self.master_fd = os.open(self.pty_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         

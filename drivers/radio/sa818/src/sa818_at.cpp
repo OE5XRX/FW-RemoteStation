@@ -37,8 +37,10 @@ static sa818_result uart_write_command(const struct device *uart, const char *cm
     return SA818_ERROR_INVALID_PARAM;
   }
 
+  size_t cmd_len = strlen(cmd);
+
   /* Send command characters */
-  for (size_t i = 0; i < strlen(cmd); i++) {
+  for (size_t i = 0; i < cmd_len; i++) {
     uart_poll_out(uart, cmd[i]);
   }
 
@@ -75,8 +77,8 @@ static sa818_result uart_read_response(const struct device *uart, char *response
 
   while (pos < response_len - 1) {
     /* Check timeout */
-    current_time = start_time;
-    int64_t elapsed = k_uptime_delta(&current_time);
+    current_time = k_uptime_get();
+    int64_t elapsed = current_time - start_time;
     if (elapsed >= timeout_ms) {
       LOG_ERR("UART read timeout after %lld ms", elapsed);
       return SA818_ERROR_TIMEOUT;
