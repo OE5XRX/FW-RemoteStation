@@ -89,6 +89,43 @@ static int cmd_sa818_powerlevel(const struct shell *shell, size_t argc, char **a
   return 0;
 }
 
+static int cmd_sa818_squelch_sim(const struct shell *shell, size_t argc, char **argv) {
+  if (argc < 2) {
+    shell_error(shell, "usage: sa818 squelch_sim open|closed");
+    return -EINVAL;
+  }
+
+  // Get GPIO emulator device
+  const struct device *gpio_dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio_sa818));
+  if (!gpio_dev || !device_is_ready(gpio_dev)) {
+    shell_error(shell, "gpio_sa818 emulator not ready");
+    return -ENODEV;
+  }
+
+  // nsquelch is on pin 3, active LOW
+  // Physical 0 = squelch closed (carrier detected)
+  // Physical 1 = squelch open (no carrier)
+  int pin_value;
+  if (!strcmp(argv[1], "open")) {
+    pin_value = 1; // No carrier
+    shell_print(shell, "Simulating squelch OPEN (no carrier)");
+  } else if (!strcmp(argv[1], "closed")) {
+    pin_value = 0; // Carrier detected
+    shell_print(shell, "Simulating squelch CLOSED (carrier detected)");
+  } else {
+    shell_error(shell, "invalid arg - use 'open' or 'closed'");
+    return -EINVAL;
+  }
+
+  int ret = gpio_emul_input_set(gpio_dev, 3, pin_value);
+  if (ret != 0) {
+    shell_error(shell, "Failed to set emulator input: %d", ret);
+    return ret;
+  }
+
+  return 0;
+}
+
 // clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_cmds,
@@ -96,6 +133,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     SHELL_CMD(power, NULL, "Power on/off", cmd_sa818_power),
     SHELL_CMD(ptt, NULL, "PTT on/off", cmd_sa818_ptt),
     SHELL_CMD(powerlevel, NULL, "Power level", cmd_sa818_powerlevel),
+    SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_squelch, NULL, "Simulate squelch (sim only)", cmd_sa818_squelch_sim),
     SHELL_SUBCMD_SET_END);
 // clang-format on
 
