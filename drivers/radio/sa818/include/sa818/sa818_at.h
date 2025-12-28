@@ -1,3 +1,15 @@
+/**
+ * @file sa818_at.h
+ * @brief SA818 AT Command Interface
+ *
+ * Provides UART-based AT command protocol implementation for
+ * configuring SA818 radio module parameters including frequency,
+ * CTCSS codes, filters, and volume control.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AT_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AT_H_
 

@@ -1,3 +1,15 @@
+/**
+ * @file sa818_audio.h
+ * @brief SA818 Audio Subsystem Interface
+ *
+ * Handles ADC/DAC configuration for audio input/output,
+ * audio level monitoring, and audio path control for
+ * SA818 radio module.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AUDIO_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AUDIO_H_
 

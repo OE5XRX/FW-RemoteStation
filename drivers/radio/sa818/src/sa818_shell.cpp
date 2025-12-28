@@ -1,3 +1,14 @@
+/**
+ * @file sa818_shell.cpp
+ * @brief SA818 Shell Command Interface
+ *
+ * Provides interactive shell commands for testing and controlling
+ * SA818 radio module via Zephyr shell interface.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #include <sa818/sa818.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>

@@ -1,3 +1,9 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# SA818/SA818S FM Transceiver Module Device Tree Binding
+# Defines properties for NiceRF SA818 UART-controlled VHF/UHF radio module
+
 description: SA818 / SA818S FM transceiver module
 
 compatible: "sa,sa818"

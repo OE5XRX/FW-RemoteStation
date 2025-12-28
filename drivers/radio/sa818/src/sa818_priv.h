@@ -1,3 +1,15 @@
+/**
+ * @file sa818_priv.h
+ * @brief SA818 Private Definitions and Structures
+ *
+ * Internal header containing shared structures, constants,
+ * and definitions used across SA818 driver modules.
+ * Not part of the public API.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #ifndef ZEPHYR_DRIVERS_SA818_SRC_SA818_PRIV_H_
 #define ZEPHYR_DRIVERS_SA818_SRC_SA818_PRIV_H_
 

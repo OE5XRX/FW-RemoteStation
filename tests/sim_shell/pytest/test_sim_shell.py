@@ -1,3 +1,12 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+"""
+Simulation Shell Tests
+
+Pytest-based tests for audio pipeline and WAV file handling
+in the native_sim environment.
+"""
 import re
 import time
 import struct

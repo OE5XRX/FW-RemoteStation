@@ -1,3 +1,9 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# FM Board Hardware Definition
+# Hardware capabilities and supported features for STM32F302-based board
+
 identifier: fm_board
 name: FM-Transceiver for the OE5XRX Remote Station
 type: mcu

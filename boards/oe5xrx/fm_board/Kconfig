@@ -1,1 +1,6 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# FM Board Kconfig
+
 source "samples/subsys/usb/common/Kconfig.sample_usbd"

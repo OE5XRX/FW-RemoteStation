@@ -1,3 +1,9 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# SA818 Radio Driver Kconfig
+# Configuration options for SA818/SA818S FM transceiver driver
+
 config SA818
   bool "SA818 FM transceiver driver"
   default y

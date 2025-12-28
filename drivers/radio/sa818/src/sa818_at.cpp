@@ -1,3 +1,14 @@
+/**
+ * @file sa818_at.cpp
+ * @brief SA818 AT Command Implementation
+ *
+ * Implements UART-based AT command protocol for SA818 configuration.
+ * Handles command transmission, response parsing, and error handling.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #include "sa818_priv.h"
 
 #include <sa818/sa818_at.h>

@@ -1,3 +1,14 @@
+/**
+ * @file sa818_core.cpp
+ * @brief SA818 Core Driver Implementation
+ *
+ * Implements device initialization, GPIO control, power management,
+ * PTT control, and status monitoring for SA818 radio module.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #define DT_DRV_COMPAT sa_sa818
 
 #include "sa818_priv.h"

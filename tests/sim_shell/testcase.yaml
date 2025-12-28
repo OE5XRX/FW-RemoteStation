@@ -1,3 +1,9 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# Simulation Shell Test Configuration
+# Pytest-based integration tests for SA818 and audio subsystems
+
 tests:
   fm.sim_shell:
     platform_allow:

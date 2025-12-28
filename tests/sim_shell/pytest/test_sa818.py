@@ -1,5 +1,11 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
 """
-Tests for SA818 shell commands.
+SA818 Driver Shell Command Tests
+
+Pytest-based integration tests for SA818 radio driver shell interface.
+Tests power control, PTT, power level, and squelch simulation commands.
 """
 import re
 import time

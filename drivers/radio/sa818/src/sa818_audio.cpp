@@ -1,3 +1,14 @@
+/**
+ * @file sa818_audio.cpp
+ * @brief SA818 Audio Subsystem Implementation
+ *
+ * Implements ADC-based audio monitoring and DAC control for
+ * SA818 radio module audio paths.
+ *
+ * @copyright Copyright (c) 2025 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
 #include "sa818_priv.h"
 
 #include <sa818/sa818_audio.h>
