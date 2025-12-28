@@ -27,7 +27,7 @@ static int cmd_sa818_status(const struct shell *shell, size_t, char **) {
   }
 
   sa818_status st = sa818_get_status(dev);
-  shell_print(shell, "powered=%d ptt=%d high_power=%d squelch=%d", st.device_power, st.ptt_state, st.power_level, st.squelch);
+  shell_print(shell, "powered=%d ptt=%d high_power=%d squelch=%d", st.device_power, st.ptt_state, st.power_level, st.squelch_state);
   return 0;
 }
 

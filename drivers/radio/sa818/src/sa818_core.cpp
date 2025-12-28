@@ -157,10 +157,11 @@ int sa818_set_power_level(const struct device *dev, sa818_power_level power_leve
 }
 
 /* Squelch Status */
-bool sa818_is_squelch_open(const struct device *dev) {
+sa818_squelch_state sa818_get_squelch(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   int val = gpio_pin_get_dt(&cfg->nsquelch);
-  return (val > 0); // Active HIGH means squelch open (no signal)
+  // SQL pin is active HIGH when squelch is open (no signal)
+  return (val > 0) ? SA818_SQUELCH_OPEN : SA818_SQUELCH_CLOSED;
 }
 
 /* Status Query */
@@ -172,7 +173,7 @@ sa818_status sa818_get_status(const struct device *dev) {
   status.device_power = data->device_power;
   status.ptt_state = data->ptt_state;
   status.power_level = data->power_level;
-  status.squelch = sa818_is_squelch_open(dev);
+  status.squelch_state = sa818_get_squelch(dev);
   k_mutex_unlock(&data->lock);
 
   return status;

@@ -118,19 +118,30 @@ enum sa818_power_level {
 int sa818_set_power_level(const struct device *dev, enum sa818_power_level power_level);
 
 /**
- * @brief Check squelch status
+ * @brief Squelch states
+ *
+ * Indicates whether the squelch is open (no carrier) or closed (carrier detected).
+ * The squelch threshold is configured via AT commands.
+ */
+enum sa818_squelch_state {
+  SA818_SQUELCH_CLOSED = 0, /**< Carrier detected (signal present, SQL pin LOW) */
+  SA818_SQUELCH_OPEN = 1,   /**< No carrier detected (squelch open, SQL pin HIGH) */
+};
+
+/**
+ * @brief Get squelch status
  *
  * Reads the squelch (SQL) pin to determine if a carrier signal
  * is being received. Squelch threshold is configured via AT commands.
  *
  * @param dev Pointer to the SA818 device structure
  *
- * @retval true Squelch is open (no carrier detected)
- * @retval false Squelch is closed (carrier detected)
+ * @return SA818_SQUELCH_OPEN if no carrier detected
+ * @return SA818_SQUELCH_CLOSED if carrier detected
  *
  * @note SQL pin is active HIGH when squelch is open (no signal)
  */
-bool sa818_is_squelch_open(const struct device *dev);
+enum sa818_squelch_state sa818_get_squelch(const struct device *dev);
 
 /**
  * @brief Device status structure
@@ -139,10 +150,10 @@ bool sa818_is_squelch_open(const struct device *dev);
  * and monitored signals.
  */
 struct sa818_status {
-  enum sa818_device_power device_power; /**< Current power state */
-  enum sa818_ptt_state ptt_state;       /**< Current PTT state */
-  enum sa818_power_level power_level;   /**< Current TX power level */
-  bool squelch;                         /**< Current squelch state (true=open) */
+  enum sa818_device_power device_power;   /**< Current power state */
+  enum sa818_ptt_state ptt_state;         /**< Current PTT state */
+  enum sa818_power_level power_level;     /**< Current TX power level */
+  enum sa818_squelch_state squelch_state; /**< Current squelch state */
 };
 
 /**
