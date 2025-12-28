@@ -31,7 +31,7 @@ def sa818_sim(dut: DeviceAdapter):
     
     Usage:
         @pytest.mark.sa818_sim
-        def test_with_uart(shell, sa818_sim):
+        def test_with_uart(sa818_sim, shell):
             # Simulator is connected to firmware UART
             shell.exec_command("sa818 at_volume 7")
             assert sa818_sim.get_state().volume == 7
