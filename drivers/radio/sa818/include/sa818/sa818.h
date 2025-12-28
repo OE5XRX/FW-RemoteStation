@@ -177,6 +177,7 @@ struct sa818_status {
   enum sa818_ptt_state ptt_state;         /**< Current PTT state */
   enum sa818_power_level power_level;     /**< Current TX power level */
   enum sa818_squelch_state squelch_state; /**< Current squelch state */
+  uint8_t volume;                         /**< Current volume level (1-8) */
 };
 
 /**

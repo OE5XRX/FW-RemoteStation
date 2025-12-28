@@ -174,6 +174,7 @@ sa818_status sa818_get_status(const struct device *dev) {
   status.ptt_state = data->ptt_state;
   status.power_level = data->power_level;
   status.squelch_state = sa818_get_squelch(dev);
+  status.volume = data->current_volume;
   k_mutex_unlock(&data->lock);
 
   return status;

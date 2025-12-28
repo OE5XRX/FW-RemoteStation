@@ -23,6 +23,94 @@
 LOG_MODULE_REGISTER(sa818_at, LOG_LEVEL_DBG);
 
 /**
+ * @brief Write AT command to UART
+ *
+ * Sends the command string character by character using uart_poll_out(),
+ * followed by CR+LF line terminator.
+ *
+ * @param uart UART device
+ * @param cmd Command string to send
+ * @return SA818_OK on success, SA818_ERROR_INVALID_PARAM if cmd is NULL
+ */
+static sa818_result uart_write_command(const struct device *uart, const char *cmd) {
+  if (!uart || !cmd) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  /* Send command characters */
+  for (size_t i = 0; i < strlen(cmd); i++) {
+    uart_poll_out(uart, cmd[i]);
+  }
+
+  /* Send CR+LF terminator */
+  uart_poll_out(uart, '\r');
+  uart_poll_out(uart, '\n');
+
+  return SA818_OK;
+}
+
+/**
+ * @brief Read UART response with timeout
+ *
+ * Reads characters from UART using uart_poll_in() until newline is received
+ * or timeout expires. Implements timeout using k_uptime_get() and k_uptime_delta().
+ *
+ * @param uart UART device
+ * @param response Buffer to store response
+ * @param response_len Size of response buffer
+ * @param timeout_ms Timeout in milliseconds
+ * @return SA818_OK on success, SA818_ERROR_TIMEOUT on timeout, SA818_ERROR_INVALID_PARAM on invalid params
+ */
+static sa818_result uart_read_response(const struct device *uart, char *response, size_t response_len, uint32_t timeout_ms) {
+  if (!uart || !response || response_len == 0) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  const int64_t start_time = k_uptime_get();
+  int64_t current_time = start_time;
+  size_t pos = 0;
+
+  /* Clear response buffer */
+  memset(response, 0, response_len);
+
+  while (pos < response_len - 1) {
+    /* Check timeout */
+    current_time = start_time;
+    int64_t elapsed = k_uptime_delta(&current_time);
+    if (elapsed >= timeout_ms) {
+      LOG_ERR("UART read timeout after %lld ms", elapsed);
+      return SA818_ERROR_TIMEOUT;
+    }
+
+    /* Try to read one character */
+    unsigned char c;
+    int ret = uart_poll_in(uart, &c);
+
+    if (ret == 0) {
+      /* Character received */
+      if (c == '\n') {
+        /* Newline marks end of response */
+        response[pos] = '\0';
+        return SA818_OK;
+      } else if (c == '\r') {
+        /* Skip carriage return */
+        continue;
+      } else {
+        /* Store character */
+        response[pos++] = c;
+      }
+    } else {
+      /* No data available, sleep briefly to avoid busy-wait */
+      k_sleep(K_MSEC(1));
+    }
+  }
+
+  /* Buffer full without receiving newline */
+  response[response_len - 1] = '\0';
+  return SA818_OK;
+}
+
+/**
  * @brief Send raw AT command and wait for response
  *
  * This is the core AT command handler. It sends a command string
@@ -38,34 +126,25 @@ sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, ch
 
   k_mutex_lock(&data->lock, K_FOREVER);
 
-  /* Clear previous response */
-  data->at_response_len = 0;
-  memset(data->at_response_buf, 0, sizeof(data->at_response_buf));
-
   /* Send command over UART */
   LOG_DBG("TX: %s", cmd);
-  for (size_t i = 0; i < strlen(cmd); i++) {
-    uart_poll_out(cfg->uart, cmd[i]);
+  sa818_result ret = uart_write_command(cfg->uart, cmd);
+  if (ret != SA818_OK) {
+    LOG_ERR("Failed to write command: %s", cmd);
+    k_mutex_unlock(&data->lock);
+    return ret;
   }
-  uart_poll_out(cfg->uart, '\r'); // AT commands end with CR
-  uart_poll_out(cfg->uart, '\n'); // Some modules need CRLF
 
-  /* Wait for response with timeout */
-  int ret = k_sem_take(&data->at_response_sem, K_MSEC(timeout_ms));
-  if (ret != 0) {
+  /* Read response from UART */
+  ret = uart_read_response(cfg->uart, response, response_len, timeout_ms);
+  if (ret != SA818_OK) {
     LOG_ERR("AT command timeout: %s", cmd);
     k_mutex_unlock(&data->lock);
-    return SA818_ERROR_TIMEOUT;
+    return ret;
   }
 
-  /* Copy response if buffer provided */
-  if (response && response_len > 0) {
-    size_t copy_len = MIN(data->at_response_len, response_len - 1);
-    memcpy(response, data->at_response_buf, copy_len);
-    response[copy_len] = '\0';
-  }
+  LOG_DBG("RX: %s", response);
 
-  LOG_DBG("RX: %s", data->at_response_buf);
   k_mutex_unlock(&data->lock);
 
   return SA818_OK;

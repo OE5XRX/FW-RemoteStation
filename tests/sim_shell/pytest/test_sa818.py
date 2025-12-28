@@ -38,8 +38,8 @@ def _as_text(out) -> str:
 def _parse_sa818_status(out) -> dict:
     """Parse sa818 status output into a dictionary."""
     text = _as_text(out)
-    # Expected format: "powered=1 ptt=0 high_power=1 squelch=1"
-    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+squelch=(\d+)", text)
+    # Expected format: "powered=1 ptt=0 high_power=1 squelch=1 volume=5"
+    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+squelch=(\d+)\s+volume=(\d+)", text)
     assert m, f"Could not parse sa818 status from output:\n{text}"
     
     return {
@@ -47,6 +47,7 @@ def _parse_sa818_status(out) -> dict:
         "ptt": int(m.group(2)),
         "high_power": int(m.group(3)),
         "squelch": int(m.group(4)),
+        "volume": int(m.group(5)),
     }
 
 
@@ -60,6 +61,7 @@ def test_sa818_status(shell):
     assert status["ptt"] in [0, 1]
     assert status["high_power"] in [0, 1]
     assert status["squelch"] in [0, 1]
+    assert 1 <= status["volume"] <= 8, f"Volume out of range: {status['volume']}"
 
 
 def test_sa818_power_on_off(shell):
