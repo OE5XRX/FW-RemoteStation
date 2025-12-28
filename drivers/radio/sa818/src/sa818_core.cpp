@@ -92,7 +92,7 @@ static int sa818_init(const struct device *dev) {
 }
 
 /* Power Control */
-int sa818_set_power(const struct device *dev, sa818_device_power power_state) {
+sa818_result sa818_set_power(const struct device *dev, sa818_device_power power_state) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
@@ -110,11 +110,11 @@ int sa818_set_power(const struct device *dev, sa818_device_power power_state) {
   data->device_power = power_state;
   k_mutex_unlock(&data->lock);
 
-  return 0;
+  return SA818_OK;
 }
 
 /* PTT Control */
-int sa818_set_ptt(const struct device *dev, sa818_ptt_state ptt_state) {
+sa818_result sa818_set_ptt(const struct device *dev, sa818_ptt_state ptt_state) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
@@ -132,11 +132,11 @@ int sa818_set_ptt(const struct device *dev, sa818_ptt_state ptt_state) {
   data->ptt_state = ptt_state;
   k_mutex_unlock(&data->lock);
 
-  return 0;
+  return SA818_OK;
 }
 
 /* Power Level Control */
-int sa818_set_power_level(const struct device *dev, sa818_power_level power_level) {
+sa818_result sa818_set_power_level(const struct device *dev, sa818_power_level power_level) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
@@ -153,7 +153,7 @@ int sa818_set_power_level(const struct device *dev, sa818_power_level power_leve
   data->power_level = power_level;
   k_mutex_unlock(&data->lock);
 
-  return 0;
+  return SA818_OK;
 }
 
 /* Squelch Status */

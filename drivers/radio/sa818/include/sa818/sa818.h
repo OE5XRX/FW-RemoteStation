@@ -35,6 +35,26 @@ extern "C" {
  */
 
 /**
+ * @brief SA818 API result codes
+ *
+ * All SA818 driver functions return these status codes to indicate
+ * success or specific error conditions.
+ */
+enum sa818_result {
+  SA818_OK = 0,                    /**< Operation successful */
+  SA818_ERROR_INVALID_DEVICE = -1, /**< Invalid device pointer or NULL */
+  SA818_ERROR_NOT_READY = -2,      /**< Device not initialized or ready */
+  SA818_ERROR_INVALID_PARAM = -3,  /**< Invalid parameter value */
+  SA818_ERROR_GPIO = -4,           /**< GPIO operation failed */
+  SA818_ERROR_UART = -5,           /**< UART communication error */
+  SA818_ERROR_TIMEOUT = -6,        /**< Operation timed out */
+  SA818_ERROR_AT_COMMAND = -7,     /**< AT command failed or invalid response */
+  SA818_ERROR_ADC = -8,            /**< ADC operation failed */
+  SA818_ERROR_DAC = -9,            /**< DAC operation failed */
+  SA818_ERROR_NO_RESPONSE = -10,   /**< No response from module */
+};
+
+/**
  * @brief Device power states
  *
  * Controls the main power state of the SA818 module via PD (Power Down) pin.
@@ -54,12 +74,13 @@ enum sa818_device_power {
  * @param dev Pointer to the SA818 device structure
  * @param power_state Desired power state (ON or OFF)
  *
- * @retval 0 Success
- * @retval -EINVAL Invalid device pointer
+ * @return SA818_OK on success
+ * @return SA818_ERROR_INVALID_DEVICE if device pointer is invalid
+ * @return SA818_ERROR_GPIO if GPIO operation failed
  *
  * @note After power-on, wait for module initialization before sending commands
  */
-int sa818_set_power(const struct device *dev, enum sa818_device_power power_state);
+enum sa818_result sa818_set_power(const struct device *dev, enum sa818_device_power power_state);
 
 /**
  * @brief PTT (Push-To-Talk) states
@@ -80,13 +101,14 @@ enum sa818_ptt_state {
  * @param dev Pointer to the SA818 device structure
  * @param ptt_state Desired PTT state (ON for TX, OFF for RX)
  *
- * @retval 0 Success
- * @retval -EINVAL Invalid device pointer
+ * @return SA818_OK on success
+ * @return SA818_ERROR_INVALID_DEVICE if device pointer is invalid
+ * @return SA818_ERROR_GPIO if GPIO operation failed
  *
  * @note TX enable delay (configured in device tree) is applied when entering TX mode
  * @warning Ensure antenna is connected before transmitting
  */
-int sa818_set_ptt(const struct device *dev, enum sa818_ptt_state ptt_state);
+enum sa818_result sa818_set_ptt(const struct device *dev, enum sa818_ptt_state ptt_state);
 
 /**
  * @brief RF output power levels
@@ -110,12 +132,13 @@ enum sa818_power_level {
  * @param dev Pointer to the SA818 device structure
  * @param power_level Desired power level (LOW or HIGH)
  *
- * @retval 0 Success
- * @retval -EINVAL Invalid device pointer
+ * @return SA818_OK on success
+ * @return SA818_ERROR_INVALID_DEVICE if device pointer is invalid
+ * @return SA818_ERROR_GPIO if GPIO operation failed
  *
  * @note Power level only affects TX mode, not RX mode
  */
-int sa818_set_power_level(const struct device *dev, enum sa818_power_level power_level);
+enum sa818_result sa818_set_power_level(const struct device *dev, enum sa818_power_level power_level);
 
 /**
  * @brief Squelch states

@@ -44,9 +44,17 @@ static int cmd_sa818_power(const struct shell *shell, size_t argc, char **argv) 
   }
 
   if (!strcmp(argv[1], "on")) {
-    sa818_set_power(dev, SA818_DEVICE_ON);
+    sa818_result ret = sa818_set_power(dev, SA818_DEVICE_ON);
+    if (ret != SA818_OK) {
+      shell_error(shell, "Failed to power on: %d", ret);
+      return ret;
+    }
   } else if (!strcmp(argv[1], "off")) {
-    sa818_set_power(dev, SA818_DEVICE_OFF);
+    sa818_result ret = sa818_set_power(dev, SA818_DEVICE_OFF);
+    if (ret != SA818_OK) {
+      shell_error(shell, "Failed to power off: %d", ret);
+      return ret;
+    }
   } else {
     shell_error(shell, "invalid arg");
     return -EINVAL;
@@ -67,9 +75,17 @@ static int cmd_sa818_ptt(const struct shell *shell, size_t argc, char **argv) {
   }
 
   if (!strcmp(argv[1], "on")) {
-    sa818_set_ptt(dev, SA818_PTT_ON);
+    sa818_result ret = sa818_set_ptt(dev, SA818_PTT_ON);
+    if (ret != SA818_OK) {
+      shell_error(shell, "Failed to enable PTT: %d", ret);
+      return ret;
+    }
   } else if (!strcmp(argv[1], "off")) {
-    sa818_set_ptt(dev, SA818_PTT_OFF);
+    sa818_result ret = sa818_set_ptt(dev, SA818_PTT_OFF);
+    if (ret != SA818_OK) {
+      shell_error(shell, "Failed to disable PTT: %d", ret);
+      return ret;
+    }
   } else {
     shell_error(shell, "invalid arg");
     return -EINVAL;
@@ -90,9 +106,17 @@ static int cmd_sa818_powerlevel(const struct shell *shell, size_t argc, char **a
   }
 
   if (!strcmp(argv[1], "high")) {
-    sa818_set_power_level(dev, SA818_POWER_HIGH);
+    sa818_result ret = sa818_set_power_level(dev, SA818_POWER_HIGH);
+    if (ret != SA818_OK) {
+      shell_error(shell, "Failed to set power level: %d", ret);
+      return ret;
+    }
   } else if (!strcmp(argv[1], "low")) {
-    sa818_set_power_level(dev, SA818_POWER_LOW);
+    sa818_result ret = sa818_set_power_level(dev, SA818_POWER_LOW);
+    if (ret != SA818_OK) {
+      shell_error(shell, "Failed to set power level: %d", ret);
+      return ret;
+    }
   } else {
     shell_error(shell, "invalid arg");
     return -EINVAL;

@@ -13,6 +13,7 @@
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AT_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AT_H_
 
+#include <sa818/sa818.h>
 #include <stdint.h>
 #include <zephyr/device.h>
 
@@ -35,9 +36,9 @@ extern "C" {
  * @param response Buffer for response (can be NULL)
  * @param response_len Length of response buffer
  * @param timeout_ms Timeout in milliseconds
- * @return 0 on success, negative errno on failure
+ * @return SA818_OK on success, error code on failure
  */
-int sa818_at_send_command(const struct device *dev, const char *cmd, char *response, size_t response_len, uint32_t timeout_ms);
+enum sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, char *response, size_t response_len, uint32_t timeout_ms);
 
 /**
  * @brief Configure radio group (frequency, CTCSS, squelch)
@@ -49,18 +50,19 @@ int sa818_at_send_command(const struct device *dev, const char *cmd, char *respo
  * @param ctcss_tx TX CTCSS code (0000-0038 for off/tones)
  * @param squelch Squelch level (0-8)
  * @param ctcss_rx RX CTCSS code
- * @return 0 on success, negative errno on failure
+ * @return SA818_OK on success, error code on failure
  */
-int sa818_at_set_group(const struct device *dev, uint8_t bandwidth, float freq_tx, float freq_rx, uint16_t ctcss_tx, uint8_t squelch, uint16_t ctcss_rx);
+enum sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, float freq_tx, float freq_rx, uint16_t ctcss_tx, uint8_t squelch,
+                                     uint16_t ctcss_rx);
 
 /**
  * @brief Set volume level
  *
  * @param dev SA818 device
  * @param volume Volume level (1-8)
- * @return 0 on success, negative errno on failure
+ * @return SA818_OK on success, error code on failure
  */
-int sa818_at_set_volume(const struct device *dev, uint8_t volume);
+enum sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume);
 
 /**
  * @brief Configure audio filters
@@ -69,18 +71,18 @@ int sa818_at_set_volume(const struct device *dev, uint8_t volume);
  * @param pre_emphasis Pre-emphasis enable
  * @param high_pass High-pass filter enable
  * @param low_pass Low-pass filter enable
- * @return 0 on success, negative errno on failure
+ * @return SA818_OK on success, error code on failure
  */
-int sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass);
+enum sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass);
 
 /**
  * @brief Read RSSI (signal strength)
  *
  * @param dev SA818 device
  * @param rssi Pointer to store RSSI value
- * @return 0 on success, negative errno on failure
+ * @return SA818_OK on success, error code on failure
  */
-int sa818_at_read_rssi(const struct device *dev, uint8_t *rssi);
+enum sa818_result sa818_at_read_rssi(const struct device *dev, uint8_t *rssi);
 
 #ifdef __cplusplus
 }

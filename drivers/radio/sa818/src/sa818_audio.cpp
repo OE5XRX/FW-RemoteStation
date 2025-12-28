@@ -25,18 +25,18 @@ LOG_MODULE_REGISTER(sa818_audio, LOG_LEVEL_INF);
  * Sets up ADC for audio monitoring and prepares
  * for future DAC integration.
  */
-int sa818_audio_init(const struct device *dev) {
+sa818_result sa818_audio_init(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
 
   /* Configure ADC channel for audio monitoring */
   int ret = adc_channel_setup_dt(&cfg->audio_in);
   if (ret != 0) {
     LOG_ERR("ADC channel setup failed: %d", ret);
-    return ret;
+    return SA818_ERROR_ADC;
   }
 
   LOG_INF("Audio subsystem initialized");
-  return 0;
+  return SA818_OK;
 }
 
 /**
@@ -45,7 +45,7 @@ int sa818_audio_init(const struct device *dev) {
  * In future, this will control DAC output for audio modulation.
  * Currently placeholder.
  */
-int sa818_audio_set_tx_level(const struct device *dev, uint8_t level) {
+sa818_result sa818_audio_set_tx_level(const struct device *dev, uint8_t level) {
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
   k_mutex_lock(&data->lock, K_FOREVER);
@@ -54,7 +54,7 @@ int sa818_audio_set_tx_level(const struct device *dev, uint8_t level) {
   LOG_DBG("TX audio level set to %d (not yet implemented)", level);
 
   k_mutex_unlock(&data->lock);
-  return 0;
+  return SA818_OK;
 }
 
 /**
@@ -63,12 +63,12 @@ int sa818_audio_set_tx_level(const struct device *dev, uint8_t level) {
  * Reads ADC to get current audio input level.
  * Can be used for monitoring squelch or signal strength.
  */
-int sa818_audio_get_rx_level(const struct device *dev, uint16_t *level) {
+sa818_result sa818_audio_get_rx_level(const struct device *dev, uint16_t *level) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
   if (!level) {
-    return -EINVAL;
+    return SA818_ERROR_INVALID_PARAM;
   }
 
   k_mutex_lock(&data->lock, K_FOREVER);
@@ -84,21 +84,21 @@ int sa818_audio_get_rx_level(const struct device *dev, uint16_t *level) {
   if (ret != 0) {
     LOG_ERR("ADC sequence init failed: %d", ret);
     k_mutex_unlock(&data->lock);
-    return ret;
+    return SA818_ERROR_ADC;
   }
 
   ret = adc_read_dt(&cfg->audio_in, &sequence);
   if (ret != 0) {
     LOG_ERR("ADC read failed: %d", ret);
     k_mutex_unlock(&data->lock);
-    return ret;
+    return SA818_ERROR_ADC;
   }
 
   *level = buf;
   LOG_DBG("RX audio level: %d", *level);
 
   k_mutex_unlock(&data->lock);
-  return 0;
+  return SA818_OK;
 }
 
 /**
@@ -107,7 +107,7 @@ int sa818_audio_get_rx_level(const struct device *dev, uint16_t *level) {
  * Controls whether RX and TX audio paths are active.
  * This can be used to mute audio or save power.
  */
-int sa818_audio_enable_path(const struct device *dev, bool rx_enable, bool tx_enable) {
+sa818_result sa818_audio_enable_path(const struct device *dev, bool rx_enable, bool tx_enable) {
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
   k_mutex_lock(&data->lock, K_FOREVER);
@@ -118,5 +118,5 @@ int sa818_audio_enable_path(const struct device *dev, bool rx_enable, bool tx_en
   LOG_INF("Audio paths: RX=%s TX=%s", rx_enable ? "enabled" : "disabled", tx_enable ? "enabled" : "disabled");
 
   k_mutex_unlock(&data->lock);
-  return 0;
+  return SA818_OK;
 }
