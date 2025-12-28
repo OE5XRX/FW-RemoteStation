@@ -1,6 +1,13 @@
 zephyr_library()
 
-zephyr_library_sources(sa818.cpp sa818_shell.cpp)
+# Core driver modules
+zephyr_library_sources(
+  src/sa818_core.cpp
+  src/sa818_at.cpp
+  src/sa818_audio.cpp
+  src/sa818_shell.cpp
+)
 
-#zephyr_library_include_directories(${CMAKE_CURRENT_LIST_DIR}/include)
+# Include directories
 zephyr_include_directories(include)
+zephyr_library_include_directories(src)

@@ -1,34 +1,20 @@
 #define DT_DRV_COMPAT sa_sa818
 
+#include "sa818_priv.h"
+
 #include <sa818/sa818.h>
+#include <sa818/sa818_at.h>
+#include <sa818/sa818_audio.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
-#include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(sa818, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(sa818_core, LOG_LEVEL_INF);
 
-namespace {
-constexpr uint32_t kInitDelayMs = 10U;
-}
-
-struct sa818_config {
-  const struct device *uart;
-  struct adc_dt_spec audio_in;
-
-  struct gpio_dt_spec h_l_power;
-  struct gpio_dt_spec nptt;
-  struct gpio_dt_spec npower_down;
-  struct gpio_dt_spec nsquelch;
-
-  uint32_t tx_enable_delay_ms;
-  uint32_t rx_settle_time_ms;
-};
-
-static int sa818_gpio_init(const sa818_config *cfg) {
+/* GPIO Initialization */
+int sa818_gpio_init(const struct sa818_config *cfg) {
   if (!device_is_ready(cfg->h_l_power.port) || !device_is_ready(cfg->nptt.port) || !device_is_ready(cfg->npower_down.port) ||
       !device_is_ready(cfg->nsquelch.port)) {
     return -ENODEV;
@@ -42,110 +28,152 @@ static int sa818_gpio_init(const sa818_config *cfg) {
   return 0;
 }
 
+/* Device Initialization */
 static int sa818_init(const struct device *dev) {
-  const sa818_config *cfg = static_cast<const sa818_config *>(dev->config);
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
+  /* Verify UART is ready */
   if (!device_is_ready(cfg->uart)) {
     LOG_ERR("UART not ready");
     return -ENODEV;
   }
 
+  /* Verify ADC is ready */
   if (!adc_is_ready_dt(&cfg->audio_in)) {
     LOG_ERR("ADC not ready");
     return -ENODEV;
   }
 
+  /* Initialize GPIO pins */
   int ret = sa818_gpio_init(cfg);
   if (ret != 0) {
-    LOG_ERR("GPIO init failed");
+    LOG_ERR("GPIO init failed: %d", ret);
     return ret;
   }
 
-  sa818_status *data = static_cast<sa818_status *>(dev->data);
+  /* Initialize synchronization primitives */
+  k_mutex_init(&data->lock);
+  k_sem_init(&data->at_response_sem, 0, 1);
+
+  /* Initialize device state */
   data->device_power = SA818_DEVICE_OFF;
   data->ptt_state = SA818_PTT_OFF;
   data->power_level = SA818_POWER_LOW;
   data->squelch = false;
+  data->audio_rx_enabled = false;
+  data->audio_tx_enabled = false;
+  data->current_volume = 4; // Default mid-level
+  data->at_response_len = 0;
 
-  k_msleep(kInitDelayMs);
+  /* Give hardware time to stabilize */
+  k_msleep(SA818_INIT_DELAY_MS);
+
+  /* Initialize audio subsystem */
+  ret = sa818_audio_init(dev);
+  if (ret != 0) {
+    LOG_WRN("Audio init failed: %d", ret);
+    // Non-fatal, continue
+  }
 
   LOG_INF("SA818 initialized");
   return 0;
 }
 
+/* Power Control */
 int sa818_set_power(const struct device *dev, sa818_device_power power_state) {
-  auto *cfg = static_cast<const sa818_config *>(dev->config);
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
+
+  k_mutex_lock(&data->lock, K_FOREVER);
 
   if (power_state == SA818_DEVICE_ON) {
-    gpio_pin_set_dt(&cfg->npower_down, 0);
-    LOG_INF("SA818 powered on");
+    gpio_pin_set_dt(&cfg->npower_down, 0); // Active LOW
+    k_msleep(SA818_POWER_ON_DELAY_MS);     // Wait for module to power up
+    LOG_INF("SA818 powered ON");
   } else {
     gpio_pin_set_dt(&cfg->npower_down, 1);
-    LOG_INF("SA818 powered off");
+    LOG_INF("SA818 powered OFF");
   }
 
-  auto *data = static_cast<sa818_status *>(dev->data);
   data->device_power = power_state;
-  LOG_INF("SA818 powered %s", power_state == SA818_DEVICE_ON ? "ON" : "OFF");
+  k_mutex_unlock(&data->lock);
+
   return 0;
 }
 
+/* PTT Control */
 int sa818_set_ptt(const struct device *dev, sa818_ptt_state ptt_state) {
-  auto *cfg = static_cast<const sa818_config *>(dev->config);
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
+
+  k_mutex_lock(&data->lock, K_FOREVER);
 
   if (ptt_state == SA818_PTT_ON) {
-    gpio_pin_set_dt(&cfg->nptt, 1);
+    gpio_pin_set_dt(&cfg->nptt, 1); // Active HIGH (inverted by pin name)
+    k_msleep(cfg->tx_enable_delay_ms);
+    LOG_INF("PTT ON");
   } else {
     gpio_pin_set_dt(&cfg->nptt, 0);
+    LOG_INF("PTT OFF");
   }
 
-  if (ptt_state == SA818_PTT_ON) {
-    k_msleep(cfg->tx_enable_delay_ms);
-  }
-
-  auto *data = static_cast<sa818_status *>(dev->data);
   data->ptt_state = ptt_state;
-  LOG_INF("PTT %s", ptt_state == SA818_PTT_ON ? "ON" : "OFF");
+  k_mutex_unlock(&data->lock);
+
   return 0;
 }
 
+/* Power Level Control */
 int sa818_set_power_level(const struct device *dev, sa818_power_level power_level) {
-  auto *cfg = static_cast<const sa818_config *>(dev->config);
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
+
+  k_mutex_lock(&data->lock, K_FOREVER);
 
   if (power_level == SA818_POWER_HIGH) {
     gpio_pin_set_dt(&cfg->h_l_power, 1);
+    LOG_INF("TX power HIGH");
   } else {
     gpio_pin_set_dt(&cfg->h_l_power, 0);
+    LOG_INF("TX power LOW");
   }
 
-  auto *data = static_cast<sa818_status *>(dev->data);
   data->power_level = power_level;
-  LOG_INF("TX power %s", power_level == SA818_POWER_HIGH ? "HIGH" : "LOW");
+  k_mutex_unlock(&data->lock);
+
   return 0;
 }
 
+/* Squelch Status */
 bool sa818_is_squelch_open(const struct device *dev) {
-  auto *cfg = static_cast<const sa818_config *>(dev->config);
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   int val = gpio_pin_get_dt(&cfg->nsquelch);
-  return (val > 0);
+  return (val > 0); // Active HIGH means squelch open (no signal)
 }
 
+/* Status Query */
 sa818_status sa818_get_status(const struct device *dev) {
-  auto *data = static_cast<sa818_status *>(dev->data);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
   sa818_status status;
+
+  k_mutex_lock(&data->lock, K_FOREVER);
   status.device_power = data->device_power;
   status.ptt_state = data->ptt_state;
   status.power_level = data->power_level;
   status.squelch = sa818_is_squelch_open(dev);
+  k_mutex_unlock(&data->lock);
+
   return status;
 }
 
+/* Device Definition Macro */
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
 #define SA818_DEFINE(node_id)                                                                                                                                  \
-  static sa818_status sa818_status_##node_id;                                                                                                                  \
+  static struct sa818_data sa818_data_##node_id;                                                                                                               \
                                                                                                                                                                \
-  static const sa818_config sa818_config_##node_id = {                                                                                                         \
+  static const struct sa818_config sa818_config_##node_id = {                                                                                                  \
       .uart = DEVICE_DT_GET(DT_PHANDLE(node_id, uart)),                                                                                                        \
       .audio_in = ADC_DT_SPEC_GET_BY_IDX(node_id, 0),                                                                                                          \
       .h_l_power = GPIO_DT_SPEC_GET(node_id, h_l_power_gpios),                                                                                                 \
@@ -156,7 +184,7 @@ sa818_status sa818_get_status(const struct device *dev) {
       .rx_settle_time_ms = DT_PROP(node_id, rx_settle_time_ms),                                                                                                \
   };                                                                                                                                                           \
                                                                                                                                                                \
-  DEVICE_DT_DEFINE(node_id, sa818_init, nullptr, &sa818_status_##node_id, &sa818_config_##node_id, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, nullptr);
+  DEVICE_DT_DEFINE(node_id, sa818_init, nullptr, &sa818_data_##node_id, &sa818_config_##node_id, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, nullptr);
 
 DT_FOREACH_STATUS_OKAY(DT_DRV_COMPAT, SA818_DEFINE)
 
