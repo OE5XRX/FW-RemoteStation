@@ -249,7 +249,7 @@ static int cmd_sa818_at_filters(const struct shell *shell, size_t argc, char **a
   return 0;
 }
 
-static int cmd_sa818_at_rssi(const struct shell *shell, size_t argc, char **argv) {
+static int cmd_sa818_at_rssi(const struct shell *shell, size_t, char **) {
   const struct device *dev = sa818_dev();
   if (!dev || !device_is_ready(dev)) {
     shell_error(shell, "sa818 not ready");

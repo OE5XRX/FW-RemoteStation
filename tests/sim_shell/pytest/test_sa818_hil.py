@@ -97,9 +97,6 @@ def test_zephyr_at_set_group(sa818_sim, shell):
     squelch = 5
     ctcss_rx = 0
     
-    # Check if there's a shell command for set_group
-    # If not, we'll need to call it via a custom command or add one
-    # For now, assume there's a command like: sa818 at_group <bw> <tx> <rx> <txcss> <sq> <rxcss>
     out = shell.exec_command(f"sa818 at_group {bandwidth} {freq_tx} {freq_rx} {ctcss_tx} {squelch} {ctcss_rx}")
     text = _as_text(out)
     
