@@ -249,6 +249,24 @@ static int cmd_sa818_at_filters(const struct shell *shell, size_t argc, char **a
   return 0;
 }
 
+static int cmd_sa818_at_rssi(const struct shell *shell, size_t argc, char **argv) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  uint8_t rssi = 0;
+  sa818_result ret = sa818_at_read_rssi(dev, &rssi);
+  if (ret != SA818_OK) {
+    shell_error(shell, "AT command failed: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "RSSI: %d", rssi);
+  return 0;
+}
+
 // clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_cmds,
@@ -260,6 +278,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     SHELL_CMD(at_volume, NULL, "Set volume via AT (1-8)", cmd_sa818_at_volume),
     SHELL_CMD(at_group, NULL, "Configure frequency via AT", cmd_sa818_at_group),
     SHELL_CMD(at_filters, NULL, "Configure audio filters via AT", cmd_sa818_at_filters),
+    SHELL_CMD(at_rssi, NULL, "Read RSSI via AT", cmd_sa818_at_rssi),
     SHELL_SUBCMD_SET_END);
 // clang-format on
 

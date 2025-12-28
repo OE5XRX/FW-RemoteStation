@@ -11,7 +11,8 @@
       "extensions": [
         "xaver.clang-format",
         "ms-vscode.cpptools-extension-pack",
-        "nordic-semiconductor.nrf-connect-extension-pack"
+        "nordic-semiconductor.nrf-connect-extension-pack",
+        "ms-python.python"
       ]
     }
   },
