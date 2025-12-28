@@ -10,6 +10,7 @@ These tests verify the complete AT command flow:
 """
 
 import pytest
+import re
 import time
 
 from test_sa818 import _parse_sa818_status
@@ -20,6 +21,24 @@ def _as_text(out) -> str:
     if isinstance(out, list):
         return "\n".join(str(line) for line in out)
     return str(out)
+
+
+def _parse_rssi(text: str) -> int:
+    """Parse RSSI value from shell output.
+    
+    Args:
+        text: Shell output text containing RSSI value
+        
+    Returns:
+        Parsed RSSI value as integer
+        
+    Raises:
+        AssertionError: If RSSI cannot be parsed from output
+    """
+    match = re.search(r'RSSI:\s*(\d+)', text)
+    assert match, f"Could not parse RSSI from output: {text}"
+    return int(match.group(1))
+
 
 @pytest.mark.sa818_sim
 def test_zephyr_at_volume_command_simple(sa818_sim, shell):
@@ -208,9 +227,9 @@ def test_zephyr_at_set_filters_all_enabled(sa818_sim, shell):
     print(f"Simulator filter state - PRE:{state.pre_emphasis} HPF:{state.high_pass} LPF:{state.low_pass}")
     
     # Verify all filters are enabled
-    assert state.pre_emphasis == True, f"Expected pre-emphasis enabled, got {state.pre_emphasis}"
-    assert state.high_pass == True, f"Expected high-pass enabled, got {state.high_pass}"
-    assert state.low_pass == True, f"Expected low-pass enabled, got {state.low_pass}"
+    assert state.pre_emphasis, f"Expected pre-emphasis enabled, got {state.pre_emphasis}"
+    assert state.high_pass, f"Expected high-pass enabled, got {state.high_pass}"
+    assert state.low_pass, f"Expected low-pass enabled, got {state.low_pass}"
     
     # Verify no error in command
     assert "err" not in text.lower(), f"AT command failed: {text}"
@@ -251,9 +270,9 @@ def test_zephyr_at_set_filters_selective(sa818_sim, shell):
     print(f"Simulator filter state - PRE:{state.pre_emphasis} HPF:{state.high_pass} LPF:{state.low_pass}")
     
     # Verify selective filter configuration
-    assert state.pre_emphasis == False, f"Expected pre-emphasis disabled, got {state.pre_emphasis}"
-    assert state.high_pass == True, f"Expected high-pass enabled, got {state.high_pass}"
-    assert state.low_pass == False, f"Expected low-pass disabled, got {state.low_pass}"
+    assert not state.pre_emphasis, f"Expected pre-emphasis disabled, got {state.pre_emphasis}"
+    assert state.high_pass, f"Expected high-pass enabled, got {state.high_pass}"
+    assert not state.low_pass, f"Expected low-pass disabled, got {state.low_pass}"
     
     # Verify no error
     assert "err" not in text.lower(), f"AT command failed: {text}"
@@ -291,9 +310,9 @@ def test_zephyr_at_set_filters_all_disabled(sa818_sim, shell):
     print(f"Simulator filter state - PRE:{state.pre_emphasis} HPF:{state.high_pass} LPF:{state.low_pass}")
     
     # Verify all filters are disabled
-    assert state.pre_emphasis == False, f"Expected pre-emphasis disabled, got {state.pre_emphasis}"
-    assert state.high_pass == False, f"Expected high-pass disabled, got {state.high_pass}"
-    assert state.low_pass == False, f"Expected low-pass disabled, got {state.low_pass}"
+    assert not state.pre_emphasis, f"Expected pre-emphasis disabled, got {state.pre_emphasis}"
+    assert not state.high_pass, f"Expected high-pass disabled, got {state.high_pass}"
+    assert not state.low_pass, f"Expected low-pass disabled, got {state.low_pass}"
     
     # Verify no error
     assert "err" not in text.lower(), f"AT command failed: {text}"
@@ -332,11 +351,7 @@ def test_zephyr_at_read_rssi_default(sa818_sim, shell):
     
     # Parse RSSI value from output
     # Expected format: "RSSI: 120"
-    import re
-    match = re.search(r'RSSI:\s*(\d+)', text)
-    assert match, f"Could not parse RSSI from output: {text}"
-    
-    rssi_value = int(match.group(1))
+    rssi_value = _parse_rssi(text)
     print(f"Parsed RSSI: {rssi_value}, Expected: {default_rssi}")
     
     # Verify RSSI matches simulator state
@@ -374,11 +389,7 @@ def test_zephyr_at_read_rssi_strong_signal(sa818_sim, shell):
     time.sleep(0.3)
     
     # Parse RSSI value
-    import re
-    match = re.search(r'RSSI:\s*(\d+)', text)
-    assert match, f"Could not parse RSSI from output: {text}"
-    
-    rssi_value = int(match.group(1))
+    rssi_value = _parse_rssi(text)
     print(f"Parsed RSSI: {rssi_value}, Expected: {strong_rssi}")
     
     # Verify strong signal RSSI
@@ -416,11 +427,7 @@ def test_zephyr_at_read_rssi_weak_signal(sa818_sim, shell):
     time.sleep(0.3)
     
     # Parse RSSI value
-    import re
-    match = re.search(r'RSSI:\s*(\d+)', text)
-    assert match, f"Could not parse RSSI from output: {text}"
-    
-    rssi_value = int(match.group(1))
+    rssi_value = _parse_rssi(text)
     print(f"Parsed RSSI: {rssi_value}, Expected: {weak_rssi}")
     
     # Verify weak signal RSSI
@@ -454,15 +461,11 @@ def test_zephyr_at_read_rssi_varying_levels(sa818_sim, shell):
         out = shell.exec_command("sa818 at_rssi")
         text = _as_text(out)
         
-        # Give time for AT transaction
-        time.sleep(0.2)
+        # Give time for AT transaction (consistent with other RSSI tests)
+        time.sleep(0.3)
         
         # Parse RSSI value
-        import re
-        match = re.search(r'RSSI:\s*(\d+)', text)
-        assert match, f"Could not parse RSSI from output: {text}"
-        
-        rssi_value = int(match.group(1))
+        rssi_value = _parse_rssi(text)
         print(f"Level {expected_rssi}: Got RSSI={rssi_value}")
         
         # Verify RSSI matches expected level
