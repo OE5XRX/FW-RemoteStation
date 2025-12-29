@@ -181,12 +181,15 @@ sa818_result sa818_at_connect(const struct device *dev) {
  * AT+DMOSETGROUP=BW,TXF,RXF,TXCCS,SQ,RXCCS
  * Example: AT+DMOSETGROUP=0,145.5000,145.5000,0000,4,0000
  */
-sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwidth, float freq_tx, float freq_rx, sa818_tone_code ctcss_tx, sa818_squelch_level squelch,
-                                sa818_tone_code ctcss_rx) {
+sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwidth, float freq_tx, float freq_rx, sa818_tone_code ctcss_tx,
+                                sa818_squelch_level squelch, sa818_tone_code ctcss_rx) {
   char cmd[128];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
   /* Validate parameters */
+  if (bandwidth != SA818_BW_12_5_KHZ && bandwidth != SA818_BW_25_KHZ) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
   if (squelch < SA818_SQL_LEVEL_0 || squelch > SA818_SQL_LEVEL_8) {
     return SA818_ERROR_INVALID_PARAM;
   }
@@ -339,7 +342,7 @@ sa818_result sa818_at_read_version(const struct device *dev, char *version, size
   /* Copy version string to output buffer */
   strncpy(version, response, version_len - 1);
   version[version_len - 1] = '\0';
-  
+
   LOG_INF("Version: %s", version);
 
   return SA818_OK;

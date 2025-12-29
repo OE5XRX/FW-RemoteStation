@@ -54,8 +54,8 @@ enum sa818_squelch_level {
 /**
  * @brief SA818 CTCSS/DCS tone codes
  *
- * Values 0-38: CTCSS tones (0=off, 1-38=67.0-254.1 Hz)
- * Values 39-121: DCS codes (023-754)
+ * Values 0-38: CTCSS tones (0=off, 1-38=67.0-250.3 Hz)
+ * Values 39-121: DCS codes (023-523)
  */
 enum sa818_tone_code {
   SA818_TONE_NONE = 0, /**< No CTCSS/DCS */
