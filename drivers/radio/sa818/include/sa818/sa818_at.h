@@ -188,6 +188,29 @@ enum sa818_tone_code {
 };
 
 /**
+ * @brief SA818 volume level (1-8)
+ */
+enum sa818_volume_level {
+  SA818_VOLUME_1 = 1, /**< Volume level 1 (quietest) */
+  SA818_VOLUME_2 = 2,
+  SA818_VOLUME_3 = 3,
+  SA818_VOLUME_4 = 4, /**< Volume level 4 (default) */
+  SA818_VOLUME_5 = 5,
+  SA818_VOLUME_6 = 6,
+  SA818_VOLUME_7 = 7,
+  SA818_VOLUME_8 = 8 /**< Volume level 8 (loudest) */
+};
+/**
+ * @brief SA818 audio filter flags (can be OR'ed together)
+ */
+enum sa818_filter_flags {
+  SA818_FILTER_NONE = 0,                                                                          /**< No filters enabled */
+  SA818_FILTER_PRE_EMPHASIS = (1 << 0),                                                           /**< Pre-emphasis filter (0x01) */
+  SA818_FILTER_HIGH_PASS = (1 << 1),                                                              /**< High-pass filter (0x02) */
+  SA818_FILTER_LOW_PASS = (1 << 2),                                                               /**< Low-pass filter (0x04) */
+  SA818_FILTER_ALL = (SA818_FILTER_PRE_EMPHASIS | SA818_FILTER_HIGH_PASS | SA818_FILTER_LOW_PASS) /**< All filters enabled */
+};
+/**
  * @brief Send raw AT command and receive response
  *
  * @param dev SA818 device
@@ -232,18 +255,16 @@ enum sa818_tone_code {
  * @param volume Volume level (1-8)
  * @return SA818_OK on success, error code on failure
  */
-[[nodiscard]] enum sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume);
+[[nodiscard]] enum sa818_result sa818_at_set_volume(const struct device *dev, enum sa818_volume_level volume);
 
 /**
  * @brief Configure audio filters
  *
  * @param dev SA818 device
- * @param pre_emphasis Pre-emphasis enable
- * @param high_pass High-pass filter enable
- * @param low_pass Low-pass filter enable
+ * @param filters Filter flags (OR'ed combination of sa818_filter_flags)
  * @return SA818_OK on success, error code on failure
  */
-[[nodiscard]] enum sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass);
+[[nodiscard]] enum sa818_result sa818_at_set_filters(const struct device *dev, enum sa818_filter_flags filters);
 
 /**
  * @brief Read RSSI (signal strength)

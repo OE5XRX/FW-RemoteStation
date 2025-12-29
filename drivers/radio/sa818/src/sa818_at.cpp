@@ -224,11 +224,11 @@ sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwi
  *
  * AT+DMOSETVOLUME=N where N is 1-8
  */
-sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume) {
+sa818_result sa818_at_set_volume(const struct device *dev, sa818_volume_level volume) {
   char cmd[32];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
-  if (volume < 1 || volume > 8) {
+  if (volume < SA818_VOLUME_1 || volume > SA818_VOLUME_8) {
     return SA818_ERROR_INVALID_PARAM;
   }
 
@@ -245,9 +245,9 @@ sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume) {
   }
 
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
-  data->current_volume = volume;
+  data->current_volume = static_cast<uint8_t>(volume);
 
-  LOG_INF("Volume set to %d", volume);
+  LOG_INF("Volume set to %d", static_cast<int>(volume));
   return SA818_OK;
 }
 
@@ -256,9 +256,13 @@ sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume) {
  *
  * AT+SETFILTER=PRE,HPF,LPF where each is 0 or 1
  */
-sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass) {
+sa818_result sa818_at_set_filters(const struct device *dev, sa818_filter_flags filters) {
   char cmd[64];
   char response[SA818_AT_RESPONSE_MAX_LEN];
+
+  bool pre_emphasis = (filters & SA818_FILTER_PRE_EMPHASIS) != 0;
+  bool high_pass = (filters & SA818_FILTER_HIGH_PASS) != 0;
+  bool low_pass = (filters & SA818_FILTER_LOW_PASS) != 0;
 
   snprintf(cmd, sizeof(cmd), "AT+SETFILTER=%d,%d,%d", pre_emphasis ? 1 : 0, high_pass ? 1 : 0, low_pass ? 1 : 0);
 

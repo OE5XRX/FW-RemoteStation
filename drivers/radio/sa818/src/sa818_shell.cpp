@@ -199,7 +199,7 @@ static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **ar
     return -EINVAL;
   }
 
-  sa818_result ret = sa818_at_set_volume(dev, volume);
+  sa818_result ret = sa818_at_set_volume(dev, static_cast<sa818_volume_level>(volume));
   if (ret != SA818_OK) {
     shell_error(shell, "AT command failed: %d", ret);
     return ret;
@@ -353,7 +353,8 @@ static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **arg
 static int cmd_sa818_at_filters(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 4) {
     shell_error(shell, "usage: sa818 at filters <pre> <hpf> <lpf>");
-    shell_error(shell, "example: sa818 at filters 1 1 1");
+    shell_error(shell, "  Each filter: 0=off, 1=on");
+    shell_error(shell, "example: sa818 at filters 1 1 1  (all enabled)");
     return -EINVAL;
   }
 
@@ -367,7 +368,16 @@ static int cmd_sa818_at_filters(const struct shell *shell, size_t argc, char **a
   bool hpf = atoi(argv[2]) != 0;
   bool lpf = atoi(argv[3]) != 0;
 
-  sa818_result ret = sa818_at_set_filters(dev, pre, hpf, lpf);
+  // Build filter flags
+  sa818_filter_flags filters = SA818_FILTER_NONE;
+  if (pre)
+    filters = static_cast<sa818_filter_flags>(filters | SA818_FILTER_PRE_EMPHASIS);
+  if (hpf)
+    filters = static_cast<sa818_filter_flags>(filters | SA818_FILTER_HIGH_PASS);
+  if (lpf)
+    filters = static_cast<sa818_filter_flags>(filters | SA818_FILTER_LOW_PASS);
+
+  sa818_result ret = sa818_at_set_filters(dev, filters);
   if (ret != SA818_OK) {
     shell_error(shell, "AT command failed: %d", ret);
     return ret;
