@@ -29,7 +29,11 @@ int WavSource::parse_wav_into_buffer(int fd) {
   if (rc)
     return rc;
 
-  if (std::memcmp(riff_hdr, "RIFF", 4) != 0 || std::memcmp(riff_hdr + 8, "WAVE", 4) != 0) {
+  constexpr std::array<uint8_t, 4> riff_magic{'R', 'I', 'F', 'F'};
+  constexpr std::array<uint8_t, 4> wave_magic{'W', 'A', 'V', 'E'};
+
+  if (!std::equal(riff_magic.begin(), riff_magic.end(), riff_hdr) ||
+      !std::equal(wave_magic.begin(), wave_magic.end(), riff_hdr + 8)) {
     return sim_audio::err_inval;
   }
 
@@ -56,7 +60,10 @@ int WavSource::parse_wav_into_buffer(int fd) {
 
     const uint32_t chunk_size = rd_u32_le(std::span<const uint8_t, 4>{chunk_hdr + 4, 4});
 
-    if (std::memcmp(chunk_hdr, "fmt ", 4) == 0) {
+    constexpr std::array<uint8_t, 4> fmt_magic{'f', 'm', 't', ' '};
+    constexpr std::array<uint8_t, 4> data_magic{'d', 'a', 't', 'a'};
+
+    if (std::equal(fmt_magic.begin(), fmt_magic.end(), chunk_hdr)) {
       if (chunk_size < 16u || chunk_size > 32u)
         return sim_audio::err_inval;
 
@@ -71,7 +78,7 @@ int WavSource::parse_wav_into_buffer(int fd) {
       bits_per_sample = rd_u16_le(std::span<const uint8_t, 2>{fmt + 14, 2});
       have_fmt = true;
 
-    } else if (std::memcmp(chunk_hdr, "data", 4) == 0) {
+    } else if (std::equal(data_magic.begin(), data_magic.end(), chunk_hdr)) {
       data_bytes = chunk_size;
       data_off = ::lseek(fd, 0, SEEK_CUR);
       if (data_off < 0)

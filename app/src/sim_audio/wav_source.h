@@ -28,8 +28,8 @@ private:
     return static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
   }
   [[nodiscard]] static constexpr uint32_t rd_u32_le(std::span<const uint8_t, 4> data) noexcept {
-    return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
-           (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
+    return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) | (static_cast<uint32_t>(data[2]) << 16) |
+           (static_cast<uint32_t>(data[3]) << 24);
   }
   int parse_wav_into_buffer(int fd);
 
