@@ -31,7 +31,7 @@ LOG_MODULE_REGISTER(sa818_at, LOG_LEVEL_DBG);
  *
  * @param uart UART device
  * @param cmd Command string to send
- * @return SA818_OK on success, SA818_ERROR_INVALID_PARAM if cmd is NULL
+ * @return SA818_OK on success, SA818_ERROR_INVALID_PARAM if uart is NULL or cmd is empty
  */
 static sa818_result uart_write_command(const struct device *uart, std::string_view cmd) {
   if (!uart || cmd.empty()) {
