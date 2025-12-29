@@ -38,7 +38,7 @@ extern "C" {
  * @param timeout_ms Timeout in milliseconds
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, char *response, size_t response_len, uint32_t timeout_ms);
+[[nodiscard]] enum sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, char *response, size_t response_len, uint32_t timeout_ms);
 
 /**
  * @brief Configure radio group (frequency, CTCSS, squelch)
@@ -52,8 +52,8 @@ enum sa818_result sa818_at_send_command(const struct device *dev, const char *cm
  * @param ctcss_rx RX CTCSS code
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, float freq_tx, float freq_rx, uint16_t ctcss_tx, uint8_t squelch,
-                                     uint16_t ctcss_rx);
+[[nodiscard]] enum sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, float freq_tx, float freq_rx, uint16_t ctcss_tx,
+                                                   uint8_t squelch, uint16_t ctcss_rx);
 
 /**
  * @brief Set volume level
@@ -62,7 +62,7 @@ enum sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth
  * @param volume Volume level (1-8)
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume);
+[[nodiscard]] enum sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume);
 
 /**
  * @brief Configure audio filters
@@ -73,7 +73,7 @@ enum sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume);
  * @param low_pass Low-pass filter enable
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass);
+[[nodiscard]] enum sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass);
 
 /**
  * @brief Read RSSI (signal strength)
@@ -82,7 +82,7 @@ enum sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphas
  * @param rssi Pointer to store RSSI value
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_at_read_rssi(const struct device *dev, uint8_t *rssi);
+[[nodiscard]] enum sa818_result sa818_at_read_rssi(const struct device *dev, uint8_t *rssi);
 
 #ifdef __cplusplus
 }

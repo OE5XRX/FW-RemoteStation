@@ -9,11 +9,11 @@ class SineSource final : public SampleSource {
 public:
   void configure(uint32_t freq_hz, float amp_norm, uint32_t sample_rate_hz);
 
-  uint32_t sample_rate_hz() const override { return sample_rate_hz_; }
+  [[nodiscard]] uint32_t sample_rate_hz() const noexcept override { return sample_rate_hz_; }
   float next_sample_norm() override;
 
-  uint32_t freq_hz() const { return freq_hz_; }
-  float amp_norm() const { return amp_norm_; }
+  [[nodiscard]] uint32_t freq_hz() const noexcept { return freq_hz_; }
+  [[nodiscard]] float amp_norm() const noexcept { return amp_norm_; }
 
 private:
   uint32_t freq_hz_{};

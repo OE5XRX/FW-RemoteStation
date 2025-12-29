@@ -34,7 +34,7 @@ extern "C" {
  * @param dev SA818 device
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_audio_init(const struct device *dev);
+[[nodiscard]] enum sa818_result sa818_audio_init(const struct device *dev);
 
 /**
  * @brief Set TX audio level (modulation)
@@ -43,7 +43,7 @@ enum sa818_result sa818_audio_init(const struct device *dev);
  * @param level Audio level (0-255)
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_audio_set_tx_level(const struct device *dev, uint8_t level);
+[[nodiscard]] enum sa818_result sa818_audio_set_tx_level(const struct device *dev, uint8_t level);
 
 /**
  * @brief Get RX audio level (demodulation)
@@ -52,7 +52,7 @@ enum sa818_result sa818_audio_set_tx_level(const struct device *dev, uint8_t lev
  * @param level Pointer to store audio level
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_audio_get_rx_level(const struct device *dev, uint16_t *level);
+[[nodiscard]] enum sa818_result sa818_audio_get_rx_level(const struct device *dev, uint16_t *level);
 
 /**
  * @brief Enable/disable audio paths
@@ -62,7 +62,7 @@ enum sa818_result sa818_audio_get_rx_level(const struct device *dev, uint16_t *l
  * @param tx_enable Enable TX audio path
  * @return SA818_OK on success, error code on failure
  */
-enum sa818_result sa818_audio_enable_path(const struct device *dev, bool rx_enable, bool tx_enable);
+[[nodiscard]] enum sa818_result sa818_audio_enable_path(const struct device *dev, bool rx_enable, bool tx_enable);
 
 #ifdef __cplusplus
 }
