@@ -14,7 +14,7 @@ int main(void) {
     printk("===========================================\n");
     return -1;
   }
-  printk("OK: SA818 Device-Tree Node found\n");
+  printk("OK: SA818 Device Tree Node found\n");
 
   if (!device_is_ready(sa)) {
     printk("ERROR: SA818 Device not ready\n");
@@ -22,7 +22,7 @@ int main(void) {
     return -1;
   }
   printk("OK: SA818 Device is ready\n");
-  printk("OK: SA818 Driver successfully loaded\n");
+  printk("OK: SA818 driver successfully loaded\n");
   printk("===========================================\n");
 
   printk("Powering on SA818...\n");
