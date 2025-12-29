@@ -32,8 +32,7 @@ int WavSource::parse_wav_into_buffer(int fd) {
   constexpr std::array<uint8_t, 4> riff_magic{'R', 'I', 'F', 'F'};
   constexpr std::array<uint8_t, 4> wave_magic{'W', 'A', 'V', 'E'};
 
-  if (!std::equal(riff_magic.begin(), riff_magic.end(), riff_hdr) ||
-      !std::equal(wave_magic.begin(), wave_magic.end(), riff_hdr + 8)) {
+  if (!std::equal(riff_magic.begin(), riff_magic.end(), riff_hdr) || !std::equal(wave_magic.begin(), wave_magic.end(), riff_hdr + 8)) {
     return sim_audio::err_inval;
   }
 

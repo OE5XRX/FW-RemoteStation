@@ -101,18 +101,18 @@ static int cmd_adc_read(const shell *sh, size_t, char **) {
   }
 
   adc_channel_cfg ch_cfg{
-    .gain = ADC_GAIN_1,
-    .reference = ADC_REF_INTERNAL,
-    .acquisition_time = ADC_ACQ_TIME_DEFAULT,
-    .channel_id = adc_channel_id,
+      .gain = ADC_GAIN_1,
+      .reference = ADC_REF_INTERNAL,
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+      .channel_id = adc_channel_id,
   };
 
   int16_t sample_raw = 0;
   adc_sequence seq{
-    .channels = BIT(adc_channel_id),
-    .buffer = &sample_raw,
-    .buffer_size = sizeof(sample_raw),
-    .resolution = 12,
+      .channels = BIT(adc_channel_id),
+      .buffer = &sample_raw,
+      .buffer_size = sizeof(sample_raw),
+      .resolution = 12,
   };
 
   int rc = adc_channel_setup(g_adc_dev, &ch_cfg);
