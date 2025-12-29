@@ -2,9 +2,11 @@
 
 #include "constants.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <span>
 #include <unistd.h>
 
 int WavSource::read_exact(int fd, void *dst, std::size_t n_bytes) {
@@ -19,14 +21,6 @@ int WavSource::read_exact(int fd, void *dst, std::size_t n_bytes) {
     off += static_cast<std::size_t>(r);
   }
   return 0;
-}
-
-uint16_t WavSource::rd_u16_le(const uint8_t *p) {
-  return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
-}
-
-uint32_t WavSource::rd_u32_le(const uint8_t *p) {
-  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
 int WavSource::parse_wav_into_buffer(int fd) {
@@ -60,7 +54,7 @@ int WavSource::parse_wav_into_buffer(int fd) {
     if (r != static_cast<ssize_t>(sizeof(chunk_hdr)))
       return sim_audio::err_io;
 
-    const uint32_t chunk_size = rd_u32_le(chunk_hdr + 4);
+    const uint32_t chunk_size = rd_u32_le(std::span<const uint8_t, 4>{chunk_hdr + 4, 4});
 
     if (std::memcmp(chunk_hdr, "fmt ", 4) == 0) {
       if (chunk_size < 16u || chunk_size > 32u)
@@ -71,10 +65,10 @@ int WavSource::parse_wav_into_buffer(int fd) {
       if (rc)
         return rc;
 
-      audio_format = rd_u16_le(fmt + 0);
-      num_channels = rd_u16_le(fmt + 2);
-      sample_rate_hz = rd_u32_le(fmt + 4);
-      bits_per_sample = rd_u16_le(fmt + 14);
+      audio_format = rd_u16_le(std::span<const uint8_t, 2>{fmt + 0, 2});
+      num_channels = rd_u16_le(std::span<const uint8_t, 2>{fmt + 2, 2});
+      sample_rate_hz = rd_u32_le(std::span<const uint8_t, 4>{fmt + 4, 4});
+      bits_per_sample = rd_u16_le(std::span<const uint8_t, 2>{fmt + 14, 2});
       have_fmt = true;
 
     } else if (std::memcmp(chunk_hdr, "data", 4) == 0) {
