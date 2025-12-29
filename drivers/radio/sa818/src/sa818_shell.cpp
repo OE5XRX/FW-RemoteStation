@@ -183,7 +183,7 @@ static int cmd_sa818_at_connect(const struct shell *shell, size_t argc, char **a
 
 static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 2) {
-    shell_error(shell, "usage: sa818 at_volume <1-8>");
+    shell_error(shell, "usage: sa818 at volume <1-8>");
     return -EINVAL;
   }
 
@@ -211,8 +211,8 @@ static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **ar
 
 static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 7) {
-    shell_error(shell, "usage: sa818 at_group <bw> <tx_freq> <rx_freq> <tx_ctcss> <squelch> <rx_ctcss>");
-    shell_error(shell, "example: sa818 at_group 0 145.500 145.500 0 4 0");
+    shell_error(shell, "usage: sa818 at group <bw> <tx_freq> <rx_freq> <tx_ctcss> <squelch> <rx_ctcss>");
+    shell_error(shell, "example: sa818 at group 0 145.500 145.500 0 4 0");
     return -EINVAL;
   }
 
@@ -241,8 +241,8 @@ static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **arg
 
 static int cmd_sa818_at_filters(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 4) {
-    shell_error(shell, "usage: sa818 at_filters <pre> <hpf> <lpf>");
-    shell_error(shell, "example: sa818 at_filters 1 1 1");
+    shell_error(shell, "usage: sa818 at filters <pre> <hpf> <lpf>");
+    shell_error(shell, "example: sa818 at filters 1 1 1");
     return -EINVAL;
   }
 
