@@ -80,7 +80,7 @@ enum sa818_device_power {
  *
  * @note After power-on, wait for module initialization before sending commands
  */
-enum sa818_result sa818_set_power(const struct device *dev, enum sa818_device_power power_state);
+[[nodiscard]] enum sa818_result sa818_set_power(const struct device *dev, enum sa818_device_power power_state);
 
 /**
  * @brief PTT (Push-To-Talk) states
@@ -108,7 +108,7 @@ enum sa818_ptt_state {
  * @note TX enable delay (configured in device tree) is applied when entering TX mode
  * @warning Ensure antenna is connected before transmitting
  */
-enum sa818_result sa818_set_ptt(const struct device *dev, enum sa818_ptt_state ptt_state);
+[[nodiscard]] enum sa818_result sa818_set_ptt(const struct device *dev, enum sa818_ptt_state ptt_state);
 
 /**
  * @brief RF output power levels
@@ -138,7 +138,7 @@ enum sa818_power_level {
  *
  * @note Power level only affects TX mode, not RX mode
  */
-enum sa818_result sa818_set_power_level(const struct device *dev, enum sa818_power_level power_level);
+[[nodiscard]] enum sa818_result sa818_set_power_level(const struct device *dev, enum sa818_power_level power_level);
 
 /**
  * @brief Squelch states
@@ -164,7 +164,7 @@ enum sa818_squelch_state {
  *
  * @note SQL pin is active HIGH when squelch is open (no signal)
  */
-enum sa818_squelch_state sa818_get_squelch(const struct device *dev);
+[[nodiscard]] enum sa818_squelch_state sa818_get_squelch(const struct device *dev);
 
 /**
  * @brief Device status structure

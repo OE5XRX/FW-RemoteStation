@@ -7,7 +7,7 @@ class SampleSource {
 public:
   virtual ~SampleSource() = default;
 
-  virtual uint32_t sample_rate_hz() const = 0;
+  [[nodiscard]] virtual uint32_t sample_rate_hz() const noexcept = 0;
   virtual float next_sample_norm() = 0; // [-1.0 .. +1.0]
 };
 

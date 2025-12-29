@@ -26,10 +26,18 @@ int main(void) {
   printk("===========================================\n");
 
   printk("Schalte SA818 ein...\n");
-  sa818_set_power(sa, SA818_DEVICE_ON);
+  enum sa818_result result = sa818_set_power(sa, SA818_DEVICE_ON);
+  if (result != SA818_OK) {
+    printk("FEHLER: Konnte SA818 nicht einschalten\n");
+    return -1;
+  }
 
   printk("Setze Sendeleistung auf HIGH...\n");
-  sa818_set_power_level(sa, SA818_POWER_HIGH);
+  result = sa818_set_power_level(sa, SA818_POWER_HIGH);
+  if (result != SA818_OK) {
+    printk("FEHLER: Konnte Sendeleistung nicht setzen\n");
+    return -1;
+  }
 
   printk("SA818 Initialisierung abgeschlossen\n");
 

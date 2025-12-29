@@ -11,14 +11,14 @@
 
 class WavSource final : public SampleSource {
 public:
-  int load(const char *path);
+  [[nodiscard]] int load(const char *path);
 
-  bool loaded() const { return (count_samples_ > 0u) && (sample_rate_hz_ > 0u); }
-  uint32_t sample_rate_hz() const override { return sample_rate_hz_; }
+  [[nodiscard]] bool loaded() const noexcept { return (count_samples_ > 0u) && (sample_rate_hz_ > 0u); }
+  [[nodiscard]] uint32_t sample_rate_hz() const noexcept override { return sample_rate_hz_; }
   float next_sample_norm() override; // loops
 
-  std::size_t pos_samples() const { return idx_samples_; }
-  std::size_t count_samples() const { return count_samples_; }
+  [[nodiscard]] std::size_t pos_samples() const noexcept { return idx_samples_; }
+  [[nodiscard]] std::size_t count_samples() const noexcept { return count_samples_; }
 
 private:
   static int read_exact(int fd, void *dst, std::size_t n_bytes);
