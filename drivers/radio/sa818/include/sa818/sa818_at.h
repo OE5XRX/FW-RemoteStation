@@ -41,6 +41,17 @@ extern "C" {
 [[nodiscard]] enum sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, char *response, size_t response_len, uint32_t timeout_ms);
 
 /**
+ * @brief Establish connection handshake with SA818 module
+ *
+ * Sends AT+DMOCONNECT command to establish communication with the radio module.
+ * This should typically be called after power-on to verify UART communication.
+ *
+ * @param dev SA818 device
+ * @return SA818_OK on success, error code on failure
+ */
+[[nodiscard]] enum sa818_result sa818_at_connect(const struct device *dev);
+
+/**
  * @brief Configure radio group (frequency, CTCSS, squelch)
  *
  * @param dev SA818 device

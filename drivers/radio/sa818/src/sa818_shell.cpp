@@ -164,9 +164,26 @@ static int cmd_sa818_squelch_sim(const struct shell *shell, size_t argc, char **
 }
 
 /* AT Command Shell Commands */
+static int cmd_sa818_at_connect(const struct shell *shell, size_t argc, char **argv) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  sa818_result ret = sa818_at_connect(dev);
+  if (ret != SA818_OK) {
+    shell_error(shell, "AT+DMOCONNECT failed: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "SA818 connection handshake successful");
+  return 0;
+}
+
 static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 2) {
-    shell_error(shell, "usage: sa818 at_volume <1-8>");
+    shell_error(shell, "usage: sa818 at volume <1-8>");
     return -EINVAL;
   }
 
@@ -194,8 +211,8 @@ static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **ar
 
 static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 7) {
-    shell_error(shell, "usage: sa818 at_group <bw> <tx_freq> <rx_freq> <tx_ctcss> <squelch> <rx_ctcss>");
-    shell_error(shell, "example: sa818 at_group 0 145.500 145.500 0 4 0");
+    shell_error(shell, "usage: sa818 at group <bw> <tx_freq> <rx_freq> <tx_ctcss> <squelch> <rx_ctcss>");
+    shell_error(shell, "example: sa818 at group 0 145.500 145.500 0 4 0");
     return -EINVAL;
   }
 
@@ -224,8 +241,8 @@ static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **arg
 
 static int cmd_sa818_at_filters(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 4) {
-    shell_error(shell, "usage: sa818 at_filters <pre> <hpf> <lpf>");
-    shell_error(shell, "example: sa818 at_filters 1 1 1");
+    shell_error(shell, "usage: sa818 at filters <pre> <hpf> <lpf>");
+    shell_error(shell, "example: sa818 at filters 1 1 1");
     return -EINVAL;
   }
 
@@ -269,16 +286,22 @@ static int cmd_sa818_at_rssi(const struct shell *shell, size_t argc, char **argv
 
 // clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
+    sa818_at_cmds,
+    SHELL_CMD(connect, NULL, "Connection handshake", cmd_sa818_at_connect),
+    SHELL_CMD(volume, NULL, "Set volume (1-8)", cmd_sa818_at_volume),
+    SHELL_CMD(group, NULL, "Configure frequency", cmd_sa818_at_group),
+    SHELL_CMD(filters, NULL, "Configure audio filters", cmd_sa818_at_filters),
+    SHELL_CMD(rssi, NULL, "Read RSSI", cmd_sa818_at_rssi),
+    SHELL_SUBCMD_SET_END);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_cmds,
     SHELL_CMD(status, NULL, "Show SA818 status", cmd_sa818_status),
     SHELL_CMD(power, NULL, "Power on/off", cmd_sa818_power),
     SHELL_CMD(ptt, NULL, "PTT on/off", cmd_sa818_ptt),
     SHELL_CMD(powerlevel, NULL, "Power level", cmd_sa818_powerlevel),
     SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_squelch, NULL, "Simulate squelch (sim only)", cmd_sa818_squelch_sim),
-    SHELL_CMD(at_volume, NULL, "Set volume via AT (1-8)", cmd_sa818_at_volume),
-    SHELL_CMD(at_group, NULL, "Configure frequency via AT", cmd_sa818_at_group),
-    SHELL_CMD(at_filters, NULL, "Configure audio filters via AT", cmd_sa818_at_filters),
-    SHELL_CMD(at_rssi, NULL, "Read RSSI via AT", cmd_sa818_at_rssi),
+    SHELL_CMD(at, &sa818_at_cmds, "AT commands", NULL),
     SHELL_SUBCMD_SET_END);
 // clang-format on
 

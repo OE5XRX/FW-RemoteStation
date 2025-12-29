@@ -152,6 +152,30 @@ sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, ch
 }
 
 /**
+ * @brief Establish connection handshake with SA818 module
+ *
+ * AT+DMOCONNECT command verifies UART communication with the radio module.
+ * Expected response: +DMOCONNECT:0
+ */
+sa818_result sa818_at_connect(const struct device *dev) {
+  char response[SA818_AT_RESPONSE_MAX_LEN];
+
+  sa818_result ret = sa818_at_send_command(dev, "AT+DMOCONNECT", response, sizeof(response), SA818_AT_TIMEOUT_MS);
+  if (ret != SA818_OK) {
+    return ret;
+  }
+
+  /* Check for OK response */
+  if (strstr(response, "+DMOCONNECT:0") == NULL) {
+    LOG_ERR("Connect failed: %s", response);
+    return SA818_ERROR_AT_COMMAND;
+  }
+
+  LOG_INF("SA818 connected successfully");
+  return SA818_OK;
+}
+
+/**
  * @brief Set radio group (frequency, CTCSS, squelch)
  *
  * AT+DMOSETGROUP=BW,TXF,RXF,TXCCS,SQ,RXCCS
