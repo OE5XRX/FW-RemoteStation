@@ -62,7 +62,7 @@ def test_zephyr_at_volume_command_simple(sa818_sim, shell):
     volume_level = 7
     
     # Send AT volume command via shell
-    out = shell.exec_command(f"sa818 at_volume {volume_level}")
+    out = shell.exec_command(f"sa818 at volume {volume_level}")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -116,7 +116,7 @@ def test_zephyr_at_set_group(sa818_sim, shell):
     squelch = 5
     ctcss_rx = 0
     
-    out = shell.exec_command(f"sa818 at_group {bandwidth} {freq_tx} {freq_rx} {ctcss_tx} {squelch} {ctcss_rx}")
+    out = shell.exec_command(f"sa818 at group {bandwidth} {freq_tx} {freq_rx} {ctcss_tx} {squelch} {ctcss_rx}")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -163,7 +163,7 @@ def test_zephyr_at_set_group_with_ctcss(sa818_sim, shell):
     squelch = 3
     ctcss_rx = 88     # Same tone for RX
     
-    out = shell.exec_command(f"sa818 at_group {bandwidth} {freq_tx} {freq_rx} {ctcss_tx} {squelch} {ctcss_rx}")
+    out = shell.exec_command(f"sa818 at group {bandwidth} {freq_tx} {freq_rx} {ctcss_tx} {squelch} {ctcss_rx}")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -213,7 +213,7 @@ def test_zephyr_at_set_filters_all_enabled(sa818_sim, shell):
     lpf = 1
     
     # Send filter configuration command
-    out = shell.exec_command(f"sa818 at_filters {pre} {hpf} {lpf}")
+    out = shell.exec_command(f"sa818 at filters {pre} {hpf} {lpf}")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -256,7 +256,7 @@ def test_zephyr_at_set_filters_selective(sa818_sim, shell):
     hpf = 1  # Enabled
     lpf = 0  # Disabled
     
-    out = shell.exec_command(f"sa818 at_filters {pre} {hpf} {lpf}")
+    out = shell.exec_command(f"sa818 at filters {pre} {hpf} {lpf}")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -296,7 +296,7 @@ def test_zephyr_at_set_filters_all_disabled(sa818_sim, shell):
     hpf = 0
     lpf = 0
     
-    out = shell.exec_command(f"sa818 at_filters {pre} {hpf} {lpf}")
+    out = shell.exec_command(f"sa818 at filters {pre} {hpf} {lpf}")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -341,7 +341,7 @@ def test_zephyr_at_read_rssi_default(sa818_sim, shell):
     default_rssi = sa818_sim.get_state().rssi
     
     # Read RSSI via shell command
-    out = shell.exec_command("sa818 at_rssi")
+    out = shell.exec_command("sa818 at rssi")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -380,7 +380,7 @@ def test_zephyr_at_read_rssi_strong_signal(sa818_sim, shell):
     sa818_sim.set_rssi(strong_rssi)
     
     # Read RSSI
-    out = shell.exec_command("sa818 at_rssi")
+    out = shell.exec_command("sa818 at rssi")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -418,7 +418,7 @@ def test_zephyr_at_read_rssi_weak_signal(sa818_sim, shell):
     sa818_sim.set_rssi(weak_rssi)
     
     # Read RSSI
-    out = shell.exec_command("sa818 at_rssi")
+    out = shell.exec_command("sa818 at rssi")
     text = _as_text(out)
     
     print(f"Shell output: {text}")
@@ -458,7 +458,7 @@ def test_zephyr_at_read_rssi_varying_levels(sa818_sim, shell):
         sa818_sim.set_rssi(expected_rssi)
         
         # Read RSSI
-        out = shell.exec_command("sa818 at_rssi")
+        out = shell.exec_command("sa818 at rssi")
         text = _as_text(out)
         
         # Give time for AT transaction (consistent with other RSSI tests)

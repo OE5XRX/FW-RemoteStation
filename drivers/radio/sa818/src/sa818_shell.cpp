@@ -286,16 +286,22 @@ static int cmd_sa818_at_rssi(const struct shell *shell, size_t argc, char **argv
 
 // clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
+    sa818_at_cmds,
+    SHELL_CMD(connect, NULL, "Connection handshake", cmd_sa818_at_connect),
+    SHELL_CMD(volume, NULL, "Set volume (1-8)", cmd_sa818_at_volume),
+    SHELL_CMD(group, NULL, "Configure frequency", cmd_sa818_at_group),
+    SHELL_CMD(filters, NULL, "Configure audio filters", cmd_sa818_at_filters),
+    SHELL_CMD(rssi, NULL, "Read RSSI", cmd_sa818_at_rssi),
+    SHELL_SUBCMD_SET_END);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_cmds,
     SHELL_CMD(status, NULL, "Show SA818 status", cmd_sa818_status),
     SHELL_CMD(power, NULL, "Power on/off", cmd_sa818_power),
     SHELL_CMD(ptt, NULL, "PTT on/off", cmd_sa818_ptt),
     SHELL_CMD(powerlevel, NULL, "Power level", cmd_sa818_powerlevel),
     SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_squelch, NULL, "Simulate squelch (sim only)", cmd_sa818_squelch_sim),
-    SHELL_CMD(at_volume, NULL, "Set volume via AT (1-8)", cmd_sa818_at_volume),
-    SHELL_CMD(at_group, NULL, "Configure frequency via AT", cmd_sa818_at_group),
-    SHELL_CMD(at_filters, NULL, "Configure audio filters via AT", cmd_sa818_at_filters),
-    SHELL_CMD(at_rssi, NULL, "Read RSSI via AT", cmd_sa818_at_rssi),
+    SHELL_CMD(at, &sa818_at_cmds, "AT commands", NULL),
     SHELL_SUBCMD_SET_END);
 // clang-format on
 
