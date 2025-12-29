@@ -472,3 +472,33 @@ def test_zephyr_at_read_rssi_varying_levels(sa818_sim, shell):
         assert rssi_value == expected_rssi, f"Expected RSSI {expected_rssi}, got {rssi_value}"
     
     print(f"✓ RSSI? with varying levels: All {len(test_levels)} levels verified")
+
+
+@pytest.mark.sa818_sim
+def test_zephyr_at_connect(sa818_sim, shell):
+    """
+    Test AT+DMOCONNECT connection handshake.
+    
+    Verifies that the connection handshake command works correctly
+    and returns the expected response from the simulator.
+    """
+    # Power on device first
+    shell.exec_command("sa818 power on")
+    time.sleep(0.1)
+    
+    # Send connect command
+    out = shell.exec_command("sa818 at connect")
+    text = _as_text(out)
+    
+    print(f"Shell output: {text}")
+    
+    # Give time for AT transaction
+    time.sleep(0.3)
+    
+    # Verify success message appears
+    assert "successful" in text.lower(), f"Expected success message, got: {text}"
+    
+    # Verify no error
+    assert "fail" not in text.lower(), f"AT command failed: {text}"
+    
+    print("✓ AT+DMOCONNECT: Connection handshake successful")

@@ -164,6 +164,23 @@ static int cmd_sa818_squelch_sim(const struct shell *shell, size_t argc, char **
 }
 
 /* AT Command Shell Commands */
+static int cmd_sa818_at_connect(const struct shell *shell, size_t argc, char **argv) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  sa818_result ret = sa818_at_connect(dev);
+  if (ret != SA818_OK) {
+    shell_error(shell, "AT+DMOCONNECT failed: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "SA818 connection handshake successful");
+  return 0;
+}
+
 static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 2) {
     shell_error(shell, "usage: sa818 at_volume <1-8>");

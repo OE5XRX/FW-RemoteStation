@@ -168,6 +168,11 @@ class SA818Simulator:
         if m:
             return f"RSSI={self.state.rssi}"
         
+        # DMOCONNECT: Connection handshake
+        m = re.match(r'AT\+DMOCONNECT', cmd, re.IGNORECASE)
+        if m:
+            return "+DMOCONNECT:0"
+        
         # Generic AT test
         if cmd.upper() == "AT":
             return "+DMOCONNECT:0"
