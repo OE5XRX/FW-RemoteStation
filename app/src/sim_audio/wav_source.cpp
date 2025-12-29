@@ -2,9 +2,11 @@
 
 #include "constants.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <span>
 #include <unistd.h>
 
 int WavSource::read_exact(int fd, void *dst, std::size_t n_bytes) {
@@ -21,21 +23,16 @@ int WavSource::read_exact(int fd, void *dst, std::size_t n_bytes) {
   return 0;
 }
 
-uint16_t WavSource::rd_u16_le(const uint8_t *p) {
-  return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
-}
-
-uint32_t WavSource::rd_u32_le(const uint8_t *p) {
-  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
-}
-
 int WavSource::parse_wav_into_buffer(int fd) {
   uint8_t riff_hdr[12]{};
   int rc = read_exact(fd, riff_hdr, sizeof(riff_hdr));
   if (rc)
     return rc;
 
-  if (std::memcmp(riff_hdr, "RIFF", 4) != 0 || std::memcmp(riff_hdr + 8, "WAVE", 4) != 0) {
+  constexpr std::array<uint8_t, 4> riff_magic{'R', 'I', 'F', 'F'};
+  constexpr std::array<uint8_t, 4> wave_magic{'W', 'A', 'V', 'E'};
+
+  if (!std::equal(riff_magic.begin(), riff_magic.end(), riff_hdr) || !std::equal(wave_magic.begin(), wave_magic.end(), riff_hdr + 8)) {
     return sim_audio::err_inval;
   }
 
@@ -60,9 +57,12 @@ int WavSource::parse_wav_into_buffer(int fd) {
     if (r != static_cast<ssize_t>(sizeof(chunk_hdr)))
       return sim_audio::err_io;
 
-    const uint32_t chunk_size = rd_u32_le(chunk_hdr + 4);
+    const uint32_t chunk_size = rd_u32_le(std::span<const uint8_t, 4>{chunk_hdr + 4, 4});
 
-    if (std::memcmp(chunk_hdr, "fmt ", 4) == 0) {
+    constexpr std::array<uint8_t, 4> fmt_magic{'f', 'm', 't', ' '};
+    constexpr std::array<uint8_t, 4> data_magic{'d', 'a', 't', 'a'};
+
+    if (std::equal(fmt_magic.begin(), fmt_magic.end(), chunk_hdr)) {
       if (chunk_size < 16u || chunk_size > 32u)
         return sim_audio::err_inval;
 
@@ -71,13 +71,13 @@ int WavSource::parse_wav_into_buffer(int fd) {
       if (rc)
         return rc;
 
-      audio_format = rd_u16_le(fmt + 0);
-      num_channels = rd_u16_le(fmt + 2);
-      sample_rate_hz = rd_u32_le(fmt + 4);
-      bits_per_sample = rd_u16_le(fmt + 14);
+      audio_format = rd_u16_le(std::span<const uint8_t, 2>{fmt + 0, 2});
+      num_channels = rd_u16_le(std::span<const uint8_t, 2>{fmt + 2, 2});
+      sample_rate_hz = rd_u32_le(std::span<const uint8_t, 4>{fmt + 4, 4});
+      bits_per_sample = rd_u16_le(std::span<const uint8_t, 2>{fmt + 14, 2});
       have_fmt = true;
 
-    } else if (std::memcmp(chunk_hdr, "data", 4) == 0) {
+    } else if (std::equal(data_magic.begin(), data_magic.end(), chunk_hdr)) {
       data_bytes = chunk_size;
       data_off = ::lseek(fd, 0, SEEK_CUR);
       if (data_off < 0)

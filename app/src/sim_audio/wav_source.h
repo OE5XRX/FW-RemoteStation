@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <zephyr/shell/shell.h>
 
 class WavSource final : public SampleSource {
@@ -19,11 +20,17 @@ public:
 
   [[nodiscard]] std::size_t pos_samples() const noexcept { return idx_samples_; }
   [[nodiscard]] std::size_t count_samples() const noexcept { return count_samples_; }
+  [[nodiscard]] std::span<const int16_t> samples() const noexcept { return std::span{buf_.data(), count_samples_}; }
 
 private:
   static int read_exact(int fd, void *dst, std::size_t n_bytes);
-  static uint16_t rd_u16_le(const uint8_t *p);
-  static uint32_t rd_u32_le(const uint8_t *p);
+  [[nodiscard]] static constexpr uint16_t rd_u16_le(std::span<const uint8_t, 2> data) noexcept {
+    return static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
+  }
+  [[nodiscard]] static constexpr uint32_t rd_u32_le(std::span<const uint8_t, 4> data) noexcept {
+    return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) | (static_cast<uint32_t>(data[2]) << 16) |
+           (static_cast<uint32_t>(data[3]) << 24);
+  }
   int parse_wav_into_buffer(int fd);
 
 private:

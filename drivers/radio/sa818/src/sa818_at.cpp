@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string_view>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
@@ -30,18 +31,16 @@ LOG_MODULE_REGISTER(sa818_at, LOG_LEVEL_DBG);
  *
  * @param uart UART device
  * @param cmd Command string to send
- * @return SA818_OK on success, SA818_ERROR_INVALID_PARAM if cmd is NULL
+ * @return SA818_OK on success, SA818_ERROR_INVALID_PARAM if uart is NULL or cmd is empty
  */
-static sa818_result uart_write_command(const struct device *uart, const char *cmd) {
-  if (!uart || !cmd) {
+static sa818_result uart_write_command(const struct device *uart, std::string_view cmd) {
+  if (!uart || cmd.empty()) {
     return SA818_ERROR_INVALID_PARAM;
   }
 
-  size_t cmd_len = strlen(cmd);
-
   /* Send command characters */
-  for (size_t i = 0; i < cmd_len; i++) {
-    uart_poll_out(uart, cmd[i]);
+  for (char c : cmd) {
+    uart_poll_out(uart, static_cast<unsigned char>(c));
   }
 
   /* Send CR+LF terminator */

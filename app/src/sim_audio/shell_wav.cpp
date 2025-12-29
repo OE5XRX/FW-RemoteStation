@@ -100,18 +100,20 @@ static int cmd_adc_read(const shell *sh, size_t, char **) {
     return sim_audio::err_nodev;
   }
 
-  adc_channel_cfg ch_cfg{};
-  ch_cfg.gain = ADC_GAIN_1;
-  ch_cfg.reference = ADC_REF_INTERNAL;
-  ch_cfg.acquisition_time = ADC_ACQ_TIME_DEFAULT;
-  ch_cfg.channel_id = adc_channel_id;
+  adc_channel_cfg ch_cfg{
+      .gain = ADC_GAIN_1,
+      .reference = ADC_REF_INTERNAL,
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+      .channel_id = adc_channel_id,
+  };
 
   int16_t sample_raw = 0;
-  adc_sequence seq{};
-  seq.channels = BIT(adc_channel_id);
-  seq.buffer = &sample_raw;
-  seq.buffer_size = sizeof(sample_raw);
-  seq.resolution = 12;
+  adc_sequence seq{
+      .channels = BIT(adc_channel_id),
+      .buffer = &sample_raw,
+      .buffer_size = sizeof(sample_raw),
+      .resolution = 12,
+  };
 
   int rc = adc_channel_setup(g_adc_dev, &ch_cfg);
   if (rc) {
