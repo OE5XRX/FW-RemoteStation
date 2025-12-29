@@ -209,10 +209,121 @@ static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **ar
   return 0;
 }
 
+/**
+ * @brief Parse bandwidth string to enum
+ * Accepts: "narrow", "12.5", "wide", "25"
+ */
+static sa818_bandwidth parse_bandwidth(const char *str) {
+  if (!strcmp(str, "narrow") || !strcmp(str, "12.5")) {
+    return SA818_BW_12_5_KHZ;
+  } else if (!strcmp(str, "wide") || !strcmp(str, "25")) {
+    return SA818_BW_25_KHZ;
+  }
+  return static_cast<sa818_bandwidth>(atoi(str));
+}
+
+/**
+ * @brief Parse CTCSS/DCS tone string to enum
+ * Accepts: "none", "off", CTCSS frequency (e.g. "67.0"), or numeric code
+ */
+static sa818_tone_code parse_tone(const char *str) {
+  if (!strcmp(str, "none") || !strcmp(str, "off")) {
+    return SA818_TONE_NONE;
+  }
+
+  // Try to parse as CTCSS frequency (e.g. "67.0")
+  float freq = atof(str);
+  if (freq > 60.0f && freq < 260.0f) {
+    // Map common CTCSS frequencies
+    if (freq >= 67.0f && freq <= 67.1f)
+      return SA818_CTCSS_67_0;
+    if (freq >= 71.8f && freq <= 72.0f)
+      return SA818_CTCSS_71_9;
+    if (freq >= 74.3f && freq <= 74.5f)
+      return SA818_CTCSS_74_4;
+    if (freq >= 76.9f && freq <= 77.1f)
+      return SA818_CTCSS_77_0;
+    if (freq >= 79.6f && freq <= 79.8f)
+      return SA818_CTCSS_79_7;
+    if (freq >= 82.4f && freq <= 82.6f)
+      return SA818_CTCSS_82_5;
+    if (freq >= 85.3f && freq <= 85.5f)
+      return SA818_CTCSS_85_4;
+    if (freq >= 88.4f && freq <= 88.6f)
+      return SA818_CTCSS_88_5;
+    if (freq >= 91.4f && freq <= 91.6f)
+      return SA818_CTCSS_91_5;
+    if (freq >= 94.7f && freq <= 94.9f)
+      return SA818_CTCSS_94_8;
+    if (freq >= 97.3f && freq <= 97.5f)
+      return SA818_CTCSS_97_4;
+    if (freq >= 99.9f && freq <= 100.1f)
+      return SA818_CTCSS_100_0;
+    if (freq >= 103.4f && freq <= 103.6f)
+      return SA818_CTCSS_103_5;
+    if (freq >= 107.1f && freq <= 107.3f)
+      return SA818_CTCSS_107_2;
+    if (freq >= 110.8f && freq <= 111.0f)
+      return SA818_CTCSS_110_9;
+    if (freq >= 114.7f && freq <= 114.9f)
+      return SA818_CTCSS_114_8;
+    if (freq >= 118.7f && freq <= 118.9f)
+      return SA818_CTCSS_118_8;
+    if (freq >= 122.9f && freq <= 123.1f)
+      return SA818_CTCSS_123_0;
+    if (freq >= 127.2f && freq <= 127.4f)
+      return SA818_CTCSS_127_3;
+    if (freq >= 131.7f && freq <= 131.9f)
+      return SA818_CTCSS_131_8;
+    if (freq >= 136.4f && freq <= 136.6f)
+      return SA818_CTCSS_136_5;
+    if (freq >= 141.2f && freq <= 141.4f)
+      return SA818_CTCSS_141_3;
+    if (freq >= 146.1f && freq <= 146.3f)
+      return SA818_CTCSS_146_2;
+    if (freq >= 151.3f && freq <= 151.5f)
+      return SA818_CTCSS_151_4;
+    if (freq >= 156.6f && freq <= 156.8f)
+      return SA818_CTCSS_156_7;
+    if (freq >= 162.1f && freq <= 162.3f)
+      return SA818_CTCSS_162_2;
+    if (freq >= 167.8f && freq <= 168.0f)
+      return SA818_CTCSS_167_9;
+    if (freq >= 173.7f && freq <= 173.9f)
+      return SA818_CTCSS_173_8;
+    if (freq >= 179.8f && freq <= 180.0f)
+      return SA818_CTCSS_179_9;
+    if (freq >= 186.1f && freq <= 186.3f)
+      return SA818_CTCSS_186_2;
+    if (freq >= 192.7f && freq <= 192.9f)
+      return SA818_CTCSS_192_8;
+    if (freq >= 203.4f && freq <= 203.6f)
+      return SA818_CTCSS_203_5;
+    if (freq >= 210.6f && freq <= 210.8f)
+      return SA818_CTCSS_210_7;
+    if (freq >= 218.0f && freq <= 218.2f)
+      return SA818_CTCSS_218_1;
+    if (freq >= 225.6f && freq <= 225.8f)
+      return SA818_CTCSS_225_7;
+    if (freq >= 233.5f && freq <= 233.7f)
+      return SA818_CTCSS_233_6;
+    if (freq >= 241.7f && freq <= 241.9f)
+      return SA818_CTCSS_241_8;
+    if (freq >= 250.2f && freq <= 250.4f)
+      return SA818_CTCSS_250_3;
+  }
+
+  // Fall back to numeric code
+  return static_cast<sa818_tone_code>(atoi(str));
+}
+
 static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 7) {
-    shell_error(shell, "usage: sa818 at group <bw> <tx_freq> <rx_freq> <tx_ctcss> <squelch> <rx_ctcss>");
-    shell_error(shell, "example: sa818 at group 0 145.500 145.500 0 4 0");
+    shell_error(shell, "usage: sa818 at group <bw> <tx_freq> <rx_freq> <tx_tone> <squelch> <rx_tone>");
+    shell_error(shell, "  bw: narrow/12.5 or wide/25");
+    shell_error(shell, "  tone: none/off, CTCSS frequency (67.0-250.3), or numeric code");
+    shell_error(shell, "example: sa818 at group narrow 145.500 145.500 none 4 none");
+    shell_error(shell, "example: sa818 at group wide 145.500 145.500 67.0 4 67.0");
     return -EINVAL;
   }
 
@@ -222,15 +333,14 @@ static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **arg
     return -ENODEV;
   }
 
-  int bw = atoi(argv[1]);
+  sa818_bandwidth bw = parse_bandwidth(argv[1]);
   float tx_freq = atof(argv[2]);
   float rx_freq = atof(argv[3]);
-  int tx_ctcss = atoi(argv[4]);
+  sa818_tone_code tx_tone = parse_tone(argv[4]);
   int squelch = atoi(argv[5]);
-  int rx_ctcss = atoi(argv[6]);
+  sa818_tone_code rx_tone = parse_tone(argv[6]);
 
-  sa818_result ret = sa818_at_set_group(dev, static_cast<sa818_bandwidth>(bw), tx_freq, rx_freq, static_cast<sa818_tone_code>(tx_ctcss),
-                                        static_cast<sa818_squelch_level>(squelch), static_cast<sa818_tone_code>(rx_ctcss));
+  sa818_result ret = sa818_at_set_group(dev, bw, tx_freq, rx_freq, tx_tone, static_cast<sa818_squelch_level>(squelch), rx_tone);
   if (ret != SA818_OK) {
     shell_error(shell, "AT command failed: %d", ret);
     return ret;
