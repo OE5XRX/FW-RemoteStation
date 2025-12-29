@@ -275,6 +275,16 @@ enum sa818_filter_flags {
  */
 [[nodiscard]] enum sa818_result sa818_at_read_rssi(const struct device *dev, uint8_t *rssi);
 
+/**
+ * @brief Read firmware version
+ *
+ * @param dev SA818 device
+ * @param version Buffer to store version string
+ * @param version_len Size of version buffer
+ * @return SA818_OK on success, error code on failure
+ */
+[[nodiscard]] enum sa818_result sa818_at_read_version(const struct device *dev, char *version, size_t version_len);
+
 #ifdef __cplusplus
 }
 #endif

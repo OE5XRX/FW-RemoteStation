@@ -405,6 +405,24 @@ static int cmd_sa818_at_rssi(const struct shell *shell, size_t argc, char **argv
   return 0;
 }
 
+static int cmd_sa818_at_version(const struct shell *shell, size_t argc, char **argv) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  char version[64];
+  sa818_result ret = sa818_at_read_version(dev, version, sizeof(version));
+  if (ret != SA818_OK) {
+    shell_error(shell, "AT command failed: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "Version: %s", version);
+  return 0;
+}
+
 // clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_at_cmds,
@@ -413,6 +431,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     SHELL_CMD(group, NULL, "Configure frequency", cmd_sa818_at_group),
     SHELL_CMD(filters, NULL, "Configure audio filters", cmd_sa818_at_filters),
     SHELL_CMD(rssi, NULL, "Read RSSI", cmd_sa818_at_rssi),
+    SHELL_CMD(version, NULL, "Read firmware version", cmd_sa818_at_version),
     SHELL_SUBCMD_SET_END);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(

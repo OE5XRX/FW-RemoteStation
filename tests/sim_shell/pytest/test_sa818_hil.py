@@ -502,3 +502,33 @@ def test_zephyr_at_connect(sa818_sim, shell):
     assert "fail" not in text.lower(), f"AT command failed: {text}"
     
     print("✓ AT+DMOCONNECT: Connection handshake successful")
+
+
+@pytest.mark.sa818_sim
+def test_zephyr_at_read_version(sa818_sim, shell):
+    """
+    Test AT+VERSION firmware version read.
+    
+    Verifies that the version command works correctly
+    and returns a version string from the simulator.
+    """
+    # Power on device first
+    shell.exec_command("sa818 power on")
+    time.sleep(0.1)
+    
+    # Send version command
+    out = shell.exec_command("sa818 at version")
+    text = _as_text(out)
+    
+    print(f"Shell output: {text}")
+    
+    # Give time for AT transaction
+    time.sleep(0.3)
+    
+    # Verify version string appears
+    assert "version:" in text.lower() or "sa818" in text.lower(), f"Expected version string, got: {text}"
+    
+    # Verify no error
+    assert "fail" not in text.lower() and "err" not in text.lower(), f"AT command failed: {text}"
+    
+    print(f"✓ AT+VERSION: Firmware version read successfully")

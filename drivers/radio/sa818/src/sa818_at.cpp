@@ -310,3 +310,29 @@ sa818_result sa818_at_read_rssi(const struct device *dev, uint8_t *rssi) {
 
   return SA818_OK;
 }
+
+/**
+ * @brief Read firmware version
+ *
+ * AT+VERSION command returns firmware version string
+ */
+sa818_result sa818_at_read_version(const struct device *dev, char *version, size_t version_len) {
+  char response[SA818_AT_RESPONSE_MAX_LEN];
+
+  if (!version || version_len == 0) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  sa818_result ret = sa818_at_send_command(dev, "AT+VERSION", response, sizeof(response), SA818_AT_TIMEOUT_MS);
+  if (ret != SA818_OK) {
+    return ret;
+  }
+
+  /* Copy version string to output buffer */
+  strncpy(version, response, version_len - 1);
+  version[version_len - 1] = '\0';
+  
+  LOG_INF("Version: %s", version);
+
+  return SA818_OK;
+}
