@@ -26,10 +26,18 @@ int main(void) {
   printk("===========================================\n");
 
   printk("Powering on SA818...\n");
-  sa818_set_power(sa, SA818_DEVICE_ON);
+  enum sa818_result result = sa818_set_power(sa, SA818_DEVICE_ON);
+  if (result != SA818_OK) {
+    printk("ERROR: Could not turn on SA818\n");
+    return -1;
+  }
 
   printk("Setting transmit power to HIGH...\n");
-  sa818_set_power_level(sa, SA818_POWER_HIGH);
+  result = sa818_set_power_level(sa, SA818_POWER_HIGH);
+  if (result != SA818_OK) {
+    printk("ERROR: Could not set SA818 power\n");
+    return -1;
+  }
 
   printk("SA818 initialization complete\n");
 
