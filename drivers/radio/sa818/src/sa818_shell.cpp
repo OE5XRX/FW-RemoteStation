@@ -229,7 +229,8 @@ static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **arg
   int squelch = atoi(argv[5]);
   int rx_ctcss = atoi(argv[6]);
 
-  sa818_result ret = sa818_at_set_group(dev, bw, tx_freq, rx_freq, tx_ctcss, squelch, rx_ctcss);
+  sa818_result ret = sa818_at_set_group(dev, static_cast<sa818_bandwidth>(bw), tx_freq, rx_freq, static_cast<sa818_tone_code>(tx_ctcss),
+                                        static_cast<sa818_squelch_level>(squelch), static_cast<sa818_tone_code>(rx_ctcss));
   if (ret != SA818_OK) {
     shell_error(shell, "AT command failed: %d", ret);
     return ret;

@@ -181,13 +181,19 @@ sa818_result sa818_at_connect(const struct device *dev) {
  * AT+DMOSETGROUP=BW,TXF,RXF,TXCCS,SQ,RXCCS
  * Example: AT+DMOSETGROUP=0,145.5000,145.5000,0000,4,0000
  */
-sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, float freq_tx, float freq_rx, uint16_t ctcss_tx, uint8_t squelch,
-                                uint16_t ctcss_rx) {
+sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwidth, float freq_tx, float freq_rx, sa818_tone_code ctcss_tx, sa818_squelch_level squelch,
+                                sa818_tone_code ctcss_rx) {
   char cmd[128];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
   /* Validate parameters */
-  if (squelch > 8) {
+  if (squelch < SA818_SQL_LEVEL_0 || squelch > SA818_SQL_LEVEL_8) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+  if (ctcss_tx < SA818_TONE_NONE || ctcss_tx > SA818_DCS_523) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+  if (ctcss_rx < SA818_TONE_NONE || ctcss_rx > SA818_DCS_523) {
     return SA818_ERROR_INVALID_PARAM;
   }
   if (freq_tx < 134.0f || freq_tx > 174.0f) {
@@ -209,7 +215,7 @@ sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, flo
     return SA818_ERROR_AT_COMMAND;
   }
 
-  LOG_INF("Group configured: TX=%.4f RX=%.4f SQ=%d", (double)freq_tx, (double)freq_rx, squelch);
+  LOG_INF("Group configured: TX=%.4f RX=%.4f SQ=%d", (double)freq_tx, (double)freq_rx, static_cast<int>(squelch));
   return SA818_OK;
 }
 
