@@ -189,9 +189,10 @@ sa818_status sa818_get_status(const struct device *dev) {
 /* Device Definition Macro */
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
-#define SA818_AUDIO_OUT_DEV(node_id) COND_CODE_1(DT_PROP_HAS_IDX(node_id, io_channels, 1), (DEVICE_DT_GET(DT_IO_CHANNELS_CTLR_BY_IDX(node_id, 1))), (NULL))
+/* DAC (audio output) is required - io-channels[1] must be present */
+#define SA818_AUDIO_OUT_DEV(node_id) DEVICE_DT_GET(DT_IO_CHANNELS_CTLR_BY_IDX(node_id, 1))
 
-#define SA818_AUDIO_OUT_CHANNEL(node_id) COND_CODE_1(DT_PROP_HAS_IDX(node_id, io_channels, 1), (DT_PHA_BY_IDX(node_id, io_channels, 1, output)), (0))
+#define SA818_AUDIO_OUT_CHANNEL(node_id) DT_PHA_BY_IDX(node_id, io_channels, 1, output)
 
 #define SA818_DEFINE(node_id)                                                                                                                                  \
   static struct sa818_data sa818_data_##node_id;                                                                                                               \

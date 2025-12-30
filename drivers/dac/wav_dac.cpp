@@ -13,6 +13,8 @@
 #define DT_DRV_COMPAT wav_dac
 
 #include <errno.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/device.h>
@@ -64,6 +66,11 @@ struct wav_dac_data {
   bool is_open;
   struct k_mutex lock;
   bool channel_configured[8]; /* Max 8 channels */
+  
+  /* Sample buffer for performance (statically allocated). */
+  uint8_t buffer[CONFIG_DAC_WAV_BUFFER_SIZE * (CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8)]; /* Static buffer. */
+  uint32_t buffer_size;          /* Buffer size in bytes. */
+  uint32_t buffer_pos;           /* Current position in buffer. */
 };
 
 /**
@@ -139,6 +146,28 @@ static void wav_dac_update_header(const struct device *dev) {
 }
 
 /**
+ * @brief Flush buffer to file
+ */
+static int wav_dac_flush_buffer(const struct device *dev) {
+  struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
+
+  if (!data->file || data->buffer_pos == 0) {
+    return 0;
+  }
+
+  size_t written = fwrite(data->buffer, 1, data->buffer_pos, data->file);
+  if (written != data->buffer_pos) {
+    int err = ferror(data->file);
+    LOG_ERR("Failed to write buffer to WAV file (expected %u, wrote %zu, ferror=%d)", 
+            data->buffer_pos, written, err);
+    return -EIO;
+  }
+
+  data->buffer_pos = 0;
+  return 0;
+}
+
+/**
  * @brief DAC channel setup
  */
 static int wav_dac_channel_setup(const struct device *dev, const struct dac_channel_cfg *channel_cfg) {
@@ -193,26 +222,45 @@ static int wav_dac_write_value(const struct device *dev, uint8_t channel, uint32
     return -EIO;
   }
 
-  /* Scale value to sample bit depth */
-  size_t written = 0;
+  /* Scale value to sample bit depth and write to buffer */
   if (CONFIG_DAC_WAV_BITS_PER_SAMPLE == 16) {
     /* Scale from DAC resolution to 16-bit signed */
     uint16_t sample = static_cast<uint16_t>(value >> (cfg->resolution - 16));
-    written = fwrite(&sample, sizeof(sample), 1, data->file);
+    
+    /* Check if buffer has space, flush if needed */
+    if (data->buffer_pos + sizeof(sample) > data->buffer_size) {
+      int ret = wav_dac_flush_buffer(dev);
+      if (ret != 0) {
+        k_mutex_unlock(&data->lock);
+        return ret;
+      }
+    }
+    
+    /* Write sample to buffer */
+    memcpy(data->buffer + data->buffer_pos, &sample, sizeof(sample));
+    data->buffer_pos += sizeof(sample);
+    
   } else if (CONFIG_DAC_WAV_BITS_PER_SAMPLE == 8) {
     /* Scale from DAC resolution to 8-bit unsigned */
     uint8_t sample = static_cast<uint8_t>(value >> (cfg->resolution - 8));
-    written = fwrite(&sample, sizeof(sample), 1, data->file);
+    
+    /* Check if buffer has space, flush if needed */
+    if (data->buffer_pos + sizeof(sample) > data->buffer_size) {
+      int ret = wav_dac_flush_buffer(dev);
+      if (ret != 0) {
+        k_mutex_unlock(&data->lock);
+        return ret;
+      }
+    }
+    
+    /* Write sample to buffer */
+    data->buffer[data->buffer_pos] = sample;
+    data->buffer_pos += sizeof(sample);
+    
   } else {
     LOG_ERR("Unsupported bits per sample: %d", CONFIG_DAC_WAV_BITS_PER_SAMPLE);
     k_mutex_unlock(&data->lock);
     return -ENOTSUP;
-  }
-
-  if (written != 1) {
-    LOG_ERR("Failed to write sample to WAV file");
-    k_mutex_unlock(&data->lock);
-    return -EIO;
   }
 
   data->samples_written++;
@@ -241,8 +289,19 @@ static int wav_dac_init(const struct device *dev) {
   data->is_open = false;
   data->samples_written = 0;
   memset(data->channel_configured, 0, sizeof(data->channel_configured));
+  
+  /* Initialize sample buffer (statically allocated). */
+  uint32_t bytes_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
+  const uint32_t MAX_BUFFER_SAMPLES = 1024u * 1024u;
+  if (CONFIG_DAC_WAV_BUFFER_SIZE > MAX_BUFFER_SAMPLES) {
+    LOG_ERR("Buffer size too large (max %u samples)", MAX_BUFFER_SAMPLES);
+    return -EINVAL;
+  }
+  data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * bytes_per_sample;
+  data->buffer_pos = 0;
 
-  LOG_DBG("WAV DAC driver initialized");
+  LOG_DBG("WAV DAC driver initialized (buffer: %u samples, %u bytes)", 
+          CONFIG_DAC_WAV_BUFFER_SIZE, data->buffer_size);
   return 0;
 }
 
@@ -256,7 +315,13 @@ static void wav_dac_shutdown(const struct device *dev) {
   k_mutex_lock(&data->lock, K_FOREVER);
 
   if (data->is_open && data->file) {
+    /* Flush any remaining buffered samples */
+    wav_dac_flush_buffer(dev);
+    
+    /* Update WAV header with final size */
     wav_dac_update_header(dev);
+    
+    /* Close file */
     fclose(data->file);
     data->file = NULL;
     data->is_open = false;
