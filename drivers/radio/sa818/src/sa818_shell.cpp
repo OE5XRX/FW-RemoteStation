@@ -11,6 +11,7 @@
 
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
+#include <sa818/sa818_audio.h>
 #include <stdlib.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -269,44 +270,16 @@ static sa818_tone_code parse_tone(const char *str) {
       float max_freq;
       sa818_tone_code code;
     } ctcss_map[] = {
-        {67.0f, 67.1f, SA818_CTCSS_67_0},
-        {71.8f, 72.0f, SA818_CTCSS_71_9},
-        {74.3f, 74.5f, SA818_CTCSS_74_4},
-        {76.9f, 77.1f, SA818_CTCSS_77_0},
-        {79.6f, 79.8f, SA818_CTCSS_79_7},
-        {82.4f, 82.6f, SA818_CTCSS_82_5},
-        {85.3f, 85.5f, SA818_CTCSS_85_4},
-        {88.4f, 88.6f, SA818_CTCSS_88_5},
-        {91.4f, 91.6f, SA818_CTCSS_91_5},
-        {94.7f, 94.9f, SA818_CTCSS_94_8},
-        {97.3f, 97.5f, SA818_CTCSS_97_4},
-        {99.9f, 100.1f, SA818_CTCSS_100_0},
-        {103.4f, 103.6f, SA818_CTCSS_103_5},
-        {107.1f, 107.3f, SA818_CTCSS_107_2},
-        {110.8f, 111.0f, SA818_CTCSS_110_9},
-        {114.7f, 114.9f, SA818_CTCSS_114_8},
-        {118.7f, 118.9f, SA818_CTCSS_118_8},
-        {122.9f, 123.1f, SA818_CTCSS_123_0},
-        {127.2f, 127.4f, SA818_CTCSS_127_3},
-        {131.7f, 131.9f, SA818_CTCSS_131_8},
-        {136.4f, 136.6f, SA818_CTCSS_136_5},
-        {141.2f, 141.4f, SA818_CTCSS_141_3},
-        {146.1f, 146.3f, SA818_CTCSS_146_2},
-        {151.3f, 151.5f, SA818_CTCSS_151_4},
-        {156.6f, 156.8f, SA818_CTCSS_156_7},
-        {162.1f, 162.3f, SA818_CTCSS_162_2},
-        {167.8f, 168.0f, SA818_CTCSS_167_9},
-        {173.7f, 173.9f, SA818_CTCSS_173_8},
-        {179.8f, 180.0f, SA818_CTCSS_179_9},
-        {186.1f, 186.3f, SA818_CTCSS_186_2},
-        {192.7f, 192.9f, SA818_CTCSS_192_8},
-        {203.4f, 203.6f, SA818_CTCSS_203_5},
-        {210.6f, 210.8f, SA818_CTCSS_210_7},
-        {218.0f, 218.2f, SA818_CTCSS_218_1},
-        {225.6f, 225.8f, SA818_CTCSS_225_7},
-        {233.5f, 233.7f, SA818_CTCSS_233_6},
-        {241.7f, 241.9f, SA818_CTCSS_241_8},
-        {250.2f, 250.4f, SA818_CTCSS_250_3},
+        {67.0f, 67.1f, SA818_CTCSS_67_0},    {71.8f, 72.0f, SA818_CTCSS_71_9},    {74.3f, 74.5f, SA818_CTCSS_74_4},    {76.9f, 77.1f, SA818_CTCSS_77_0},
+        {79.6f, 79.8f, SA818_CTCSS_79_7},    {82.4f, 82.6f, SA818_CTCSS_82_5},    {85.3f, 85.5f, SA818_CTCSS_85_4},    {88.4f, 88.6f, SA818_CTCSS_88_5},
+        {91.4f, 91.6f, SA818_CTCSS_91_5},    {94.7f, 94.9f, SA818_CTCSS_94_8},    {97.3f, 97.5f, SA818_CTCSS_97_4},    {99.9f, 100.1f, SA818_CTCSS_100_0},
+        {103.4f, 103.6f, SA818_CTCSS_103_5}, {107.1f, 107.3f, SA818_CTCSS_107_2}, {110.8f, 111.0f, SA818_CTCSS_110_9}, {114.7f, 114.9f, SA818_CTCSS_114_8},
+        {118.7f, 118.9f, SA818_CTCSS_118_8}, {122.9f, 123.1f, SA818_CTCSS_123_0}, {127.2f, 127.4f, SA818_CTCSS_127_3}, {131.7f, 131.9f, SA818_CTCSS_131_8},
+        {136.4f, 136.6f, SA818_CTCSS_136_5}, {141.2f, 141.4f, SA818_CTCSS_141_3}, {146.1f, 146.3f, SA818_CTCSS_146_2}, {151.3f, 151.5f, SA818_CTCSS_151_4},
+        {156.6f, 156.8f, SA818_CTCSS_156_7}, {162.1f, 162.3f, SA818_CTCSS_162_2}, {167.8f, 168.0f, SA818_CTCSS_167_9}, {173.7f, 173.9f, SA818_CTCSS_173_8},
+        {179.8f, 180.0f, SA818_CTCSS_179_9}, {186.1f, 186.3f, SA818_CTCSS_186_2}, {192.7f, 192.9f, SA818_CTCSS_192_8}, {203.4f, 203.6f, SA818_CTCSS_203_5},
+        {210.6f, 210.8f, SA818_CTCSS_210_7}, {218.0f, 218.2f, SA818_CTCSS_218_1}, {225.6f, 225.8f, SA818_CTCSS_225_7}, {233.5f, 233.7f, SA818_CTCSS_233_6},
+        {241.7f, 241.9f, SA818_CTCSS_241_8}, {250.2f, 250.4f, SA818_CTCSS_250_3},
     };
 
     for (size_t i = 0; i < (sizeof(ctcss_map) / sizeof(ctcss_map[0])); ++i) {
@@ -467,7 +440,88 @@ static int cmd_sa818_at_version(const struct shell *shell, size_t argc, char **a
   return 0;
 }
 
+/* Test Tone Commands */
+static int cmd_sa818_test_tone(const struct shell *shell, size_t argc, char **argv) {
+  if (argc < 2) {
+    shell_error(shell, "usage: sa818 test tone <freq_hz> [duration_ms] [amplitude]");
+    shell_error(shell, "  freq_hz: 100-3000 Hz");
+    shell_error(shell, "  duration_ms: 0 = continuous (default)");
+    shell_error(shell, "  amplitude: 0-255 (default: 128)");
+    shell_error(shell, "example: sa818 test tone 1000          (continuous 1 kHz tone)");
+    shell_error(shell, "example: sa818 test tone 1000 5000     (1 kHz tone for 5 seconds)");
+    shell_error(shell, "example: sa818 test tone 1750 3000 200 (1750 Hz for 3s at 78%% amplitude)");
+    return -EINVAL;
+  }
+
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  /* Parse frequency */
+  int freq_hz = atoi(argv[1]);
+  if (freq_hz < 100 || freq_hz > 3000) {
+    shell_error(shell, "invalid frequency: %d Hz (valid range: 100-3000 Hz)", freq_hz);
+    return -EINVAL;
+  }
+
+  /* Parse optional duration */
+  uint32_t duration_ms = 0;
+  if (argc >= 3) {
+    duration_ms = static_cast<uint32_t>(atoi(argv[2]));
+  }
+
+  /* Parse optional amplitude */
+  uint8_t amplitude = 128; /* Default to 50% */
+  if (argc >= 4) {
+    int amp = atoi(argv[3]);
+    if (amp < 0 || amp > 255) {
+      shell_error(shell, "invalid amplitude: %d (valid range: 0-255)", amp);
+      return -EINVAL;
+    }
+    amplitude = static_cast<uint8_t>(amp);
+  }
+
+  /* Generate test tone */
+  sa818_result ret = sa818_audio_generate_test_tone(dev, static_cast<uint16_t>(freq_hz), duration_ms, amplitude);
+  if (ret != SA818_OK) {
+    shell_error(shell, "Failed to generate test tone: %d", ret);
+    return ret;
+  }
+
+  if (duration_ms > 0) {
+    shell_print(shell, "Test tone started: %d Hz for %u ms at amplitude %u", freq_hz, duration_ms, amplitude);
+  } else {
+    shell_print(shell, "Continuous test tone started: %d Hz at amplitude %u", freq_hz, amplitude);
+  }
+
+  return 0;
+}
+
+static int cmd_sa818_test_tone_stop(const struct shell *shell, size_t argc, char **argv) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  sa818_result ret = sa818_audio_stop_test_tone(dev);
+  if (ret != SA818_OK) {
+    shell_error(shell, "Failed to stop test tone: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "Test tone stopped");
+  return 0;
+}
+
 // clang-format off
+SHELL_STATIC_SUBCMD_SET_CREATE(
+    sa818_test_cmds,
+    SHELL_CMD(tone, NULL, "Generate test tone", cmd_sa818_test_tone),
+    SHELL_CMD(tone_stop, NULL, "Stop test tone", cmd_sa818_test_tone_stop),
+    SHELL_SUBCMD_SET_END);
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_at_cmds,
     SHELL_CMD(connect, NULL, "Connection handshake", cmd_sa818_at_connect),
@@ -486,6 +540,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     SHELL_CMD(powerlevel, NULL, "Power level", cmd_sa818_powerlevel),
     SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_squelch, NULL, "Simulate squelch (sim only)", cmd_sa818_squelch_sim),
     SHELL_CMD(at, &sa818_at_cmds, "AT commands", NULL),
+    SHELL_CMD(test, &sa818_test_cmds, "Test commands", NULL),
     SHELL_SUBCMD_SET_END);
 // clang-format on
 

@@ -75,6 +75,14 @@ struct sa818_data {
   bool audio_rx_enabled;
   bool audio_tx_enabled;
   uint8_t current_volume;
+
+  /* Test tone state */
+  struct k_work_delayable test_tone_work;
+  bool test_tone_active;
+  uint16_t test_tone_freq;
+  uint8_t test_tone_amplitude;
+  float test_tone_phase;
+  int64_t test_tone_end_time;
 };
 
 /**

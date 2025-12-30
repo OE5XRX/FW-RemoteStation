@@ -64,6 +64,25 @@ extern "C" {
  */
 [[nodiscard]] enum sa818_result sa818_audio_enable_path(const struct device *dev, bool rx_enable, bool tx_enable);
 
+/**
+ * @brief Generate test tone on TX audio output
+ *
+ * @param dev SA818 device
+ * @param freq_hz Tone frequency in Hz (100-3000)
+ * @param duration_ms Duration in milliseconds (0 = continuous)
+ * @param amplitude Tone amplitude (0-255)
+ * @return SA818_OK on success, error code on failure
+ */
+[[nodiscard]] enum sa818_result sa818_audio_generate_test_tone(const struct device *dev, uint16_t freq_hz, uint32_t duration_ms, uint8_t amplitude);
+
+/**
+ * @brief Stop test tone generation
+ *
+ * @param dev SA818 device
+ * @return SA818_OK on success, error code on failure
+ */
+[[nodiscard]] enum sa818_result sa818_audio_stop_test_tone(const struct device *dev);
+
 #ifdef __cplusplus
 }
 #endif
