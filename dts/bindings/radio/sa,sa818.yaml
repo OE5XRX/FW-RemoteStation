@@ -20,9 +20,11 @@ properties:
     type: phandle-array
     required: true
     description: >
-      IO channels used by SA818. First entry is ADC for audio input,
-      second entry is DAC for audio output.
+      IO channels used by SA818. Must contain exactly two entries:
+      First entry is ADC for audio input (required),
+      second entry is DAC for audio output (required).
       Example: <&adc0 0>, <&wav_dac 0>
+      Use wav-dac on native_sim or real hardware DAC on embedded targets.
 
   io-channel-names:
     type: string-array
