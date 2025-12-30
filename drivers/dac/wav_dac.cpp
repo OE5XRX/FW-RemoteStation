@@ -16,7 +16,6 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/dac.h>
@@ -68,8 +67,8 @@ struct wav_dac_data {
   struct k_mutex lock;
   bool channel_configured[8]; /* Max 8 channels */
   
-  /* Sample buffer for performance. */
-  uint8_t *buffer;               /* Buffer for samples (allocated dynamically). */
+  /* Sample buffer for performance (statically allocated). */
+  uint8_t buffer[CONFIG_DAC_WAV_BUFFER_SIZE * (CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8)]; /* Static buffer. */
   uint32_t buffer_size;          /* Buffer size in bytes. */
   uint32_t buffer_pos;           /* Current position in buffer. */
 };
@@ -291,7 +290,7 @@ static int wav_dac_init(const struct device *dev) {
   data->samples_written = 0;
   memset(data->channel_configured, 0, sizeof(data->channel_configured));
   
-  /* Allocate sample buffer - validate reasonable size. */
+  /* Initialize sample buffer (statically allocated). */
   uint32_t bytes_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
   const uint32_t MAX_BUFFER_SAMPLES = 1024u * 1024u;
   if (CONFIG_DAC_WAV_BUFFER_SIZE > MAX_BUFFER_SAMPLES) {
@@ -299,11 +298,6 @@ static int wav_dac_init(const struct device *dev) {
     return -EINVAL;
   }
   data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * bytes_per_sample;
-  data->buffer = static_cast<uint8_t *>(malloc(data->buffer_size));
-  if (!data->buffer) {
-    LOG_ERR("Failed to allocate sample buffer (%u bytes)", data->buffer_size);
-    return -ENOMEM;
-  }
   data->buffer_pos = 0;
 
   LOG_DBG("WAV DAC driver initialized (buffer: %u samples, %u bytes)", 
@@ -331,12 +325,6 @@ static void wav_dac_shutdown(const struct device *dev) {
     fclose(data->file);
     data->file = NULL;
     data->is_open = false;
-  }
-  
-  /* Free buffer */
-  if (data->buffer) {
-    free(data->buffer);
-    data->buffer = NULL;
   }
 
   k_mutex_unlock(&data->lock);
