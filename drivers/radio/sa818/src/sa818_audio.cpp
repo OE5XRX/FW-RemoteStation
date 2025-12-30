@@ -34,23 +34,19 @@ sa818_result sa818_audio_init(const struct device *dev) {
     LOG_ERR("ADC channel setup failed: %d", ret);
     return SA818_ERROR_ADC;
   }
-  
-  /* Configure DAC channel for audio output (optional) */
-  if (cfg->audio_out_dev != NULL) {
-    struct dac_channel_cfg dac_cfg = {
+
+  /* Configure DAC channel for audio output */
+  struct dac_channel_cfg dac_cfg = {
       .channel_id = cfg->audio_out_channel,
       .resolution = cfg->audio_out_resolution,
-    };
-    
-    ret = dac_channel_setup(cfg->audio_out_dev, &dac_cfg);
-    if (ret != 0) {
-      LOG_ERR("DAC channel setup failed: %d", ret);
-      return SA818_ERROR_DAC;
-    }
-    LOG_INF("DAC channel %u configured (%u-bit)", cfg->audio_out_channel, cfg->audio_out_resolution);
-  } else {
-    LOG_INF("DAC not configured (optional on this platform)");
+  };
+
+  ret = dac_channel_setup(cfg->audio_out_dev, &dac_cfg);
+  if (ret != 0) {
+    LOG_ERR("DAC channel setup failed: %d", ret);
+    return SA818_ERROR_DAC;
   }
+  LOG_INF("DAC channel %u configured (%u-bit)", cfg->audio_out_channel, cfg->audio_out_resolution);
 
   LOG_INF("Audio subsystem initialized");
   return SA818_OK;
@@ -74,22 +70,17 @@ sa818_result sa818_audio_set_tx_level(const struct device *dev, uint8_t level) {
     return SA818_OK;
   }
 
-  /* Write to DAC if configured */
-  if (cfg->audio_out_dev != NULL) {
-    /* Scale 8-bit level (0-255) to DAC resolution */
-    uint32_t dac_value = (static_cast<uint32_t>(level) << (cfg->audio_out_resolution - 8));
-    
-    int ret = dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
-    if (ret != 0) {
-      LOG_ERR("DAC write failed: %d", ret);
-      k_mutex_unlock(&data->lock);
-      return SA818_ERROR_DAC;
-    }
-    
-    LOG_DBG("TX audio level set to %d (DAC: 0x%04x)", level, dac_value);
-  } else {
-    LOG_DBG("TX audio level %d (DAC not available)", level);
+  /* Scale 8-bit level (0-255) to DAC resolution */
+  uint32_t dac_value = (static_cast<uint32_t>(level) << (cfg->audio_out_resolution - 8));
+
+  int ret = dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
+  if (ret != 0) {
+    LOG_ERR("DAC write failed: %d", ret);
+    k_mutex_unlock(&data->lock);
+    return SA818_ERROR_DAC;
   }
+
+  LOG_DBG("TX audio level set to %d (DAC: 0x%04x)", level, dac_value);
 
   k_mutex_unlock(&data->lock);
   return SA818_OK;

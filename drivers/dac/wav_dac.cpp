@@ -12,13 +12,13 @@
 
 #define DT_DRV_COMPAT wav_dac
 
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/dac.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
 
 LOG_MODULE_REGISTER(wav_dac, LOG_LEVEL_DBG);
 
@@ -27,23 +27,23 @@ LOG_MODULE_REGISTER(wav_dac, LOG_LEVEL_DBG);
  */
 struct wav_header {
   /* RIFF chunk descriptor */
-  char riff[4];            /* "RIFF" */
-  uint32_t file_size;      /* File size - 8 */
-  char wave[4];            /* "WAVE" */
-  
+  char riff[4];       /* "RIFF" */
+  uint32_t file_size; /* File size - 8 */
+  char wave[4];       /* "WAVE" */
+
   /* fmt sub-chunk */
-  char fmt[4];             /* "fmt " */
-  uint32_t fmt_size;       /* Size of fmt chunk (16 for PCM) */
-  uint16_t audio_format;   /* Audio format (1 = PCM) */
-  uint16_t num_channels;   /* Number of channels */
-  uint32_t sample_rate;    /* Sample rate */
-  uint32_t byte_rate;      /* Byte rate */
-  uint16_t block_align;    /* Block align */
-  uint16_t bits_per_sample;/* Bits per sample */
-  
+  char fmt[4];              /* "fmt " */
+  uint32_t fmt_size;        /* Size of fmt chunk (16 for PCM) */
+  uint16_t audio_format;    /* Audio format (1 = PCM) */
+  uint16_t num_channels;    /* Number of channels */
+  uint32_t sample_rate;     /* Sample rate */
+  uint32_t byte_rate;       /* Byte rate */
+  uint16_t block_align;     /* Block align */
+  uint16_t bits_per_sample; /* Bits per sample */
+
   /* data sub-chunk */
-  char data[4];            /* "data" */
-  uint32_t data_size;      /* Size of data section */
+  char data[4];       /* "data" */
+  uint32_t data_size; /* Size of data section */
 } __packed;
 
 /**
@@ -74,31 +74,31 @@ struct wav_dac_data {
 static int wav_dac_init_file(const struct device *dev) {
   const struct wav_dac_config *cfg = static_cast<const struct wav_dac_config *>(dev->config);
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
-  
+
   /* Open file for writing */
   data->file = fopen(cfg->output_file, "wb");
   if (!data->file) {
     LOG_ERR("Failed to open WAV file: %s", cfg->output_file);
     return -EIO;
   }
-  
+
   /* Write WAV header (will be updated on close) */
   struct wav_header header = {
-    .riff = {'R', 'I', 'F', 'F'},
-    .file_size = 36, /* Will be updated */
-    .wave = {'W', 'A', 'V', 'E'},
-    .fmt = {'f', 'm', 't', ' '},
-    .fmt_size = 16,
-    .audio_format = 1, /* PCM */
-    .num_channels = cfg->channels,
-    .sample_rate = cfg->sample_rate,
-    .byte_rate = cfg->sample_rate * cfg->channels * cfg->bits_per_sample / 8,
-    .block_align = static_cast<uint16_t>(cfg->channels * cfg->bits_per_sample / 8),
-    .bits_per_sample = cfg->bits_per_sample,
-    .data = {'d', 'a', 't', 'a'},
-    .data_size = 0 /* Will be updated */
+      .riff = {'R', 'I', 'F', 'F'},
+      .file_size = 36, /* Will be updated */
+      .wave = {'W', 'A', 'V', 'E'},
+      .fmt = {'f', 'm', 't', ' '},
+      .fmt_size = 16,
+      .audio_format = 1, /* PCM */
+      .num_channels = cfg->channels,
+      .sample_rate = cfg->sample_rate,
+      .byte_rate = cfg->sample_rate * cfg->channels * cfg->bits_per_sample / 8,
+      .block_align = static_cast<uint16_t>(cfg->channels * cfg->bits_per_sample / 8),
+      .bits_per_sample = cfg->bits_per_sample,
+      .data = {'d', 'a', 't', 'a'},
+      .data_size = 0 /* Will be updated */
   };
-  
+
   size_t written = fwrite(&header, 1, sizeof(header), data->file);
   if (written != sizeof(header)) {
     LOG_ERR("Failed to write WAV header");
@@ -106,13 +106,12 @@ static int wav_dac_init_file(const struct device *dev) {
     data->file = NULL;
     return -EIO;
   }
-  
+
   data->is_open = true;
   data->samples_written = 0;
-  
-  LOG_INF("WAV DAC initialized: %s (%u Hz, %u ch, %u bit)",
-          cfg->output_file, cfg->sample_rate, cfg->channels, cfg->bits_per_sample);
-  
+
+  LOG_INF("WAV DAC initialized: %s (%u Hz, %u ch, %u bit)", cfg->output_file, cfg->sample_rate, cfg->channels, cfg->bits_per_sample);
+
   return 0;
 }
 
@@ -122,25 +121,23 @@ static int wav_dac_init_file(const struct device *dev) {
 static void wav_dac_update_header(const struct device *dev) {
   const struct wav_dac_config *cfg = static_cast<const struct wav_dac_config *>(dev->config);
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
-  
+
   if (!data->file) {
     return;
   }
-  
+
   uint32_t data_size = data->samples_written * cfg->channels * cfg->bits_per_sample / 8;
   uint32_t file_size = data_size + 36;
-  
+
   /* Seek to file size field */
   fseek(data->file, 4, SEEK_SET);
   fwrite(&file_size, sizeof(file_size), 1, data->file);
-  
+
   /* Seek to data size field */
   fseek(data->file, 40, SEEK_SET);
   fwrite(&data_size, sizeof(data_size), 1, data->file);
-  
-  LOG_INF("WAV file finalized: %u samples (%.2f seconds)",
-          data->samples_written,
-          (double)data->samples_written / cfg->sample_rate);
+
+  LOG_INF("WAV file finalized: %u samples (%.2f seconds)", data->samples_written, (double)data->samples_written / cfg->sample_rate);
 }
 
 /**
@@ -148,13 +145,13 @@ static void wav_dac_update_header(const struct device *dev) {
  */
 static int wav_dac_channel_setup(const struct device *dev, const struct dac_channel_cfg *channel_cfg) {
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
-  
+
   if (channel_cfg->channel_id >= 8) {
     return -EINVAL;
   }
-  
+
   k_mutex_lock(&data->lock, K_FOREVER);
-  
+
   /* Initialize file on first channel setup */
   if (!data->is_open) {
     int ret = wav_dac_init_file(dev);
@@ -163,11 +160,11 @@ static int wav_dac_channel_setup(const struct device *dev, const struct dac_chan
       return ret;
     }
   }
-  
+
   data->channel_configured[channel_cfg->channel_id] = true;
-  
+
   k_mutex_unlock(&data->lock);
-  
+
   LOG_DBG("Channel %u configured", channel_cfg->channel_id);
   return 0;
 }
@@ -178,18 +175,18 @@ static int wav_dac_channel_setup(const struct device *dev, const struct dac_chan
 static int wav_dac_write_value(const struct device *dev, uint8_t channel, uint32_t value) {
   const struct wav_dac_config *cfg = static_cast<const struct wav_dac_config *>(dev->config);
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
-  
+
   if (channel >= 8 || !data->channel_configured[channel]) {
     return -EINVAL;
   }
-  
+
   k_mutex_lock(&data->lock, K_FOREVER);
-  
+
   if (!data->is_open || !data->file) {
     k_mutex_unlock(&data->lock);
     return -EIO;
   }
-  
+
   /* Scale value to sample bit depth */
   size_t written = 0;
   if (cfg->bits_per_sample == 16) {
@@ -201,17 +198,17 @@ static int wav_dac_write_value(const struct device *dev, uint8_t channel, uint32
     uint8_t sample = static_cast<uint8_t>(value >> (cfg->resolution - 8));
     written = fwrite(&sample, sizeof(sample), 1, data->file);
   }
-  
+
   if (written != 1) {
     LOG_ERR("Failed to write sample to WAV file");
     k_mutex_unlock(&data->lock);
     return -EIO;
   }
-  
+
   data->samples_written++;
-  
+
   k_mutex_unlock(&data->lock);
-  
+
   return 0;
 }
 
@@ -219,8 +216,8 @@ static int wav_dac_write_value(const struct device *dev, uint8_t channel, uint32
  * @brief Driver API structure
  */
 static const struct dac_driver_api wav_dac_api = {
-  .channel_setup = wav_dac_channel_setup,
-  .write_value = wav_dac_write_value,
+    .channel_setup = wav_dac_channel_setup,
+    .write_value = wav_dac_write_value,
 };
 
 /**
@@ -229,12 +226,12 @@ static const struct dac_driver_api wav_dac_api = {
 static int wav_dac_init(const struct device *dev) __attribute__((used));
 static int wav_dac_init(const struct device *dev) {
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
-  
+
   k_mutex_init(&data->lock);
   data->is_open = false;
   data->samples_written = 0;
   memset(data->channel_configured, 0, sizeof(data->channel_configured));
-  
+
   LOG_DBG("WAV DAC driver initialized");
   return 0;
 }
@@ -245,38 +242,32 @@ static int wav_dac_init(const struct device *dev) {
 static void wav_dac_shutdown(const struct device *dev) __attribute__((used));
 static void wav_dac_shutdown(const struct device *dev) {
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
-  
+
   k_mutex_lock(&data->lock, K_FOREVER);
-  
+
   if (data->is_open && data->file) {
     wav_dac_update_header(dev);
     fclose(data->file);
     data->file = NULL;
     data->is_open = false;
   }
-  
+
   k_mutex_unlock(&data->lock);
 }
 
 /* Devicetree macro magic */
-#define WAV_DAC_INIT(inst)                                                     \
-  static struct wav_dac_data wav_dac_data_##inst;                             \
-                                                                               \
-  static const struct wav_dac_config wav_dac_config_##inst = {                \
-    .output_file = DT_INST_PROP(inst, output_file),                           \
-    .sample_rate = DT_INST_PROP(inst, sample_rate),                           \
-    .channels = DT_INST_PROP(inst, channels),                                 \
-    .bits_per_sample = DT_INST_PROP(inst, bits_per_sample),                   \
-    .resolution = DT_INST_PROP(inst, resolution),                             \
-  };                                                                           \
-                                                                               \
-  DEVICE_DT_INST_DEFINE(inst,                                                 \
-                        wav_dac_init,                                         \
-                        wav_dac_shutdown,                                     \
-                        &wav_dac_data_##inst,                                 \
-                        &wav_dac_config_##inst,                               \
-                        POST_KERNEL,                                          \
-                        CONFIG_DAC_WAV_INIT_PRIORITY,                         \
+#define WAV_DAC_INIT(inst)                                                                                                                                     \
+  static struct wav_dac_data wav_dac_data_##inst;                                                                                                              \
+                                                                                                                                                               \
+  static const struct wav_dac_config wav_dac_config_##inst = {                                                                                                 \
+      .output_file = DT_INST_PROP(inst, output_file),                                                                                                          \
+      .sample_rate = DT_INST_PROP(inst, sample_rate),                                                                                                          \
+      .channels = DT_INST_PROP(inst, channels),                                                                                                                \
+      .bits_per_sample = DT_INST_PROP(inst, bits_per_sample),                                                                                                  \
+      .resolution = DT_INST_PROP(inst, resolution),                                                                                                            \
+  };                                                                                                                                                           \
+                                                                                                                                                               \
+  DEVICE_DT_INST_DEFINE(inst, wav_dac_init, wav_dac_shutdown, &wav_dac_data_##inst, &wav_dac_config_##inst, POST_KERNEL, CONFIG_DAC_WAV_INIT_PRIORITY,         \
                         &wav_dac_api);
 
 DT_INST_FOREACH_STATUS_OKAY(WAV_DAC_INIT)

@@ -42,7 +42,7 @@ extern "C" {
 struct sa818_config {
   const struct device *uart;
   struct adc_dt_spec audio_in;
-  const struct device *audio_out_dev;  /* DAC device (optional) */
+  const struct device *audio_out_dev; /* DAC device (optional) */
   uint8_t audio_out_channel;
   uint8_t audio_out_resolution;
 
