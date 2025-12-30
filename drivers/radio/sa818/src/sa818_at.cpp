@@ -271,6 +271,11 @@ sa818_result sa818_at_set_filters(const struct device *dev, sa818_filter_flags f
   char cmd[64];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
+  // Validate filter flags - only bits 0-2 are valid
+  if ((filters & ~SA818_FILTER_ALL) != 0) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
   bool pre_emphasis = (filters & SA818_FILTER_PRE_EMPHASIS) != 0;
   bool high_pass = (filters & SA818_FILTER_HIGH_PASS) != 0;
   bool low_pass = (filters & SA818_FILTER_LOW_PASS) != 0;

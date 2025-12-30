@@ -200,6 +200,7 @@ enum sa818_volume_level {
   SA818_VOLUME_7 = 7,
   SA818_VOLUME_8 = 8 /**< Volume level 8 (loudest) */
 };
+
 /**
  * @brief SA818 audio filter flags (can be OR'ed together)
  */
