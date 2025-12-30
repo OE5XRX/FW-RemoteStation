@@ -13,6 +13,7 @@
 #define DT_DRV_COMPAT wav_dac
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/device.h>
@@ -286,8 +287,13 @@ static int wav_dac_init(const struct device *dev) {
   data->samples_written = 0;
   memset(data->channel_configured, 0, sizeof(data->channel_configured));
   
-  /* Allocate sample buffer */
-  data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
+  /* Allocate sample buffer - check for overflow */
+  uint32_t bytes_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
+  if (CONFIG_DAC_WAV_BUFFER_SIZE > UINT32_MAX / bytes_per_sample) {
+    LOG_ERR("Buffer size too large (would overflow)");
+    return -EINVAL;
+  }
+  data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * bytes_per_sample;
   data->buffer = static_cast<uint8_t *>(k_malloc(data->buffer_size));
   if (!data->buffer) {
     LOG_ERR("Failed to allocate sample buffer (%u bytes)", data->buffer_size);

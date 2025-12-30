@@ -7,10 +7,7 @@ SA818 Audio and DAC Integration Tests
 Pytest-based tests for SA818 audio subsystem, specifically testing
 DAC integration for TX audio output.
 """
-import os
 import re
-import struct
-import wave
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -65,7 +62,7 @@ def test_sa818_audio_dac_initialization(shell):
     
     # If we get a valid status, the DAC must be initialized
     # because the driver requires a DAC to be present
-    assert "error" not in text.lower() or "sa818 not ready" not in text.lower()
+    assert "error" not in text.lower() and "sa818 not ready" not in text.lower()
 
 
 def test_sa818_audio_tx_path_enable(shell):
@@ -141,4 +138,6 @@ def test_sa818_audio_dac_required(shell):
     
     # Should get valid status (not an error about missing DAC)
     assert "sa818 not ready" not in text.lower()
-    assert "dac" not in text.lower() or "dac not ready" not in text.lower()
+    # If DAC is mentioned, it should not be "not ready"
+    if "dac" in text.lower():
+        assert "dac not ready" not in text.lower()
