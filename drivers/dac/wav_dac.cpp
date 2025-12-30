@@ -292,8 +292,9 @@ static int wav_dac_init(const struct device *dev) {
   
   /* Allocate sample buffer - validate reasonable size. */
   uint32_t bytes_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
-  if (CONFIG_DAC_WAV_BUFFER_SIZE > 1024u * 1024u) {
-    LOG_ERR("Buffer size too large (max 1048576 samples)");
+  const uint32_t MAX_BUFFER_SAMPLES = 1024u * 1024u;
+  if (CONFIG_DAC_WAV_BUFFER_SIZE > MAX_BUFFER_SAMPLES) {
+    LOG_ERR("Buffer size too large (max %u samples)", MAX_BUFFER_SAMPLES);
     return -EINVAL;
   }
   data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * bytes_per_sample;
