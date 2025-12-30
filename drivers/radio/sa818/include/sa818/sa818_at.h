@@ -203,7 +203,7 @@ enum sa818_volume_level {
 /**
  * @brief SA818 audio filter flags (can be OR'ed together)
  */
-enum sa818_filter_flags {
+enum sa818_filter_flags : uint8_t {
   SA818_FILTER_NONE = 0,                                                                          /**< No filters enabled */
   SA818_FILTER_PRE_EMPHASIS = (1 << 0),                                                           /**< Pre-emphasis filter (0x01) */
   SA818_FILTER_HIGH_PASS = (1 << 1),                                                              /**< High-pass filter (0x02) */
