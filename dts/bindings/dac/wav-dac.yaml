@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (c) 2025 OE5XRX
+
+description: |
+  WAV File DAC Emulator
+  
+  This driver emulates a DAC by writing audio samples to a WAV file.
+  Useful for testing and simulation on platforms without real hardware DAC.
+  
+  The sample rate and bits-per-sample are configured via Kconfig:
+  - CONFIG_DAC_WAV_SAMPLE_RATE (default: 8000 Hz)
+  - CONFIG_DAC_WAV_BITS_PER_SAMPLE (default: 16-bit)
+  
+  Example devicetree node:
+  
+    wav_dac: dac@0 {
+        compatible = "wav-dac";
+        #io-channel-cells = <1>;
+        output-file = "audio_output.wav";
+        channels = <1>;
+        resolution = <16>;
+    };
+
+compatible: "wav-dac"
+
+include: [dac-controller.yaml]
+
+io-channel-cells:
+  - output
+
+properties:
+  output-file:
+    type: string
+    required: true
+    description: Path to output WAV file
+
+  channels:
+    type: int
+    default: 1
+    enum:
+      - 1
+      - 2
+    description: Number of audio channels (1=mono, 2=stereo)
+
+  resolution:
+    type: int
+    default: 16
+    description: DAC resolution in bits

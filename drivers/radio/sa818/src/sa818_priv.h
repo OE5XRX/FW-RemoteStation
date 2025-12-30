@@ -15,6 +15,7 @@
 
 #include <sa818/sa818.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/dac.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 
@@ -41,6 +42,9 @@ extern "C" {
 struct sa818_config {
   const struct device *uart;
   struct adc_dt_spec audio_in;
+  const struct device *audio_out_dev; /* DAC device (optional) */
+  uint8_t audio_out_channel;
+  uint8_t audio_out_resolution;
 
   struct gpio_dt_spec h_l_power;
   struct gpio_dt_spec nptt;

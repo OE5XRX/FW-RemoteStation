@@ -1,1 +1,1 @@
-rsource "drivers/radio/Kconfig"
+rsource "drivers/Kconfig"

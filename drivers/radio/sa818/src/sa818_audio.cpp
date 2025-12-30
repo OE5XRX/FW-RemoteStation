@@ -14,6 +14,7 @@
 #include <sa818/sa818_audio.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/dac.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -22,8 +23,7 @@ LOG_MODULE_REGISTER(sa818_audio, LOG_LEVEL_INF);
 /**
  * @brief Initialize audio subsystem
  *
- * Sets up ADC for audio monitoring and prepares
- * for future DAC integration.
+ * Sets up ADC for audio monitoring and DAC for audio output.
  */
 sa818_result sa818_audio_init(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
@@ -35,6 +35,19 @@ sa818_result sa818_audio_init(const struct device *dev) {
     return SA818_ERROR_ADC;
   }
 
+  /* Configure DAC channel for audio output */
+  struct dac_channel_cfg dac_cfg = {
+      .channel_id = cfg->audio_out_channel,
+      .resolution = cfg->audio_out_resolution,
+  };
+
+  ret = dac_channel_setup(cfg->audio_out_dev, &dac_cfg);
+  if (ret != 0) {
+    LOG_ERR("DAC channel setup failed: %d", ret);
+    return SA818_ERROR_DAC;
+  }
+  LOG_INF("DAC channel %u configured (%u-bit)", cfg->audio_out_channel, cfg->audio_out_resolution);
+
   LOG_INF("Audio subsystem initialized");
   return SA818_OK;
 }
@@ -42,16 +55,32 @@ sa818_result sa818_audio_init(const struct device *dev) {
 /**
  * @brief Set TX audio level (modulation)
  *
- * In future, this will control DAC output for audio modulation.
- * Currently placeholder.
+ * Controls DAC output for audio modulation. The level is scaled
+ * to the DAC resolution and written as a single sample.
  */
 sa818_result sa818_audio_set_tx_level(const struct device *dev, uint8_t level) {
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
   k_mutex_lock(&data->lock, K_FOREVER);
 
-  /* TODO: Implement DAC control when hardware supports it */
-  LOG_DBG("TX audio level set to %d (not yet implemented)", level);
+  if (!data->audio_tx_enabled) {
+    LOG_DBG("TX audio disabled, ignoring level set");
+    k_mutex_unlock(&data->lock);
+    return SA818_OK;
+  }
+
+  /* Scale 8-bit level (0-255) to DAC resolution */
+  uint32_t dac_value = (static_cast<uint32_t>(level) << (cfg->audio_out_resolution - 8));
+
+  int ret = dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
+  if (ret != 0) {
+    LOG_ERR("DAC write failed: %d", ret);
+    k_mutex_unlock(&data->lock);
+    return SA818_ERROR_DAC;
+  }
+
+  LOG_DBG("TX audio level set to %d (DAC: 0x%04x)", level, dac_value);
 
   k_mutex_unlock(&data->lock);
   return SA818_OK;
