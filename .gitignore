@@ -22,3 +22,4 @@ _codeql_detected_source_root
 # implement later
 doc
 scripts
+*.wav

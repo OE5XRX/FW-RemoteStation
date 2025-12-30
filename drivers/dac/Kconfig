@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (c) 2025 OE5XRX
+
+menuconfig DAC_WAV
+	bool "WAV File DAC Emulator"
+	depends on DAC
+	help
+	  Enable WAV file DAC emulator driver. This driver implements
+	  the Zephyr DAC API but writes audio samples to a WAV file
+	  instead of sending them to hardware. Useful for testing and
+	  simulation on native_sim platform.
+
+if DAC_WAV
+
+config DAC_WAV_INIT_PRIORITY
+	int "WAV DAC init priority"
+	default 40
+	help
+	  WAV DAC initialization priority. Must be lower than devices that use it
+	  (typically CONFIG_KERNEL_INIT_PRIORITY_DEVICE=50).
+
+config DAC_WAV_SAMPLE_RATE
+	int "Default sample rate (Hz)"
+	default 8000
+	help
+	  Default sample rate for WAV file output in Hz.
+
+config DAC_WAV_BUFFER_SIZE
+	int "Internal buffer size (samples)"
+	default 1024
+	help
+	  Number of samples to buffer before writing to file.
+
+endif # DAC_WAV

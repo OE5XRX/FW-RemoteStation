@@ -20,20 +20,14 @@ properties:
     type: phandle-array
     required: true
     description: >
-      ADC input channel(s) used by the SA818. Expected to contain at least one
-      entry for audio input, e.g. <&adc0 0>.
+      IO channels used by SA818. First entry should be ADC for audio input.
+      Optional second entry can be DAC for audio output (for testing/simulation).
+      Example: <&adc0 0>, <&wav_dac 0>
 
   io-channel-names:
     type: string-array
     required: false
-    description: Optional names for io-channels (e.g. "audio_in")
-
-  audio-out:
-    type: phandle
-    required: false
-    description: >
-      Optional audio output sink. On hardware this is typically a DAC.
-      In native_sim this may be omitted.
+    description: Optional names for io-channels (e.g. "audio_in", "audio_out")
 
   h-l-power-gpios:
     type: phandle-array

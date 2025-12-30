@@ -28,8 +28,8 @@
     uart = <&uart1>;
 
     /* Audio input via ADC channel 0 */
-    io-channels = <&adc0 0>;
-    io-channel-names = "audio_in";
+    io-channels = <&adc0 0>, <&wav_dac 0>;
+    io-channel-names = "audio_in", "audio_out";
 
     h-l-power-gpios   = <&gpio_sa818 0 GPIO_ACTIVE_HIGH>;
     nptt-gpios        = <&gpio_sa818 1 GPIO_ACTIVE_LOW>;
@@ -38,8 +38,19 @@
 
     tx-enable-delay-ms = <20>;
     rx-settle-time-ms  = <50>;
-
-    /* Optional (Hardware): audio-out = <&dacX>;  (omit in native_sim) */
+  };
+  
+  /* WAV File DAC Emulator */
+  wav_dac: wav_dac {
+    compatible = "wav-dac";
+    status = "okay";
+    #io-channel-cells = <1>;
+    
+    output-file = "sa818_audio_output.wav";
+    sample-rate = <8000>;
+    channels = <1>;
+    bits-per-sample = <16>;
+    resolution = <16>;
   };
 };
 
