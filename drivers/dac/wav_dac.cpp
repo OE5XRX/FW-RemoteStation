@@ -90,7 +90,7 @@ static int wav_dac_init_file(const struct device *dev) {
       .audio_format = 1, /* PCM */
       .num_channels = cfg->channels,
       .sample_rate = CONFIG_DAC_WAV_SAMPLE_RATE,
-      .byte_rate = CONFIG_DAC_WAV_SAMPLE_RATE * cfg->channels * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8,
+      .byte_rate = static_cast<uint32_t>(CONFIG_DAC_WAV_SAMPLE_RATE * cfg->channels * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8),
       .block_align = static_cast<uint16_t>(cfg->channels * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8),
       .bits_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE,
       .data = {'d', 'a', 't', 'a'},
