@@ -13,6 +13,7 @@
 #define DT_DRV_COMPAT wav_dac
 
 #include <errno.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
