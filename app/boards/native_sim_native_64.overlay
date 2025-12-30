@@ -47,9 +47,7 @@
     #io-channel-cells = <1>;
     
     output-file = "sa818_audio_output.wav";
-    sample-rate = <8000>;
     channels = <1>;
-    bits-per-sample = <16>;
     resolution = <16>;
   };
 };

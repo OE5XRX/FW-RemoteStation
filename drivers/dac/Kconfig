@@ -25,6 +25,28 @@ config DAC_WAV_SAMPLE_RATE
 	help
 	  Default sample rate for WAV file output in Hz.
 
+choice DAC_WAV_BITS_PER_SAMPLE_CHOICE
+	prompt "Bits per sample"
+	default DAC_WAV_BITS_PER_SAMPLE_16
+	help
+	  Select the number of bits per audio sample in WAV file output.
+
+config DAC_WAV_BITS_PER_SAMPLE_8
+	bool "8 (unsigned)"
+
+config DAC_WAV_BITS_PER_SAMPLE_16
+	bool "16 (signed)"
+
+endchoice
+
+config DAC_WAV_BITS_PER_SAMPLE
+	int
+	default 8 if DAC_WAV_BITS_PER_SAMPLE_8
+	default 16 if DAC_WAV_BITS_PER_SAMPLE_16
+	help
+	  Number of bits per audio sample in WAV file output.
+	  This value is derived from the selected bits-per-sample option.
+
 config DAC_WAV_BUFFER_SIZE
 	int "Internal buffer size (samples)"
 	default 1024

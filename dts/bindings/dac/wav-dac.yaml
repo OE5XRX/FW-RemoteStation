@@ -7,15 +7,18 @@ description: |
   This driver emulates a DAC by writing audio samples to a WAV file.
   Useful for testing and simulation on platforms without real hardware DAC.
   
+  The sample rate and bits-per-sample are configured via Kconfig:
+  - CONFIG_DAC_WAV_SAMPLE_RATE (default: 8000 Hz)
+  - CONFIG_DAC_WAV_BITS_PER_SAMPLE (default: 16-bit)
+  
   Example devicetree node:
   
     wav_dac: dac@0 {
         compatible = "wav-dac";
         #io-channel-cells = <1>;
         output-file = "audio_output.wav";
-        sample-rate = <8000>;
         channels = <1>;
-        bits-per-sample = <16>;
+        resolution = <16>;
     };
 
 compatible: "wav-dac"
@@ -31,11 +34,6 @@ properties:
     required: true
     description: Path to output WAV file
 
-  sample-rate:
-    type: int
-    default: 8000
-    description: Sample rate in Hz
-
   channels:
     type: int
     default: 1
@@ -43,14 +41,6 @@ properties:
       - 1
       - 2
     description: Number of audio channels (1=mono, 2=stereo)
-
-  bits-per-sample:
-    type: int
-    default: 16
-    enum:
-      - 8
-      - 16
-    description: Bits per sample
 
   resolution:
     type: int
