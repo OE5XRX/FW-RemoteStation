@@ -142,9 +142,17 @@ static void wav_dac_update_header(const struct device *dev) {
  * @brief DAC channel setup
  */
 static int wav_dac_channel_setup(const struct device *dev, const struct dac_channel_cfg *channel_cfg) {
+  const struct wav_dac_config *cfg = static_cast<const struct wav_dac_config *>(dev->config);
   struct wav_dac_data *data = static_cast<struct wav_dac_data *>(dev->data);
 
   if (channel_cfg->channel_id >= 8) {
+    return -EINVAL;
+  }
+
+  /* Validate that DAC resolution is sufficient for target bits-per-sample */
+  if (cfg->resolution < CONFIG_DAC_WAV_BITS_PER_SAMPLE) {
+    LOG_ERR("DAC resolution (%u bits) is less than WAV bits-per-sample (%u bits)", 
+            cfg->resolution, CONFIG_DAC_WAV_BITS_PER_SAMPLE);
     return -EINVAL;
   }
 

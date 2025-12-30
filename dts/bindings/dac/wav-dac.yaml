@@ -18,6 +18,7 @@ description: |
         #io-channel-cells = <1>;
         output-file = "audio_output.wav";
         channels = <1>;
+        resolution = <16>;
     };
 
 compatible: "wav-dac"
