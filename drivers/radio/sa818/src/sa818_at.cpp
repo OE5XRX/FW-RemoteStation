@@ -199,13 +199,13 @@ sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwi
   if (ctcss_rx < SA818_TONE_NONE || ctcss_rx > SA818_DCS_523) {
     return SA818_ERROR_INVALID_PARAM;
   }
-  
+
   /* Validate TX frequency (VHF: 134-174 MHz, UHF: 400-480 MHz) */
   if (!((freq_tx >= 134.0f && freq_tx <= 174.0f) || (freq_tx >= 400.0f && freq_tx <= 480.0f))) {
     LOG_ERR("TX freq out of range: %.4f (valid: 134-174 MHz or 400-480 MHz)", (double)freq_tx);
     return SA818_ERROR_INVALID_PARAM;
   }
-  
+
   /* Validate RX frequency (VHF: 134-174 MHz, UHF: 400-480 MHz) */
   if (!((freq_rx >= 134.0f && freq_rx <= 174.0f) || (freq_rx >= 400.0f && freq_rx <= 480.0f))) {
     LOG_ERR("RX freq out of range: %.4f (valid: 134-174 MHz or 400-480 MHz)", (double)freq_rx);
