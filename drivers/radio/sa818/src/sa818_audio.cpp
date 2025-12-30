@@ -41,6 +41,7 @@ sa818_result sa818_audio_init(const struct device *dev) {
 
   /* Initialize test tone work queue */
   k_work_init_delayable(&data->test_tone_work, test_tone_work_handler);
+  data->test_tone_dev = dev;
   data->test_tone_active = false;
 
   /* Configure ADC channel for audio monitoring */
@@ -174,20 +175,9 @@ static void test_tone_work_handler(struct k_work *work) {
   struct k_work_delayable *dwork = k_work_delayable_from_work(work);
   struct sa818_data *data = CONTAINER_OF(dwork, struct sa818_data, test_tone_work);
 
-  /* Get device from data structure (traverse back through device structure) */
-  const struct device *dev = NULL;
-  /* Find the device by iterating through all devices */
-  /* Note: This is a workaround since we don't have direct access to device from data */
-  /* In production code, you might want to store device pointer in sa818_data */
-  STRUCT_SECTION_FOREACH(device, d) {
-    if (d->data == data) {
-      dev = d;
-      break;
-    }
-  }
-
+  const struct device *dev = data->test_tone_dev;
   if (!dev) {
-    LOG_ERR("Device not found in test_tone_work_handler");
+    LOG_ERR("Device pointer not set in test_tone_work_handler");
     return;
   }
 
@@ -240,7 +230,7 @@ static void test_tone_work_handler(struct k_work *work) {
   }
 
   /* Update phase for next sample */
-  constexpr float two_pi = 2.0f * 3.14159265358979323846f;
+  constexpr float two_pi = 2.0f * static_cast<float>(M_PI);
   float phase_increment = two_pi * static_cast<float>(data->test_tone_freq) / static_cast<float>(TEST_TONE_SAMPLE_RATE_HZ);
   data->test_tone_phase += phase_increment;
 

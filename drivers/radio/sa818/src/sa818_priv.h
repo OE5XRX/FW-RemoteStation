@@ -78,6 +78,7 @@ struct sa818_data {
 
   /* Test tone state */
   struct k_work_delayable test_tone_work;
+  const struct device *test_tone_dev; /* Device pointer for work handler */
   bool test_tone_active;
   uint16_t test_tone_freq;
   uint8_t test_tone_amplitude;

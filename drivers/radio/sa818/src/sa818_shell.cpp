@@ -449,7 +449,7 @@ static int cmd_sa818_test_tone(const struct shell *shell, size_t argc, char **ar
     shell_error(shell, "  amplitude: 0-255 (default: 128)");
     shell_error(shell, "example: sa818 test tone 1000          (continuous 1 kHz tone)");
     shell_error(shell, "example: sa818 test tone 1000 5000     (1 kHz tone for 5 seconds)");
-    shell_error(shell, "example: sa818 test tone 1750 3000 200 (1750 Hz for 3s at 78%% amplitude)");
+    shell_error(shell, "example: sa818 test tone 1750 3000 200 (1750 Hz for 3s at 78% amplitude)");
     return -EINVAL;
   }
 
