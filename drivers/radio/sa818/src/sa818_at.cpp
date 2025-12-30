@@ -181,12 +181,15 @@ sa818_result sa818_at_connect(const struct device *dev) {
  * AT+DMOSETGROUP=BW,TXF,RXF,TXCCS,SQ,RXCCS
  * Example: AT+DMOSETGROUP=0,145.5000,145.5000,0000,4,0000
  */
-sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwidth, float freq_tx, float freq_rx, sa818_tone_code ctcss_tx, sa818_squelch_level squelch,
-                                sa818_tone_code ctcss_rx) {
+sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwidth, float freq_tx, float freq_rx, sa818_tone_code ctcss_tx,
+                                sa818_squelch_level squelch, sa818_tone_code ctcss_rx) {
   char cmd[128];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
   /* Validate parameters */
+  if (bandwidth != SA818_BW_12_5_KHZ && bandwidth != SA818_BW_25_KHZ) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
   if (squelch < SA818_SQL_LEVEL_0 || squelch > SA818_SQL_LEVEL_8) {
     return SA818_ERROR_INVALID_PARAM;
   }
@@ -196,13 +199,13 @@ sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwi
   if (ctcss_rx < SA818_TONE_NONE || ctcss_rx > SA818_DCS_523) {
     return SA818_ERROR_INVALID_PARAM;
   }
-  
+
   /* Validate TX frequency (VHF: 134-174 MHz, UHF: 400-480 MHz) */
   if (!((freq_tx >= 134.0f && freq_tx <= 174.0f) || (freq_tx >= 400.0f && freq_tx <= 480.0f))) {
     LOG_ERR("TX freq out of range: %.4f (valid: 134-174 MHz or 400-480 MHz)", (double)freq_tx);
     return SA818_ERROR_INVALID_PARAM;
   }
-  
+
   /* Validate RX frequency (VHF: 134-174 MHz, UHF: 400-480 MHz) */
   if (!((freq_rx >= 134.0f && freq_rx <= 174.0f) || (freq_rx >= 400.0f && freq_rx <= 480.0f))) {
     LOG_ERR("RX freq out of range: %.4f (valid: 134-174 MHz or 400-480 MHz)", (double)freq_rx);
@@ -267,6 +270,11 @@ sa818_result sa818_at_set_volume(const struct device *dev, sa818_volume_level vo
 sa818_result sa818_at_set_filters(const struct device *dev, sa818_filter_flags filters) {
   char cmd[64];
   char response[SA818_AT_RESPONSE_MAX_LEN];
+
+  // Validate filter flags - only bits 0-2 are valid
+  if ((filters & ~SA818_FILTER_ALL) != 0) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
 
   bool pre_emphasis = (filters & SA818_FILTER_PRE_EMPHASIS) != 0;
   bool high_pass = (filters & SA818_FILTER_HIGH_PASS) != 0;
@@ -339,7 +347,7 @@ sa818_result sa818_at_read_version(const struct device *dev, char *version, size
   /* Copy version string to output buffer */
   strncpy(version, response, version_len - 1);
   version[version_len - 1] = '\0';
-  
+
   LOG_INF("Version: %s", version);
 
   return SA818_OK;
