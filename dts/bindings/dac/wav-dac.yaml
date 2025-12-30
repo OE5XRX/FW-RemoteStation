@@ -23,7 +23,7 @@ compatible: "wav-dac"
 include: [dac-controller.yaml]
 
 io-channel-cells:
-  - channel
+  - output
 
 properties:
   output-file:
