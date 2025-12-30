@@ -90,9 +90,9 @@ static int wav_dac_init_file(const struct device *dev) {
       .audio_format = 1, /* PCM */
       .num_channels = cfg->channels,
       .sample_rate = CONFIG_DAC_WAV_SAMPLE_RATE,
-      .byte_rate = CONFIG_DAC_WAV_SAMPLE_RATE * cfg->channels * 16 / 8,
-      .block_align = static_cast<uint16_t>(cfg->channels * 16 / 8),
-      .bits_per_sample = 16,
+      .byte_rate = CONFIG_DAC_WAV_SAMPLE_RATE * cfg->channels * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8,
+      .block_align = static_cast<uint16_t>(cfg->channels * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8),
+      .bits_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE,
       .data = {'d', 'a', 't', 'a'},
       .data_size = 0 /* Will be updated */
   };
@@ -108,7 +108,7 @@ static int wav_dac_init_file(const struct device *dev) {
   data->is_open = true;
   data->samples_written = 0;
 
-  LOG_INF("WAV DAC initialized: %s (%u Hz, %u ch, %u bit)", cfg->output_file, CONFIG_DAC_WAV_SAMPLE_RATE, cfg->channels, 16);
+  LOG_INF("WAV DAC initialized: %s (%u Hz, %u ch, %u bit)", cfg->output_file, CONFIG_DAC_WAV_SAMPLE_RATE, cfg->channels, CONFIG_DAC_WAV_BITS_PER_SAMPLE);
 
   return 0;
 }
@@ -124,7 +124,7 @@ static void wav_dac_update_header(const struct device *dev) {
     return;
   }
 
-  uint32_t data_size = data->samples_written * cfg->channels * 16 / 8;
+  uint32_t data_size = data->samples_written * cfg->channels * CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
   uint32_t file_size = data_size + 36;
 
   /* Seek to file size field */
@@ -185,11 +185,21 @@ static int wav_dac_write_value(const struct device *dev, uint8_t channel, uint32
     return -EIO;
   }
 
-  /* Scale value to sample bit depth (always 16-bit for now) */
+  /* Scale value to sample bit depth */
   size_t written = 0;
-  /* Scale from DAC resolution to 16-bit signed */
-  uint16_t sample = static_cast<uint16_t>(value >> (cfg->resolution - 16));
-  written = fwrite(&sample, sizeof(sample), 1, data->file);
+  if (CONFIG_DAC_WAV_BITS_PER_SAMPLE == 16) {
+    /* Scale from DAC resolution to 16-bit signed */
+    uint16_t sample = static_cast<uint16_t>(value >> (cfg->resolution - 16));
+    written = fwrite(&sample, sizeof(sample), 1, data->file);
+  } else if (CONFIG_DAC_WAV_BITS_PER_SAMPLE == 8) {
+    /* Scale from DAC resolution to 8-bit unsigned */
+    uint8_t sample = static_cast<uint8_t>(value >> (cfg->resolution - 8));
+    written = fwrite(&sample, sizeof(sample), 1, data->file);
+  } else {
+    LOG_ERR("Unsupported bits per sample: %d", CONFIG_DAC_WAV_BITS_PER_SAMPLE);
+    k_mutex_unlock(&data->lock);
+    return -ENOTSUP;
+  }
 
   if (written != 1) {
     LOG_ERR("Failed to write sample to WAV file");

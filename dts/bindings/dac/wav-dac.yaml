@@ -7,8 +7,9 @@ description: |
   This driver emulates a DAC by writing audio samples to a WAV file.
   Useful for testing and simulation on platforms without real hardware DAC.
   
-  The sample rate is configured via Kconfig (CONFIG_DAC_WAV_SAMPLE_RATE).
-  Audio format is fixed to 16-bit PCM for simplicity.
+  The sample rate and bits-per-sample are configured via Kconfig:
+  - CONFIG_DAC_WAV_SAMPLE_RATE (default: 8000 Hz)
+  - CONFIG_DAC_WAV_BITS_PER_SAMPLE (default: 16-bit)
   
   Example devicetree node:
   
