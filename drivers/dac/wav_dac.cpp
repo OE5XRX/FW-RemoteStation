@@ -16,6 +16,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/dac.h>
@@ -298,7 +299,7 @@ static int wav_dac_init(const struct device *dev) {
     return -EINVAL;
   }
   data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * bytes_per_sample;
-  data->buffer = static_cast<uint8_t *>(k_malloc(data->buffer_size));
+  data->buffer = static_cast<uint8_t *>(malloc(data->buffer_size));
   if (!data->buffer) {
     LOG_ERR("Failed to allocate sample buffer (%u bytes)", data->buffer_size);
     return -ENOMEM;
@@ -334,7 +335,7 @@ static void wav_dac_shutdown(const struct device *dev) {
   
   /* Free buffer */
   if (data->buffer) {
-    k_free(data->buffer);
+    free(data->buffer);
     data->buffer = NULL;
   }
 
