@@ -211,7 +211,7 @@ static int cmd_sa818_at_volume(const struct shell *shell, size_t argc, char **ar
 
 /**
  * @brief Parse bandwidth string to enum
- * Accepts: "narrow", "12.5", "wide", "25"
+ * Accepts: "narrow", "12.5", "wide", "25", or numeric value (0 or 1)
  */
 static sa818_bandwidth parse_bandwidth(const char *str) {
   if (!strcmp(str, "narrow") || !strcmp(str, "12.5")) {
@@ -219,12 +219,41 @@ static sa818_bandwidth parse_bandwidth(const char *str) {
   } else if (!strcmp(str, "wide") || !strcmp(str, "25")) {
     return SA818_BW_25_KHZ;
   }
-  return static_cast<sa818_bandwidth>(atoi(str));
+
+  // Validate numeric input
+  if (str == nullptr || *str == '\0') {
+    return SA818_BW_12_5_KHZ; // Default to narrow
+  }
+
+  // Check if string is numeric
+  const char *p = str;
+  if (*p == '+' || *p == '-') {
+    ++p;
+  }
+
+  if (*p == '\0') {
+    return SA818_BW_12_5_KHZ; // Only a sign, default to narrow
+  }
+
+  while (*p != '\0') {
+    if (*p < '0' || *p > '9') {
+      return SA818_BW_12_5_KHZ; // Non-numeric, default to narrow
+    }
+    ++p;
+  }
+
+  // Valid numeric string - parse it
+  int value = atoi(str);
+  if (value == 0 || value == 1) {
+    return static_cast<sa818_bandwidth>(value);
+  }
+
+  return SA818_BW_12_5_KHZ; // Out of range, default to narrow
 }
 
 /**
  * @brief Parse CTCSS/DCS tone string to enum
- * Accepts: "none", "off", CTCSS frequency (e.g. "67.0"), or numeric code
+ * Accepts: "none", "off", CTCSS frequency (e.g. "67.0"), or numeric code (0-121)
  */
 static sa818_tone_code parse_tone(const char *str) {
   if (!strcmp(str, "none") || !strcmp(str, "off")) {
@@ -287,8 +316,41 @@ static sa818_tone_code parse_tone(const char *str) {
     }
   }
 
-  // Fall back to numeric code
-  return static_cast<sa818_tone_code>(atoi(str));
+  // Validate numeric input before parsing
+  if (str == nullptr || *str == '\0') {
+    return SA818_TONE_NONE; // Default to no tone
+  }
+
+  // Check if string is numeric
+  const char *p = str;
+  if (*p == '+' || *p == '-') {
+    ++p;
+  }
+
+  if (*p == '\0') {
+    return SA818_TONE_NONE; // Only a sign, default to no tone
+  }
+
+  bool is_numeric = true;
+  while (*p != '\0') {
+    if (*p < '0' || *p > '9') {
+      is_numeric = false;
+      break;
+    }
+    ++p;
+  }
+
+  if (!is_numeric) {
+    return SA818_TONE_NONE; // Non-numeric, default to no tone
+  }
+
+  // Valid numeric string - parse and validate range
+  int value = atoi(str);
+  if (value >= 0 && value <= 121) {
+    return static_cast<sa818_tone_code>(value);
+  }
+
+  return SA818_TONE_NONE; // Out of range, default to no tone
 }
 
 static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **argv) {
