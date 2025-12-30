@@ -181,17 +181,34 @@ sa818_result sa818_at_connect(const struct device *dev) {
  * AT+DMOSETGROUP=BW,TXF,RXF,TXCCS,SQ,RXCCS
  * Example: AT+DMOSETGROUP=0,145.5000,145.5000,0000,4,0000
  */
-sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, float freq_tx, float freq_rx, uint16_t ctcss_tx, uint8_t squelch,
-                                uint16_t ctcss_rx) {
+sa818_result sa818_at_set_group(const struct device *dev, sa818_bandwidth bandwidth, float freq_tx, float freq_rx, sa818_tone_code ctcss_tx,
+                                sa818_squelch_level squelch, sa818_tone_code ctcss_rx) {
   char cmd[128];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
   /* Validate parameters */
-  if (squelch > 8) {
+  if (bandwidth != SA818_BW_12_5_KHZ && bandwidth != SA818_BW_25_KHZ) {
     return SA818_ERROR_INVALID_PARAM;
   }
-  if (freq_tx < 134.0f || freq_tx > 174.0f) {
-    LOG_ERR("TX freq out of range: %.4f", (double)freq_tx);
+  if (squelch < SA818_SQL_LEVEL_0 || squelch > SA818_SQL_LEVEL_8) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+  if (ctcss_tx < SA818_TONE_NONE || ctcss_tx > SA818_DCS_523) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+  if (ctcss_rx < SA818_TONE_NONE || ctcss_rx > SA818_DCS_523) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  /* Validate TX frequency (VHF: 134-174 MHz, UHF: 400-480 MHz) */
+  if (!((freq_tx >= 134.0f && freq_tx <= 174.0f) || (freq_tx >= 400.0f && freq_tx <= 480.0f))) {
+    LOG_ERR("TX freq out of range: %.4f (valid: 134-174 MHz or 400-480 MHz)", (double)freq_tx);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  /* Validate RX frequency (VHF: 134-174 MHz, UHF: 400-480 MHz) */
+  if (!((freq_rx >= 134.0f && freq_rx <= 174.0f) || (freq_rx >= 400.0f && freq_rx <= 480.0f))) {
+    LOG_ERR("RX freq out of range: %.4f (valid: 134-174 MHz or 400-480 MHz)", (double)freq_rx);
     return SA818_ERROR_INVALID_PARAM;
   }
 
@@ -209,7 +226,7 @@ sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, flo
     return SA818_ERROR_AT_COMMAND;
   }
 
-  LOG_INF("Group configured: TX=%.4f RX=%.4f SQ=%d", (double)freq_tx, (double)freq_rx, squelch);
+  LOG_INF("Group configured: TX=%.4f RX=%.4f SQ=%d", (double)freq_tx, (double)freq_rx, static_cast<int>(squelch));
   return SA818_OK;
 }
 
@@ -218,11 +235,11 @@ sa818_result sa818_at_set_group(const struct device *dev, uint8_t bandwidth, flo
  *
  * AT+DMOSETVOLUME=N where N is 1-8
  */
-sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume) {
+sa818_result sa818_at_set_volume(const struct device *dev, sa818_volume_level volume) {
   char cmd[32];
   char response[SA818_AT_RESPONSE_MAX_LEN];
 
-  if (volume < 1 || volume > 8) {
+  if (volume < SA818_VOLUME_1 || volume > SA818_VOLUME_8) {
     return SA818_ERROR_INVALID_PARAM;
   }
 
@@ -239,9 +256,9 @@ sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume) {
   }
 
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
-  data->current_volume = volume;
+  data->current_volume = static_cast<uint8_t>(volume);
 
-  LOG_INF("Volume set to %d", volume);
+  LOG_INF("Volume set to %d", static_cast<int>(volume));
   return SA818_OK;
 }
 
@@ -250,9 +267,18 @@ sa818_result sa818_at_set_volume(const struct device *dev, uint8_t volume) {
  *
  * AT+SETFILTER=PRE,HPF,LPF where each is 0 or 1
  */
-sa818_result sa818_at_set_filters(const struct device *dev, bool pre_emphasis, bool high_pass, bool low_pass) {
+sa818_result sa818_at_set_filters(const struct device *dev, sa818_filter_flags filters) {
   char cmd[64];
   char response[SA818_AT_RESPONSE_MAX_LEN];
+
+  // Validate filter flags - only bits 0-2 are valid
+  if ((filters & ~SA818_FILTER_ALL) != 0) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  bool pre_emphasis = (filters & SA818_FILTER_PRE_EMPHASIS) != 0;
+  bool high_pass = (filters & SA818_FILTER_HIGH_PASS) != 0;
+  bool low_pass = (filters & SA818_FILTER_LOW_PASS) != 0;
 
   snprintf(cmd, sizeof(cmd), "AT+SETFILTER=%d,%d,%d", pre_emphasis ? 1 : 0, high_pass ? 1 : 0, low_pass ? 1 : 0);
 
@@ -297,6 +323,32 @@ sa818_result sa818_at_read_rssi(const struct device *dev, uint8_t *rssi) {
 
   *rssi = atoi(rssi_str + 5);
   LOG_DBG("RSSI: %d", *rssi);
+
+  return SA818_OK;
+}
+
+/**
+ * @brief Read firmware version
+ *
+ * AT+VERSION command returns firmware version string
+ */
+sa818_result sa818_at_read_version(const struct device *dev, char *version, size_t version_len) {
+  char response[SA818_AT_RESPONSE_MAX_LEN];
+
+  if (!version || version_len == 0) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  sa818_result ret = sa818_at_send_command(dev, "AT+VERSION", response, sizeof(response), SA818_AT_TIMEOUT_MS);
+  if (ret != SA818_OK) {
+    return ret;
+  }
+
+  /* Copy version string to output buffer */
+  strncpy(version, response, version_len - 1);
+  version[version_len - 1] = '\0';
+
+  LOG_INF("Version: %s", version);
 
   return SA818_OK;
 }

@@ -173,6 +173,11 @@ class SA818Simulator:
         if m:
             return "+DMOCONNECT:0"
         
+        # VERSION: Read firmware version
+        m = re.match(r'AT\+VERSION', cmd, re.IGNORECASE)
+        if m:
+            return "SA818_V4.2"
+        
         # Generic AT test
         if cmd.upper() == "AT":
             return "+DMOCONNECT:0"
