@@ -67,10 +67,10 @@ struct wav_dac_data {
   struct k_mutex lock;
   bool channel_configured[8]; /* Max 8 channels */
   
-  /* Sample buffer for performance */
-  uint8_t *buffer;               /* Buffer for samples (allocated dynamically) */
-  uint32_t buffer_size;          /* Buffer size in bytes */
-  uint32_t buffer_pos;           /* Current position in buffer */
+  /* Sample buffer for performance. */
+  uint8_t *buffer;               /* Buffer for samples (allocated dynamically). */
+  uint32_t buffer_size;          /* Buffer size in bytes. */
+  uint32_t buffer_pos;           /* Current position in buffer. */
 };
 
 /**
@@ -157,7 +157,9 @@ static int wav_dac_flush_buffer(const struct device *dev) {
 
   size_t written = fwrite(data->buffer, 1, data->buffer_pos, data->file);
   if (written != data->buffer_pos) {
-    LOG_ERR("Failed to write buffer to WAV file (expected %u, wrote %zu)", data->buffer_pos, written);
+    int err = ferror(data->file);
+    LOG_ERR("Failed to write buffer to WAV file (expected %u, wrote %zu, ferror=%d)", 
+            data->buffer_pos, written, err);
     return -EIO;
   }
 
@@ -288,10 +290,10 @@ static int wav_dac_init(const struct device *dev) {
   data->samples_written = 0;
   memset(data->channel_configured, 0, sizeof(data->channel_configured));
   
-  /* Allocate sample buffer - check for overflow */
+  /* Allocate sample buffer - validate reasonable size. */
   uint32_t bytes_per_sample = CONFIG_DAC_WAV_BITS_PER_SAMPLE / 8;
-  if (CONFIG_DAC_WAV_BUFFER_SIZE > UINT32_MAX / bytes_per_sample) {
-    LOG_ERR("Buffer size too large (would overflow)");
+  if (CONFIG_DAC_WAV_BUFFER_SIZE > 1024u * 1024u) {
+    LOG_ERR("Buffer size too large (max 1048576 samples)");
     return -EINVAL;
   }
   data->buffer_size = CONFIG_DAC_WAV_BUFFER_SIZE * bytes_per_sample;
