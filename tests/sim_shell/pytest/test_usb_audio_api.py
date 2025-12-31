@@ -73,8 +73,8 @@ def test_audio_pipeline_initialization(shell):
     
     # Should not have audio initialization errors
     text = "\n".join(out).lower()
-    # Check that "dac error" pattern doesn't appear
-    assert "dac" not in text or "error" not in text or "dac error" not in text
+    # Check that error patterns don't appear
+    assert "error" not in text
 
 
 def test_sa818_audio_commands_without_usb(shell):

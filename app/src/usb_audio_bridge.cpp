@@ -83,9 +83,11 @@ struct usb_audio_bridge_ctx {
   uint8_t tx_ring_buf[TX_RING_SIZE];
   uint8_t rx_ring_buf[RX_RING_SIZE];
 
-  /* USB buffer pool */
-  uint8_t usb_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN);
-  uint8_t usb_buf_idx;
+  /* USB buffer pools - separate for each direction */
+  uint8_t usb_out_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN); /* USB OUT (receive) */
+  uint8_t usb_in_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN);  /* USB IN (transmit) */
+  uint8_t usb_out_buf_idx;
+  uint8_t usb_in_buf_idx;
 
   /* Synchronization */
   struct k_mutex lock;
@@ -204,8 +206,8 @@ static void *uac2_get_recv_buf(const struct device *dev, uint8_t terminal, uint1
 
   /* Return next buffer from pool - protect with mutex */
   k_mutex_lock(&ctx->lock, K_FOREVER);
-  void *buf = ctx->usb_buf_pool[ctx->usb_buf_idx];
-  ctx->usb_buf_idx = (ctx->usb_buf_idx + 1) % USB_BUF_COUNT;
+  void *buf = ctx->usb_out_buf_pool[ctx->usb_out_buf_idx];
+  ctx->usb_out_buf_idx = (ctx->usb_out_buf_idx + 1) % USB_BUF_COUNT;
   k_mutex_unlock(&ctx->lock);
 
   return buf;
@@ -276,10 +278,10 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
 
     /* Check if we have enough data to send */
     if (ring_buf_size_get(&ctx->rx_ring) >= USB_BYTES_PER_SOF) {
-      /* Allocate buffer from pool - mutex already held */
-      uint8_t buf_idx = ctx->usb_buf_idx;
-      ctx->usb_buf_idx = (ctx->usb_buf_idx + 1) % USB_BUF_COUNT;
-      void *buf = ctx->usb_buf_pool[buf_idx];
+      /* Allocate buffer from IN pool - mutex already held */
+      uint8_t buf_idx = ctx->usb_in_buf_idx;
+      ctx->usb_in_buf_idx = (ctx->usb_in_buf_idx + 1) % USB_BUF_COUNT;
+      void *buf = ctx->usb_in_buf_pool[buf_idx];
 
       /* Pull data from RX ring buffer */
       uint32_t bytes_read = ring_buf_get(&ctx->rx_ring, (uint8_t *)buf, USB_BYTES_PER_SOF);
@@ -331,7 +333,8 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   /* Reset state */
   ctx->tx_enabled = false;
   ctx->rx_enabled = false;
-  ctx->usb_buf_idx = 0;
+  ctx->usb_out_buf_idx = 0;
+  ctx->usb_in_buf_idx = 0;
 
   /* Register UAC2 callbacks */
   usbd_uac2_set_ops(uac2_dev, &uac2_ops, ctx);

@@ -56,7 +56,9 @@ struct sa818_audio_stream_ctx {
  * 2. Updating all API functions to access ctx via dev->data
  * 3. Ensuring proper initialization/cleanup per device instance
  */
-static struct sa818_audio_stream_ctx audio_ctx;
+static struct sa818_audio_stream_ctx audio_ctx = {
+  .lock = Z_MUTEX_INITIALIZER(audio_ctx.lock),
+};
 
 /**
  * @brief Audio processing work handler
@@ -155,13 +157,6 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
   /* Store format */
   audio_ctx.format = *format;
   audio_ctx.dev = dev;
-
-  /* Initialize mutex if not already done */
-  static bool mutex_initialized = false;
-  if (!mutex_initialized) {
-    k_mutex_init(&audio_ctx.lock);
-    mutex_initialized = true;
-  }
 
   /* Initialize work queue if not already done */
   k_work_init_delayable(&audio_ctx.audio_work, audio_stream_work_handler);
