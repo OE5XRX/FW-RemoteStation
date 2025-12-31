@@ -93,7 +93,6 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
 - Konfigurierbare Sample Rate, Bit Depth, Channels
 
 ### 2. USB Audio Bridge (Application)
-### 2. USB Audio Bridge (Application)
 
 **Source**: `app/src/usb_audio_bridge.cpp`
 
@@ -132,8 +131,10 @@ static const struct uac2_ops sa818_uac2_ops = {
 
 ### 1. Device Tree Konfiguration
 
+UAC2 configuration is included directly in the base device tree:
+
 ```dts
-/* boards/oe5xrx/fm_board/fm_board_usb_composite.overlay */
+/* boards/oe5xrx/fm_board/fm_board.dts */
 uac2_radio: usb_audio2 {
     compatible = "zephyr,uac2";
     status = "okay";
@@ -172,9 +173,8 @@ int main(void) {
 ### 3. Build
 
 ```bash
-# Mit USB Audio Overlay
-west build -p -b fm_board/stm32f302xc app -- \
-  -DEXTRA_DTC_OVERLAY_FILE="boards/oe5xrx/fm_board/fm_board_usb_composite.overlay"
+# Build with USB Audio
+west build -p -b fm_board/stm32f302xc app
 
 # Flash
 west flash

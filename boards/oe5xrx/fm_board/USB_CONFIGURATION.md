@@ -71,8 +71,7 @@ Device Descriptor:
 ## Device Tree Konfiguration
 
 Die USB-Konfiguration erfolgt über:
-- **Base DTS** (`fm_board.dts`): USB-Peripheral und CDC ACM
-- **USB Overlay** (`fm_board_usb_composite.overlay`): UAC2 Audio-Streaming
+- **Base DTS** (`fm_board.dts`): USB-Peripheral, CDC ACM und UAC2 Audio-Streaming
 
 ### UAC2 Audio-Terminals
 
