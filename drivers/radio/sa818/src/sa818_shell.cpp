@@ -11,6 +11,7 @@
 
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
+#include <sa818/sa818_audio.h>
 #include <stdlib.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -467,7 +468,93 @@ static int cmd_sa818_at_version(const struct shell *shell, size_t argc, char **a
   return 0;
 }
 
+/* Test Tone Commands */
+static int cmd_sa818_test_tone(const struct shell *shell, size_t argc, char **argv) {
+  if (argc < 2) {
+    shell_error(shell, "usage: sa818 test tone <freq_hz> [duration_ms] [amplitude]");
+    shell_error(shell, "  freq_hz: 100-3000 Hz");
+    shell_error(shell, "  duration_ms: 0 = continuous (default)");
+    shell_error(shell, "  amplitude: 0-255 (default: 128)");
+    shell_error(shell, "example: sa818 test tone 1000          (continuous 1 kHz tone)");
+    shell_error(shell, "example: sa818 test tone 1000 5000     (1 kHz tone for 5 seconds)");
+    shell_error(shell, "example: sa818 test tone 1750 3000 200 (1750 Hz for 3s at 78%% amplitude)");
+    return -EINVAL;
+  }
+
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  /* Parse frequency */
+  int freq_hz = atoi(argv[1]);
+  if (freq_hz < 100 || freq_hz > 3000) {
+    shell_error(shell, "invalid frequency: %d Hz (valid range: 100-3000 Hz)", freq_hz);
+    return -EINVAL;
+  }
+
+  /* Parse optional duration */
+  uint32_t duration_ms = 0;
+  if (argc >= 3) {
+    int duration = atoi(argv[2]);
+    if (duration < 0) {
+      shell_error(shell, "invalid duration: %d ms (must be non-negative)", duration);
+      return -EINVAL;
+    }
+    duration_ms = static_cast<uint32_t>(duration);
+  }
+
+  /* Parse optional amplitude */
+  uint8_t amplitude = 128; /* Default to 50% */
+  if (argc >= 4) {
+    int amp = atoi(argv[3]);
+    if (amp < 0 || amp > 255) {
+      shell_error(shell, "invalid amplitude: %d (valid range: 0-255)", amp);
+      return -EINVAL;
+    }
+    amplitude = static_cast<uint8_t>(amp);
+  }
+
+  /* Generate test tone */
+  sa818_result ret = sa818_audio_generate_test_tone(dev, static_cast<uint16_t>(freq_hz), duration_ms, amplitude);
+  if (ret != SA818_OK) {
+    shell_error(shell, "Failed to generate test tone: %d", ret);
+    return ret;
+  }
+
+  if (duration_ms > 0) {
+    shell_print(shell, "Test tone started: %d Hz for %u ms at amplitude %u", freq_hz, duration_ms, amplitude);
+  } else {
+    shell_print(shell, "Continuous test tone started: %d Hz at amplitude %u", freq_hz, amplitude);
+  }
+
+  return 0;
+}
+
+static int cmd_sa818_test_tone_stop(const struct shell *shell, size_t argc, char **argv) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  sa818_result ret = sa818_audio_stop_test_tone(dev);
+  if (ret != SA818_OK) {
+    shell_error(shell, "Failed to stop test tone: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "Test tone stopped");
+  return 0;
+}
+
 // clang-format off
+SHELL_STATIC_SUBCMD_SET_CREATE(
+    sa818_test_cmds,
+    SHELL_CMD(tone, NULL, "Generate test tone", cmd_sa818_test_tone),
+    SHELL_CMD(tone_stop, NULL, "Stop test tone", cmd_sa818_test_tone_stop),
+    SHELL_SUBCMD_SET_END);
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_at_cmds,
     SHELL_CMD(connect, NULL, "Connection handshake", cmd_sa818_at_connect),
@@ -486,6 +573,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     SHELL_CMD(powerlevel, NULL, "Power level", cmd_sa818_powerlevel),
     SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_squelch, NULL, "Simulate squelch (sim only)", cmd_sa818_squelch_sim),
     SHELL_CMD(at, &sa818_at_cmds, "AT commands", NULL),
+    SHELL_CMD(test, &sa818_test_cmds, "Test commands", NULL),
     SHELL_SUBCMD_SET_END);
 // clang-format on
 
