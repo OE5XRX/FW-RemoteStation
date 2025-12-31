@@ -32,6 +32,17 @@ LOG_MODULE_REGISTER(sa818_audio, LOG_LEVEL_INF);
 static void test_tone_work_handler(struct k_work *work);
 
 /**
+ * @brief Reset DAC to midpoint value
+ *
+ * @param cfg Device configuration
+ */
+static void reset_dac_to_midpoint(const struct sa818_config *cfg) {
+  uint32_t dac_max = (1U << cfg->audio_out_resolution) - 1;
+  uint32_t dac_midpoint = dac_max / 2;
+  dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_midpoint);
+}
+
+/**
  * @brief Initialize audio subsystem
  *
  * Sets up ADC for audio monitoring and DAC for audio output.
@@ -205,9 +216,7 @@ static void test_tone_work_handler(struct k_work *work) {
       data->audio_tx_enabled = false;
 
       /* Reset DAC to midpoint before stopping */
-      uint32_t dac_max = (1U << cfg->audio_out_resolution) - 1;
-      uint32_t dac_midpoint = dac_max / 2;
-      dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_midpoint);
+      reset_dac_to_midpoint(cfg);
 
       k_mutex_unlock(&data->lock);
       return;
@@ -357,9 +366,7 @@ sa818_result sa818_audio_stop_test_tone(const struct device *dev) {
 
   /* Reset DAC to midpoint before disabling TX path */
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
-  uint32_t dac_max = (1U << cfg->audio_out_resolution) - 1;
-  uint32_t dac_midpoint = dac_max / 2;
-  dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_midpoint);
+  reset_dac_to_midpoint(cfg);
 
   /* Disable TX audio path */
   data->audio_tx_enabled = false;
