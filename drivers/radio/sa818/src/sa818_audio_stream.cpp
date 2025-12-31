@@ -33,7 +33,6 @@ struct sa818_audio_stream_ctx {
   struct sa818_audio_format format;
 
   struct k_work_delayable audio_work;
-  struct k_mutex lock;
   bool streaming;
 
   /* Buffers for audio processing */
@@ -56,9 +55,11 @@ struct sa818_audio_stream_ctx {
  * 2. Updating all API functions to access ctx via dev->data
  * 3. Ensuring proper initialization/cleanup per device instance
  */
-static struct sa818_audio_stream_ctx audio_ctx = {
-  .lock = Z_MUTEX_INITIALIZER(audio_ctx.lock),
-};
+
+/* Static mutex for audio context - initialized at compile time */
+K_MUTEX_DEFINE(audio_ctx_mutex);
+
+static struct sa818_audio_stream_ctx audio_ctx;
 
 /**
  * @brief Audio processing work handler
@@ -73,9 +74,9 @@ static void audio_stream_work_handler(struct k_work *work) {
   struct k_work_delayable *dwork = k_work_delayable_from_work(work);
   struct sa818_audio_stream_ctx *ctx = CONTAINER_OF(dwork, struct sa818_audio_stream_ctx, audio_work);
 
-  k_mutex_lock(&ctx->lock, K_FOREVER);
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   bool streaming = ctx->streaming;
-  k_mutex_unlock(&ctx->lock);
+  k_mutex_unlock(&audio_ctx_mutex);
 
   if (!streaming) {
     return;
@@ -162,10 +163,10 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
   k_work_init_delayable(&audio_ctx.audio_work, audio_stream_work_handler);
 
   /* Start streaming */
-  k_mutex_lock(&audio_ctx.lock, K_FOREVER);
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = true;
-  k_mutex_unlock(&audio_ctx.lock);
-  
+  k_mutex_unlock(&audio_ctx_mutex);
+
   k_work_reschedule(&audio_ctx.audio_work, K_MSEC(1));
 
   LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);
@@ -181,10 +182,10 @@ sa818_result sa818_audio_stream_stop(const struct device *dev) {
     return SA818_ERROR_INVALID_PARAM;
   }
 
-  k_mutex_lock(&audio_ctx.lock, K_FOREVER);
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = false;
-  k_mutex_unlock(&audio_ctx.lock);
-  
+  k_mutex_unlock(&audio_ctx_mutex);
+
   k_work_cancel_delayable(&audio_ctx.audio_work);
 
   LOG_INF("Audio streaming stopped");
