@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(sa818_audio, LOG_LEVEL_INF);
 #define TEST_TONE_UPDATE_INTERVAL_US (1000000 / TEST_TONE_SAMPLE_RATE_HZ) /* 125 us */
 #define TEST_TONE_MIN_FREQ_HZ 100
 #define TEST_TONE_MAX_FREQ_HZ 3000
+#define TEST_TONE_MAX_DURATION_MS 3600000 /* 1 hour */
 
 /* Forward declarations */
 static void test_tone_work_handler(struct k_work *work);
@@ -39,7 +40,11 @@ sa818_result sa818_audio_init(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
 
-  /* Initialize test tone work queue */
+  /* Initialize test tone work queue (handle possible re-init safely) */
+  if (data->test_tone_dev != nullptr) {
+    /* Cancel any pending or scheduled test tone work before reinitializing */
+    k_work_cancel_delayable(&data->test_tone_work);
+  }
   k_work_init_delayable(&data->test_tone_work, test_tone_work_handler);
   data->test_tone_dev = dev;
   data->test_tone_active = false;
@@ -198,6 +203,12 @@ static void test_tone_work_handler(struct k_work *work) {
       LOG_INF("Test tone duration expired");
       data->test_tone_active = false;
       data->audio_tx_enabled = false;
+
+      /* Reset DAC to midpoint before stopping */
+      uint32_t dac_max = (1U << cfg->audio_out_resolution) - 1;
+      uint32_t dac_midpoint = dac_max / 2;
+      dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_midpoint);
+
       k_mutex_unlock(&data->lock);
       return;
     }
@@ -230,13 +241,14 @@ static void test_tone_work_handler(struct k_work *work) {
   }
 
   /* Update phase for next sample */
-  constexpr float two_pi = 2.0f * static_cast<float>(M_PI);
-  float phase_increment = two_pi * static_cast<float>(data->test_tone_freq) / static_cast<float>(TEST_TONE_SAMPLE_RATE_HZ);
-  data->test_tone_phase += phase_increment;
+  constexpr double two_pi = 2.0 * M_PI;
+  double phase_increment = two_pi * static_cast<double>(data->test_tone_freq) / static_cast<double>(TEST_TONE_SAMPLE_RATE_HZ);
+  data->test_tone_phase += static_cast<float>(phase_increment);
 
-  /* Wrap phase to [0, 2*PI) */
-  if (data->test_tone_phase >= two_pi) {
-    data->test_tone_phase -= two_pi;
+  /* Wrap phase to [0, 2*PI) using modulo to prevent accumulation errors */
+  data->test_tone_phase = std::fmod(data->test_tone_phase, static_cast<float>(two_pi));
+  if (data->test_tone_phase < 0.0f) {
+    data->test_tone_phase += static_cast<float>(two_pi);
   }
 
   k_mutex_unlock(&data->lock);
@@ -262,6 +274,11 @@ sa818_result sa818_audio_generate_test_tone(const struct device *dev, uint16_t f
   /* Validate parameters */
   if (freq_hz < TEST_TONE_MIN_FREQ_HZ || freq_hz > TEST_TONE_MAX_FREQ_HZ) {
     LOG_ERR("Invalid frequency: %u Hz (valid range: %u-%u Hz)", freq_hz, TEST_TONE_MIN_FREQ_HZ, TEST_TONE_MAX_FREQ_HZ);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  if (duration_ms > TEST_TONE_MAX_DURATION_MS) {
+    LOG_ERR("Invalid duration: %u ms (maximum: %u ms)", duration_ms, TEST_TONE_MAX_DURATION_MS);
     return SA818_ERROR_INVALID_PARAM;
   }
 
@@ -299,7 +316,16 @@ sa818_result sa818_audio_generate_test_tone(const struct device *dev, uint16_t f
 
   k_mutex_unlock(&data->lock);
 
-  /* Start work queue */
+  /* Start work queue
+   *
+   * Note:
+   * - Using K_NO_WAIT schedules the first test tone sample to run as soon
+   *   as the system work queue can execute it (minimal initial delay).
+   * - Subsequent samples are timed inside test_tone_work_handler based on
+   *   TEST_TONE_SAMPLE_RATE_HZ / TEST_TONE_UPDATE_INTERVAL_US.
+   * - If the system work queue is heavily loaded, the actual timing of the
+   *   first (and possibly later) samples may deviate from the ideal schedule.
+   */
   k_work_schedule(&data->test_tone_work, K_NO_WAIT);
 
   return SA818_OK;
@@ -328,6 +354,12 @@ sa818_result sa818_audio_stop_test_tone(const struct device *dev) {
   /* Stop test tone */
   data->test_tone_active = false;
   k_work_cancel_delayable(&data->test_tone_work);
+
+  /* Reset DAC to midpoint before disabling TX path */
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  uint32_t dac_max = (1U << cfg->audio_out_resolution) - 1;
+  uint32_t dac_midpoint = dac_max / 2;
+  dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_midpoint);
 
   /* Disable TX audio path */
   data->audio_tx_enabled = false;

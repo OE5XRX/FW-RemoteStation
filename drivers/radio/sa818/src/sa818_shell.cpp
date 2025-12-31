@@ -497,7 +497,12 @@ static int cmd_sa818_test_tone(const struct shell *shell, size_t argc, char **ar
   /* Parse optional duration */
   uint32_t duration_ms = 0;
   if (argc >= 3) {
-    duration_ms = static_cast<uint32_t>(atoi(argv[2]));
+    int duration = atoi(argv[2]);
+    if (duration < 0) {
+      shell_error(shell, "invalid duration: %d ms (must be non-negative)", duration);
+      return -EINVAL;
+    }
+    duration_ms = static_cast<uint32_t>(duration);
   }
 
   /* Parse optional amplitude */

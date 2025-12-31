@@ -67,11 +67,15 @@ extern "C" {
 /**
  * @brief Generate test tone on TX audio output
  *
+ * If a test tone is already active, it will be stopped and replaced with the new tone.
+ *
  * @param dev SA818 device
  * @param freq_hz Tone frequency in Hz (100-3000)
- * @param duration_ms Duration in milliseconds (0 = continuous)
+ * @param duration_ms Duration in milliseconds (0 = continuous, max 3600000 for 1 hour)
  * @param amplitude Tone amplitude (0-255)
- * @return SA818_OK on success, error code on failure
+ * @return SA818_OK on success; SA818_ERROR_INVALID_DEVICE if @p dev is not a valid SA818 device;
+ *         SA818_ERROR_INVALID_PARAM if @p freq_hz or @p duration_ms is out of range;
+ *         SA818_ERROR_DAC if the DAC device is not available
  */
 [[nodiscard]] enum sa818_result sa818_audio_generate_test_tone(const struct device *dev, uint16_t freq_hz, uint32_t duration_ms, uint8_t amplitude);
 
