@@ -6,6 +6,11 @@ project(app LANGUAGES C CXX ASM)
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 target_sources(app PRIVATE src/main.cpp)
 
+# USB Audio Bridge (application-level integration)
+if(CONFIG_USBD_AUDIO2_CLASS)
+  target_sources(app PRIVATE src/usb_audio_bridge.cpp)
+endif()
+
 if (CONFIG_BOARD_NATIVE_SIM)
     target_sources(app PRIVATE
     src/sim_audio/sample_clock.cpp

@@ -1,9 +1,10 @@
 /**
  * @file main_usb_audio.cpp
- * @brief SA818 USB Audio Application Example
+ * @brief SA818 USB Audio Application
  *
  * Demonstrates USB composite device with CDC ACM, UAC2, and DFU.
- * This file shows how to integrate the SA818 driver with USB Audio.
+ * Shows clean separation: SA818 driver provides generic audio interface,
+ * application connects it to USB Audio.
  *
  * To build for FM Board with USB Audio:
  *   west build -p -b fm_board/stm32f302xc app -- \
@@ -13,12 +14,12 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
+#include "usb_audio_bridge.h"
+
 #include <sa818/sa818.h>
-#include <sa818/sa818_usb_audio.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/usb/class/usbd_uac2.h>
 #include <zephyr/usb/usbd.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -92,21 +93,14 @@ int main(void) {
   }
   LOG_INF("UAC2 device ready");
 
-  /* Initialize USB Audio integration */
-  ret = sa818_usb_audio_init(sa818, uac2);
-  if (ret != SA818_OK) {
-    LOG_ERR("USB Audio init failed: %d", ret);
-    return -EIO;
+  /* Initialize USB Audio Bridge (application-level integration) */
+  ret = usb_audio_bridge_init(sa818, uac2);
+  if (ret != 0) {
+    LOG_ERR("USB Audio Bridge init failed: %d", ret);
+    return ret;
   }
 
-  /* Enable USB Audio */
-  ret = sa818_usb_audio_enable(sa818);
-  if (ret != SA818_OK) {
-    LOG_ERR("USB Audio enable failed: %d", ret);
-    return -EIO;
-  }
-
-  LOG_INF("USB Audio enabled and ready");
+  LOG_INF("USB Audio Bridge enabled");
 #else
   LOG_WRN("USB Audio not configured in device tree");
 #endif
