@@ -41,6 +41,21 @@ struct sa818_audio_stream_ctx {
   uint8_t rx_buffer[SA818_AUDIO_BUFFER_SIZE * SA818_AUDIO_SAMPLE_SIZE];
 };
 
+/*
+ * DESIGN NOTE: Global singleton audio context
+ *
+ * The current implementation uses a single global audio_ctx, which means only
+ * one SA818 device can stream audio at a time. This is acceptable for the
+ * current use case (single radio system).
+ *
+ * If support for multiple SA818 radios is needed in the future, this should be
+ * refactored to store the audio context in the device's runtime data structure
+ * (struct sa818_data), similar to how other device-specific state is managed.
+ * This would require:
+ * 1. Adding audio_stream_ctx to struct sa818_data
+ * 2. Updating all API functions to access ctx via dev->data
+ * 3. Ensuring proper initialization/cleanup per device instance
+ */
 static struct sa818_audio_stream_ctx audio_ctx;
 
 /**
