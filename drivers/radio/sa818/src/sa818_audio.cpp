@@ -12,6 +12,7 @@
 #include "sa818_priv.h"
 
 #include <cmath>
+#include <numbers>
 #include <sa818/sa818_audio.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/adc.h>
@@ -250,7 +251,7 @@ static void test_tone_work_handler(struct k_work *work) {
   }
 
   /* Update phase for next sample */
-  constexpr double two_pi = 2.0 * M_PI;
+  constexpr double two_pi = 2.0 * std::numbers::pi_v<double>;
   double phase_increment = two_pi * static_cast<double>(data->test_tone_freq) / static_cast<double>(TEST_TONE_SAMPLE_RATE_HZ);
   data->test_tone_phase += static_cast<float>(phase_increment);
 
