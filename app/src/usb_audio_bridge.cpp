@@ -281,7 +281,7 @@ K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7
 /**
  * @brief Initialize USB Audio Bridge
  */
-int usb_audio_bridge_init(const struct device *sa818_dev, const struct device *uac2_dev) {
+extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struct device *uac2_dev) {
   struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
 
   if (ctx->sa818_dev != NULL) {

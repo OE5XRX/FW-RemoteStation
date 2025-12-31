@@ -6,10 +6,6 @@
  * Shows clean separation: SA818 driver provides generic audio interface,
  * application connects it to USB Audio.
  *
- * To build for FM Board with USB Audio:
- *   west build -p -b fm_board/stm32f302xc app -- \
- *     -DEXTRA_DTC_OVERLAY_FILE="boards/oe5xrx/fm_board/fm_board_usb_composite.overlay"
- *
  * @copyright Copyright (c) 2025 OE5XRX
  * @spdx-license-identifier LGPL-3.0-or-later
  */
@@ -20,7 +16,10 @@
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/usb/usbd.h>
+
+extern "C" {
+#include "sample_usbd.h"
+}
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -34,40 +33,26 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #endif
 
 /**
- * @brief USB device initialization
- */
-static int usb_init(void) {
-  const struct device *usbd = DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0));
-
-  if (!device_is_ready(usbd)) {
-    LOG_ERR("USB device not ready");
-    return -ENODEV;
-  }
-
-  /* Initialize USB device stack */
-  int ret = usbd_init(usbd);
-  if (ret != 0) {
-    LOG_ERR("USB init failed: %d", ret);
-    return ret;
-  }
-
-  /* Enable USB device */
-  ret = usbd_enable(usbd);
-  if (ret != 0) {
-    LOG_ERR("USB enable failed: %d", ret);
-    return ret;
-  }
-
-  LOG_INF("USB device initialized");
-  return 0;
-}
-
-/**
  * @brief Main application
  */
 int main(void) {
   LOG_INF("SA818 USB Audio Application Starting...");
   LOG_INF("Build: %s %s", __DATE__, __TIME__);
+
+  /* Initialize USB device (provided by common sample code) */
+  struct usbd_context *sample_usbd = sample_usbd_init_device(NULL);
+  if (sample_usbd == NULL) {
+    LOG_ERR("Failed to initialize USB device");
+    return -ENODEV;
+  }
+
+  /* Enable USB device */
+  int ret = usbd_enable(sample_usbd);
+  if (ret != 0) {
+    LOG_ERR("Failed to enable USB device: %d", ret);
+    return ret;
+  }
+  LOG_INF("USB device enabled");
 
   /* Get SA818 device */
   const struct device *sa818 = DEVICE_DT_GET(SA818_NODE);
@@ -76,13 +61,6 @@ int main(void) {
     return -ENODEV;
   }
   LOG_INF("SA818 device ready");
-
-  /* Initialize USB device stack */
-  int ret = usb_init();
-  if (ret != 0) {
-    LOG_ERR("USB initialization failed: %d", ret);
-    return ret;
-  }
 
 #if DT_NODE_EXISTS(UAC2_NODE)
   /* Get UAC2 device */
