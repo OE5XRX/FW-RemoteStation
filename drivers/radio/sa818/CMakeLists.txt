@@ -14,6 +14,11 @@ zephyr_library_sources(
   src/sa818_shell.cpp
 )
 
+# USB Audio integration (conditional)
+zephyr_library_sources_ifdef(CONFIG_USBD_AUDIO2_CLASS
+  src/sa818_usb_audio.cpp
+)
+
 # Include directories
 zephyr_include_directories(include)
 zephyr_library_include_directories(src)
