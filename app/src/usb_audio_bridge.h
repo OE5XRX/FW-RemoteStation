@@ -27,8 +27,7 @@ extern "C" {
  * @param uac2_dev UAC2 device instance
  * @return 0 on success, negative errno on failure
  */
-int usb_audio_bridge_init(const struct device *sa818_dev,
-                           const struct device *uac2_dev);
+int usb_audio_bridge_init(const struct device *sa818_dev, const struct device *uac2_dev);
 
 #ifdef __cplusplus
 }

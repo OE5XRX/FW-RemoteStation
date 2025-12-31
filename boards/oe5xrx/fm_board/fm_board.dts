@@ -4,12 +4,13 @@
  *
  * FM Board Device Tree
  * Hardware configuration for STM32F302-based FM transceiver board
- * with SA818 radio module and USB CDC console
+ * with SA818 radio module and USB composite device (CDC, UAC2, DFU)
  */
 
 /dts-v1/;
 #include <st/f3/stm32f302Xc.dtsi>
 #include <st/f3/stm32f302v(b-c)tx-pinctrl.dtsi>
+#include <zephyr/dt-bindings/usb/audio.h>
 
 / {
 	model = "FM-Transceiver for the OE5XRX Remote Station";
@@ -59,6 +60,85 @@
   aliases {
     sa818 = &sa818;
   };
+
+	/*
+	 * USB Audio Class 2 (UAC2) Configuration
+	 * Provides bidirectional audio streaming for SA818 radio
+	 * - OUT: USB Host -> SA818 TX (audio to transmit)
+	 * - IN: SA818 RX -> USB Host (received audio)
+	 */
+	uac2_radio: usb_audio2 {
+		compatible = "zephyr,uac2";
+		status = "okay";
+		full-speed;
+		high-speed;
+		audio-function = <AUDIO_FUNCTION_OTHER>;
+
+		/* Audio Clock Source - 8kHz for SA818 */
+		uac_aclk: aclk {
+			compatible = "zephyr,uac2-clock-source";
+			clock-type = "internal-fixed";
+			frequency-control = "read-only";
+			sampling-frequencies = <8000>;
+		};
+
+		/*
+		 * Output Path: USB -> SA818 TX
+		 * Audio from host is sent to SA818 for transmission
+		 */
+		usb_out_terminal: usb_out {
+			compatible = "zephyr,uac2-input-terminal";
+			clock-source = <&uac_aclk>;
+			terminal-type = <USB_TERMINAL_STREAMING>;
+			/* Mono audio for radio transmission */
+			front-center;
+		};
+
+		sa818_tx_output: sa818_tx {
+			compatible = "zephyr,uac2-output-terminal";
+			data-source = <&usb_out_terminal>;
+			clock-source = <&uac_aclk>;
+			terminal-type = <EMBEDDED_TERMINAL_RADIO_TRANSMITTER>;
+		};
+
+		/*
+		 * Input Path: SA818 RX -> USB
+		 * Received audio from SA818 is sent to host
+		 */
+		sa818_rx_input: sa818_rx {
+			compatible = "zephyr,uac2-input-terminal";
+			clock-source = <&uac_aclk>;
+			terminal-type = <EMBEDDED_TERMINAL_RADIO_RECEIVER>;
+			/* Mono audio from radio receiver */
+			front-center;
+		};
+
+		usb_in_terminal: usb_in {
+			compatible = "zephyr,uac2-output-terminal";
+			data-source = <&sa818_rx_input>;
+			clock-source = <&uac_aclk>;
+			terminal-type = <USB_TERMINAL_STREAMING>;
+		};
+
+		/*
+		 * Audio Streaming Interfaces
+		 */
+		as_iso_out: out_interface {
+			compatible = "zephyr,uac2-audio-streaming";
+			linked-terminal = <&usb_out_terminal>;
+			implicit-feedback;
+			subslot-size = <2>;
+			bit-resolution = <16>;
+		};
+
+		as_iso_in: in_interface {
+			compatible = "zephyr,uac2-audio-streaming";
+			linked-terminal = <&usb_in_terminal>;
+			implicit-feedback;
+			subslot-size = <2>;
+			bit-resolution = <16>;
+		};
+	};
 
 	sa818: sa818 {
     compatible = "sa,sa818";

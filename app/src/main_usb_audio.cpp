@@ -124,10 +124,8 @@ int main(void) {
 
     /* Optional: Print status periodically */
     sa818_status status = sa818_get_status(sa818);
-    LOG_INF("SA818 Status - Power: %s, PTT: %s, SQL: %s",
-            status.device_power == SA818_DEVICE_ON ? "ON" : "OFF",
-            status.ptt_state == SA818_PTT_ON ? "ON" : "OFF",
-            status.squelch_state == SA818_SQUELCH_OPEN ? "OPEN" : "CLOSED");
+    LOG_INF("SA818 Status - Power: %s, PTT: %s, SQL: %s", status.device_power == SA818_DEVICE_ON ? "ON" : "OFF",
+            status.ptt_state == SA818_PTT_ON ? "ON" : "OFF", status.squelch_state == SA818_SQUELCH_OPEN ? "OPEN" : "CLOSED");
   }
 
   return 0;
