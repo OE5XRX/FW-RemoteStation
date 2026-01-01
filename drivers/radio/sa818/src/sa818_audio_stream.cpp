@@ -85,13 +85,21 @@ static void audio_stream_work_handler(struct k_work *work) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(ctx->dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(ctx->dev->data);
 
+  /* Protect access to audio enable flags */
+  k_mutex_lock(&data->lock, K_FOREVER);
+  bool tx_enabled = data->audio_tx_enabled;
+  bool rx_enabled = data->audio_rx_enabled;
+  k_mutex_unlock(&data->lock);
+
   /* Process TX: Get audio from application -> DAC */
-  if (ctx->callbacks.tx_request && data->audio_tx_enabled) {
+  if (ctx->callbacks.tx_request && tx_enabled) {
     size_t bytes = ctx->callbacks.tx_request(ctx->dev, ctx->tx_buffer, sizeof(ctx->tx_buffer), ctx->callbacks.user_data);
 
-    if (bytes >= SA818_AUDIO_SAMPLE_SIZE) {
-      /* Write first sample to DAC */
-      int16_t pcm_sample = (int16_t)((ctx->tx_buffer[1] << 8) | ctx->tx_buffer[0]);
+    /* Process all complete samples in the TX buffer */
+    size_t samples = bytes / SA818_AUDIO_SAMPLE_SIZE;
+    for (size_t i = 0; i < samples; ++i) {
+      const uint8_t *sample_ptr = &ctx->tx_buffer[i * SA818_AUDIO_SAMPLE_SIZE];
+      int16_t pcm_sample = (int16_t)((sample_ptr[1] << 8) | sample_ptr[0]);
       /* Scale signed 16-bit (-32768 to 32767) to unsigned DAC range */
       uint32_t dac_value = ((uint32_t)(pcm_sample + 32768) << (cfg->audio_out_resolution - 16));
       dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
@@ -99,20 +107,24 @@ static void audio_stream_work_handler(struct k_work *work) {
   }
 
   /* Process RX: ADC -> Application callback */
-  if (ctx->callbacks.rx_data && data->audio_rx_enabled) {
+  if (ctx->callbacks.rx_data && rx_enabled) {
     /* Read ADC */
     uint16_t adc_sequence_buf[1];
-    struct adc_sequence sequence = {
-        .buffer = adc_sequence_buf,
-        .buffer_size = sizeof(adc_sequence_buf),
-    };
+    struct adc_sequence sequence = {};
+
+    adc_sequence_init_dt(&cfg->audio_in, &sequence);
+    sequence.buffer = adc_sequence_buf;
+    sequence.buffer_size = sizeof(adc_sequence_buf);
 
     int ret = adc_read_dt(&cfg->audio_in, &sequence);
     if (ret == 0) {
-      /* Convert ADC value to 16-bit PCM */
-      int16_t adc_value = (int16_t)adc_sequence_buf[0];
-      /* Scale 12-bit ADC (0-4095) to signed 16-bit (-32768 to 32767) */
-      int16_t pcm_sample = (int16_t)((adc_value - 2048) << 4);
+      /* Convert ADC value to 16-bit PCM.
+       * We request 16-bit resolution from the ADC driver, so the sample is in
+       * the full unsigned 16-bit range (0-65535). Map this to signed 16-bit
+       * PCM (-32768 to 32767) by subtracting the midpoint.
+       */
+      uint16_t adc_value = adc_sequence_buf[0];
+      int16_t pcm_sample = (int16_t)((int32_t)adc_value - 32768);
 
       ctx->rx_buffer[0] = (uint8_t)(pcm_sample & 0xFF);
       ctx->rx_buffer[1] = (uint8_t)((pcm_sample >> 8) & 0xFF);
@@ -122,9 +134,13 @@ static void audio_stream_work_handler(struct k_work *work) {
     }
   }
 
-  /* Reschedule based on sample rate */
-  uint32_t period_us = 1000000 / ctx->format.sample_rate;
-  k_work_reschedule(&ctx->audio_work, K_USEC(period_us));
+  /* Reschedule based on sample rate - check streaming flag again under mutex */
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
+  if (ctx->streaming) {
+    uint32_t period_us = 1000000 / ctx->format.sample_rate;
+    k_work_reschedule(&ctx->audio_work, K_USEC(period_us));
+  }
+  k_mutex_unlock(&audio_ctx_mutex);
 }
 
 /**
@@ -137,6 +153,9 @@ sa818_result sa818_audio_stream_register(const struct device *dev, const struct 
 
   audio_ctx.dev = dev;
   audio_ctx.callbacks = *callbacks;
+
+  /* Initialize work queue once during registration */
+  k_work_init_delayable(&audio_ctx.audio_work, audio_stream_work_handler);
 
   LOG_INF("Audio callbacks registered");
   return SA818_OK;
@@ -158,9 +177,6 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
   /* Store format */
   audio_ctx.format = *format;
   audio_ctx.dev = dev;
-
-  /* Initialize work queue if not already done */
-  k_work_init_delayable(&audio_ctx.audio_work, audio_stream_work_handler);
 
   /* Start streaming */
   k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
@@ -186,7 +202,9 @@ sa818_result sa818_audio_stream_stop(const struct device *dev) {
   audio_ctx.streaming = false;
   k_mutex_unlock(&audio_ctx_mutex);
 
-  k_work_cancel_delayable(&audio_ctx.audio_work);
+  /* Ensure work is fully stopped before returning */
+  struct k_work_sync sync;
+  k_work_cancel_delayable_sync(&audio_ctx.audio_work, &sync);
 
   LOG_INF("Audio streaming stopped");
   return SA818_OK;

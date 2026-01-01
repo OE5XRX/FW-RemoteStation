@@ -148,18 +148,31 @@ uac2_radio: usb_audio2 {
 #include "usb_audio_bridge.h"
 #include <sa818/sa818.h>
 
+extern "C" {
+#include "sample_usbd.h"
+}
+
 int main(void) {
+    /* Initialize USB device (provided by common sample code) */
+    struct usbd_context *sample_usbd = sample_usbd_init_device(NULL);
+    if (sample_usbd == NULL) {
+        return -ENODEV;
+    }
+
+    /* Enable USB device */
+    int ret = usbd_enable(sample_usbd);
+    if (ret != 0) {
+        return ret;
+    }
+
     /* Get devices */
     const struct device *sa818 = DEVICE_DT_GET(DT_ALIAS(sa818));
     const struct device *uac2 = DEVICE_DT_GET(DT_NODELABEL(uac2_radio));
     
-    /* Initialize USB */
-    usbd_init(DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)));
-    usbd_enable(DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)));
-    
     /* Initialize USB Audio Bridge (connects SA818 ↔ UAC2) */
-    int ret = usb_audio_bridge_init(sa818, uac2);
+    ret = usb_audio_bridge_init(sa818, uac2);
     if (ret != 0) {
+        usbd_disable(sample_usbd);
         return ret;
     }
     
