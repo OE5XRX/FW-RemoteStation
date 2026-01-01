@@ -63,12 +63,10 @@ LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
 #define USB_IN_TERMINAL_ID 4  /* SA818 RX -> USB */
 
 /* Build-time guard: force maintainers to consciously update IDs if they change. */
-static_assert(USB_OUT_TERMINAL_ID == 1,
-              "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
-              "the device tree/descriptors and update this check accordingly.");
-static_assert(USB_IN_TERMINAL_ID == 4,
-              "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
-              "the device tree/descriptors and update this check accordingly.");
+static_assert(USB_OUT_TERMINAL_ID == 1, "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
+                                        "the device tree/descriptors and update this check accordingly.");
+static_assert(USB_IN_TERMINAL_ID == 4, "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
+                                       "the device tree/descriptors and update this check accordingly.");
 
 /**
  * @brief USB Audio Bridge context
