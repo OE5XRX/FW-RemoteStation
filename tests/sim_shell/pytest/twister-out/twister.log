@@ -1,0 +1,29 @@
+2025-12-31 21:32:36,847 - twister - INFO - Using Ninja..
+2025-12-31 21:32:36,906 - twister - INFO - Zephyr version: v4.3.0-2952-ge855856a5d63
+2025-12-31 21:32:36,908 - twister - DEBUG - Running cmake script /home/user/zephyr/cmake/verify-toolchain.cmake
+2025-12-31 21:32:36,908 - twister - DEBUG - Calling cmake: /usr/bin/cmake -DFORMAT=json -P /home/user/zephyr/cmake/verify-toolchain.cmake
+2025-12-31 21:32:37,037 - twister - DEBUG - Finished running /home/user/zephyr/cmake/verify-toolchain.cmake
+2025-12-31 21:32:37,037 - twister - INFO - Using 'zephyr' toolchain.
+2025-12-31 21:32:37,930 - twister - DEBUG - Reading testsuite configuration files under /home/user/workspace/tests/sim_shell/pytest/tests/sim_shell...
+2025-12-31 21:32:37,931 - twister - ERROR - Twister call stack dump:
+  File "/opt/python/venv/bin/west", line 7, in <module>
+    sys.exit(main())
+  File "/opt/python/venv/lib/python3.12/site-packages/west/app/main.py", line 1199, in main
+    app.run(argv or sys.argv[1:])
+  File "/opt/python/venv/lib/python3.12/site-packages/west/app/main.py", line 278, in run
+    self.run_command(argv, early_args)
+  File "/opt/python/venv/lib/python3.12/site-packages/west/app/main.py", line 584, in run_command
+    self.run_extension(args.command, argv)
+  File "/opt/python/venv/lib/python3.12/site-packages/west/app/main.py", line 739, in run_extension
+    self.cmd.run(args, unknown, self.topdir, manifest=self.manifest,
+  File "/opt/python/venv/lib/python3.12/site-packages/west/commands.py", line 200, in run
+    self.do_run(args, unknown)
+  File "/home/user/zephyr/scripts/west_commands/twister_cmd.py", line 61, in do_run
+    ret = twister(options, default_options)
+  File "/home/user/zephyr/scripts/pylib/twister/twisterlib/twister_main.py", line 41, in _inner
+    return func(*args, **kwargs)
+  File "/home/user/zephyr/scripts/pylib/twister/twisterlib/twister_main.py", line 117, in twister
+    tplan.discover()
+  File "/home/user/zephyr/scripts/pylib/twister/twisterlib/testplan.py", line 221, in discover
+    raise TwisterRuntimeError("No testsuites found at the specified location...")
+

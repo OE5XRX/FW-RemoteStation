@@ -11,6 +11,7 @@ zephyr_library_sources(
   src/sa818_core.cpp
   src/sa818_at.cpp
   src/sa818_audio.cpp
+  src/sa818_audio_stream.cpp
   src/sa818_shell.cpp
 )
 
