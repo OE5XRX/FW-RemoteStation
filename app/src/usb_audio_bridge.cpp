@@ -78,8 +78,8 @@ struct usb_audio_bridge_ctx {
   /* Ring buffers */
   struct ring_buf tx_ring; /* USB OUT -> SA818 TX */
   struct ring_buf rx_ring; /* SA818 RX -> USB IN */
-  uint8_t tx_ring_buf[TX_RING_SIZE];
-  uint8_t rx_ring_buf[RX_RING_SIZE];
+  uint8_t tx_ring_buf[TX_RING_SIZE] __aligned(UDC_BUF_ALIGN);
+  uint8_t rx_ring_buf[RX_RING_SIZE] __aligned(UDC_BUF_ALIGN);
 
   /* USB buffer pools - separate for each direction */
   uint8_t usb_out_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN); /* USB OUT (receive) */
@@ -268,11 +268,12 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
   while (true) {
     k_msleep(1); /* Run at ~1kHz (USB SOF rate) */
 
+    k_mutex_lock(&ctx->lock, K_FOREVER);
+
     if (!ctx->rx_enabled) {
+      k_mutex_unlock(&ctx->lock);
       continue;
     }
-
-    k_mutex_lock(&ctx->lock, K_FOREVER);
 
     /* Check if we have enough data to send */
     if (ring_buf_size_get(&ctx->rx_ring) >= USB_BYTES_PER_SOF) {
@@ -309,6 +310,9 @@ K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7
 
 /**
  * @brief Initialize USB Audio Bridge
+ *
+ * NOTE: This function must only be called once during system initialization
+ * from a single thread. It is not thread-safe for concurrent calls.
  */
 extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struct device *uac2_dev) {
   struct usb_audio_bridge_ctx *ctx = &bridge_ctx;

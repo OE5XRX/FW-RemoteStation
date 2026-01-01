@@ -27,8 +27,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define SA818_NODE DT_ALIAS(sa818)
 #define UAC2_NODE DT_NODELABEL(uac2_radio)
 
-/* Check if USB Audio is available */
-#if !DT_NODE_EXISTS(UAC2_NODE)
+/* Check if USB Audio is available - warn only on actual hardware platforms */
+#if !DT_NODE_EXISTS(UAC2_NODE) && !defined(CONFIG_BOARD_NATIVE_SIM)
 #warning "USB Audio (uac2_radio) not found in device tree"
 #endif
 
@@ -58,6 +58,7 @@ int main(void) {
   const struct device *sa818 = DEVICE_DT_GET(SA818_NODE);
   if (!device_is_ready(sa818)) {
     LOG_ERR("SA818 device not ready");
+    usbd_disable(sample_usbd);
     return -ENODEV;
   }
   LOG_INF("SA818 device ready");
@@ -67,6 +68,7 @@ int main(void) {
   const struct device *uac2 = DEVICE_DT_GET(UAC2_NODE);
   if (!device_is_ready(uac2)) {
     LOG_ERR("UAC2 device not ready");
+    usbd_disable(sample_usbd);
     return -ENODEV;
   }
   LOG_INF("UAC2 device ready");
@@ -75,6 +77,7 @@ int main(void) {
   ret = usb_audio_bridge_init(sa818, uac2);
   if (ret != 0) {
     LOG_ERR("USB Audio Bridge init failed: %d", ret);
+    usbd_disable(sample_usbd);
     return ret;
   }
 
@@ -87,6 +90,7 @@ int main(void) {
   ret = sa818_set_power(sa818, SA818_DEVICE_ON);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to power on SA818: %d", ret);
+    usbd_disable(sample_usbd);
     return -EIO;
   }
   LOG_INF("SA818 powered on");

@@ -4,7 +4,7 @@
  *
  * FM Board Device Tree
  * Hardware configuration for STM32F302-based FM transceiver board
- * with SA818 radio module and USB composite device (CDC, UAC2, DFU)
+ * with SA818 radio module and USB composite device (CDC, UAC2; DFU configured via Kconfig)
  */
 
 /dts-v1/;
@@ -71,7 +71,6 @@
 		compatible = "zephyr,uac2";
 		status = "okay";
 		full-speed;
-		high-speed;
 		audio-function = <AUDIO_FUNCTION_OTHER>;
 
 		/* Audio Clock Source - 8kHz for SA818 */
