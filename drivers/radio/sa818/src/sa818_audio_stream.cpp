@@ -40,6 +40,25 @@ struct sa818_audio_stream_ctx {
   uint8_t rx_buffer[SA818_AUDIO_BUFFER_SIZE * SA818_AUDIO_SAMPLE_SIZE];
 };
 
+/*
+ * DESIGN NOTE: Global singleton audio context
+ *
+ * The current implementation uses a single global audio_ctx, which means only
+ * one SA818 device can stream audio at a time. This is acceptable for the
+ * current use case (single radio system).
+ *
+ * If support for multiple SA818 radios is needed in the future, this should be
+ * refactored to store the audio context in the device's runtime data structure
+ * (struct sa818_data), similar to how other device-specific state is managed.
+ * This would require:
+ * 1. Adding audio_stream_ctx to struct sa818_data
+ * 2. Updating all API functions to access ctx via dev->data
+ * 3. Ensuring proper initialization/cleanup per device instance
+ */
+
+/* Static mutex for audio context - initialized at compile time */
+K_MUTEX_DEFINE(audio_ctx_mutex);
+
 static struct sa818_audio_stream_ctx audio_ctx;
 
 /**
@@ -55,7 +74,11 @@ static void audio_stream_work_handler(struct k_work *work) {
   struct k_work_delayable *dwork = k_work_delayable_from_work(work);
   struct sa818_audio_stream_ctx *ctx = CONTAINER_OF(dwork, struct sa818_audio_stream_ctx, audio_work);
 
-  if (!ctx->streaming) {
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
+  bool streaming = ctx->streaming;
+  k_mutex_unlock(&audio_ctx_mutex);
+
+  if (!streaming) {
     return;
   }
 
@@ -140,7 +163,10 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
   k_work_init_delayable(&audio_ctx.audio_work, audio_stream_work_handler);
 
   /* Start streaming */
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = true;
+  k_mutex_unlock(&audio_ctx_mutex);
+
   k_work_reschedule(&audio_ctx.audio_work, K_MSEC(1));
 
   LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);
@@ -156,7 +182,10 @@ sa818_result sa818_audio_stream_stop(const struct device *dev) {
     return SA818_ERROR_INVALID_PARAM;
   }
 
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = false;
+  k_mutex_unlock(&audio_ctx_mutex);
+
   k_work_cancel_delayable(&audio_ctx.audio_work);
 
   LOG_INF("Audio streaming stopped");

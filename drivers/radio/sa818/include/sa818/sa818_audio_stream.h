@@ -14,9 +14,9 @@
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_AUDIO_STREAM_H_
 
 #include <sa818/sa818.h>
-#include <zephyr/device.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <zephyr/device.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,9 +32,9 @@ extern "C" {
  * @brief Audio sample format for SA818
  */
 struct sa818_audio_format {
-  uint32_t sample_rate;  /**< Sample rate in Hz (typically 8000) */
-  uint8_t bit_depth;     /**< Bits per sample (typically 16) */
-  uint8_t channels;      /**< Number of channels (1=mono, 2=stereo) */
+  uint32_t sample_rate; /**< Sample rate in Hz (typically 8000) */
+  uint8_t bit_depth;    /**< Bits per sample (typically 16) */
+  uint8_t channels;     /**< Number of channels (1=mono, 2=stereo) */
 };
 
 /**
@@ -49,10 +49,7 @@ struct sa818_audio_format {
  * @param user_data User data pointer from callback registration
  * @return Number of bytes written to buffer (0 if no data available)
  */
-typedef size_t (*sa818_audio_tx_request_cb)(const struct device *dev,
-                                             uint8_t *buffer,
-                                             size_t size,
-                                             void *user_data);
+typedef size_t (*sa818_audio_tx_request_cb)(const struct device *dev, uint8_t *buffer, size_t size, void *user_data);
 
 /**
  * @brief RX audio data callback
@@ -65,10 +62,7 @@ typedef size_t (*sa818_audio_tx_request_cb)(const struct device *dev,
  * @param size Number of bytes in buffer
  * @param user_data User data pointer from callback registration
  */
-typedef void (*sa818_audio_rx_data_cb)(const struct device *dev,
-                                        const uint8_t *buffer,
-                                        size_t size,
-                                        void *user_data);
+typedef void (*sa818_audio_rx_data_cb)(const struct device *dev, const uint8_t *buffer, size_t size, void *user_data);
 
 /**
  * @brief Audio streaming callbacks
@@ -88,8 +82,7 @@ struct sa818_audio_callbacks {
  * @param callbacks Callback structure
  * @return SA818_OK on success, error code otherwise
  */
-sa818_result sa818_audio_stream_register(const struct device *dev,
-                                          const struct sa818_audio_callbacks *callbacks);
+sa818_result sa818_audio_stream_register(const struct device *dev, const struct sa818_audio_callbacks *callbacks);
 
 /**
  * @brief Start audio streaming
@@ -100,8 +93,7 @@ sa818_result sa818_audio_stream_register(const struct device *dev,
  * @param format Audio format configuration
  * @return SA818_OK on success, error code otherwise
  */
-sa818_result sa818_audio_stream_start(const struct device *dev,
-                                       const struct sa818_audio_format *format);
+sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa818_audio_format *format);
 
 /**
  * @brief Stop audio streaming
@@ -120,8 +112,7 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
  * @param format Output format structure
  * @return SA818_OK on success, error code otherwise
  */
-sa818_result sa818_audio_stream_get_format(const struct device *dev,
-                                            struct sa818_audio_format *format);
+sa818_result sa818_audio_stream_get_format(const struct device *dev, struct sa818_audio_format *format);
 
 /**
  * @}

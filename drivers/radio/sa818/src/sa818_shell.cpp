@@ -270,6 +270,7 @@ static sa818_tone_code parse_tone(const char *str) {
       float max_freq;
       sa818_tone_code code;
     } ctcss_map[] = {
+        // clang-format off
         {67.0f, 67.1f, SA818_CTCSS_67_0},
         {71.8f, 72.0f, SA818_CTCSS_71_9},
         {74.3f, 74.5f, SA818_CTCSS_74_4},
@@ -308,6 +309,7 @@ static sa818_tone_code parse_tone(const char *str) {
         {233.5f, 233.7f, SA818_CTCSS_233_6},
         {241.7f, 241.9f, SA818_CTCSS_241_8},
         {250.2f, 250.4f, SA818_CTCSS_250_3},
+        // clang-format on
     };
 
     for (size_t i = 0; i < (sizeof(ctcss_map) / sizeof(ctcss_map[0])); ++i) {

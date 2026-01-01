@@ -43,9 +43,30 @@ LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
 #define USB_BUF_COUNT 8
 #define USB_BUF_SIZE 32 /* 16 samples max per SOF */
 
-/* Terminal IDs from device tree */
+/*
+ * Terminal IDs from USB Audio Class 2 (UAC2) descriptors
+ *
+ * NOTE:
+ *   - UAC2 terminal IDs are assigned by the descriptor generator based on
+ *     the order of terminals in the device tree.
+ *   - For the current board/device-tree configuration, the UAC2 class
+ *     exposes:
+ *       * USB OUT terminal for SA818 TX  -> ID 1
+ *       * USB IN terminal for SA818 RX   -> ID 4
+ *
+ * These values MUST match the actual UAC2 descriptors. If you change the
+ * UAC2 audio topology (e.g. add/remove/reorder terminals in the device tree
+ * or Kconfig), re-check the generated descriptors and update the defines
+ * and static_asserts below accordingly.
+ */
 #define USB_OUT_TERMINAL_ID 1 /* USB -> SA818 TX */
 #define USB_IN_TERMINAL_ID 4  /* SA818 RX -> USB */
+
+/* Build-time guard: force maintainers to consciously update IDs if they change. */
+static_assert(USB_OUT_TERMINAL_ID == 1, "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
+                                        "the device tree/descriptors and update this check accordingly.");
+static_assert(USB_IN_TERMINAL_ID == 4, "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
+                                       "the device tree/descriptors and update this check accordingly.");
 
 /**
  * @brief USB Audio Bridge context
@@ -60,9 +81,11 @@ struct usb_audio_bridge_ctx {
   uint8_t tx_ring_buf[TX_RING_SIZE];
   uint8_t rx_ring_buf[RX_RING_SIZE];
 
-  /* USB buffer pool */
-  uint8_t usb_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN);
-  uint8_t usb_buf_idx;
+  /* USB buffer pools - separate for each direction */
+  uint8_t usb_out_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN); /* USB OUT (receive) */
+  uint8_t usb_in_buf_pool[USB_BUF_COUNT][USB_BUF_SIZE] __aligned(UDC_BUF_ALIGN);  /* USB IN (transmit) */
+  uint8_t usb_out_buf_idx;
+  uint8_t usb_in_buf_idx;
 
   /* Synchronization */
   struct k_mutex lock;
@@ -179,9 +202,11 @@ static void *uac2_get_recv_buf(const struct device *dev, uint8_t terminal, uint1
     return NULL;
   }
 
-  /* Return next buffer from pool */
-  void *buf = ctx->usb_buf_pool[ctx->usb_buf_idx];
-  ctx->usb_buf_idx = (ctx->usb_buf_idx + 1) % USB_BUF_COUNT;
+  /* Return next buffer from pool - protect with mutex */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  void *buf = ctx->usb_out_buf_pool[ctx->usb_out_buf_idx];
+  ctx->usb_out_buf_idx = (ctx->usb_out_buf_idx + 1) % USB_BUF_COUNT;
+  k_mutex_unlock(&ctx->lock);
 
   return buf;
 }
@@ -251,17 +276,18 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
 
     /* Check if we have enough data to send */
     if (ring_buf_size_get(&ctx->rx_ring) >= USB_BYTES_PER_SOF) {
-      /* Allocate buffer from pool */
-      uint8_t buf_idx = ctx->usb_buf_idx;
-      ctx->usb_buf_idx = (ctx->usb_buf_idx + 1) % USB_BUF_COUNT;
-      void *buf = ctx->usb_buf_pool[buf_idx];
+      /* Allocate buffer from IN pool - mutex already held */
+      uint8_t buf_idx = ctx->usb_in_buf_idx;
+      ctx->usb_in_buf_idx = (ctx->usb_in_buf_idx + 1) % USB_BUF_COUNT;
+      void *buf = ctx->usb_in_buf_pool[buf_idx];
 
       /* Pull data from RX ring buffer */
       uint32_t bytes_read = ring_buf_get(&ctx->rx_ring, (uint8_t *)buf, USB_BYTES_PER_SOF);
 
       k_mutex_unlock(&ctx->lock);
 
-      if (bytes_read > 0) {
+      /* Check if we got expected amount of data */
+      if (bytes_read == USB_BYTES_PER_SOF) {
         /* Send to USB host */
         int ret = usbd_uac2_send(ctx->uac2_dev, USB_IN_TERMINAL_ID, buf, bytes_read);
         if (ret != 0) {
@@ -269,6 +295,8 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
         } else {
           LOG_DBG("USB IN: %u bytes sent", bytes_read);
         }
+      } else if (bytes_read > 0) {
+        LOG_WRN("USB IN: partial read %u/%u bytes, frame dropped", bytes_read, USB_BYTES_PER_SOF);
       }
     } else {
       k_mutex_unlock(&ctx->lock);
@@ -276,6 +304,7 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
   }
 }
 
+/* USB IN thread - priority 7, starts immediately */
 K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, 0);
 
 /**
@@ -302,7 +331,8 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   /* Reset state */
   ctx->tx_enabled = false;
   ctx->rx_enabled = false;
-  ctx->usb_buf_idx = 0;
+  ctx->usb_out_buf_idx = 0;
+  ctx->usb_in_buf_idx = 0;
 
   /* Register UAC2 callbacks */
   usbd_uac2_set_ops(uac2_dev, &uac2_ops, ctx);
@@ -336,6 +366,9 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   LOG_INF("USB Audio Bridge initialized (8kHz, 16-bit, mono)");
   LOG_INF("  USB OUT -> TX Ring (%u bytes) -> SA818 TX", TX_RING_SIZE);
   LOG_INF("  SA818 RX -> RX Ring (%u bytes) -> USB IN", RX_RING_SIZE);
+
+  /* Start USB IN thread now that context is fully initialized */
+  k_thread_start(usb_in_tid);
 
   return 0;
 }

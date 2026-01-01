@@ -73,7 +73,8 @@ def test_audio_pipeline_initialization(shell):
     
     # Should not have audio initialization errors
     text = "\n".join(out).lower()
-    assert "dac" not in text or "error" not in text
+    # Check that error patterns don't appear
+    assert "error" not in text
 
 
 def test_sa818_audio_commands_without_usb(shell):
@@ -105,4 +106,4 @@ def test_audio_streaming_api_independence(shell):
     # Audio commands should work
     out = shell.exec_command("sa818 ptt on")
     text = "\n".join(out).lower()
-    assert "error" not in text or "not supported" not in text
+    assert "error" not in text and "not supported" not in text

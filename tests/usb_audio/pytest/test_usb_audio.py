@@ -14,8 +14,6 @@ These tests verify that:
 Note: These are hardware tests that require fm_board with USB connection.
 """
 
-import re
-
 
 def test_usb_device_boot(dut, usb_enumerated):
     """
@@ -70,20 +68,14 @@ def test_no_boot_errors(dut):
     text = "\n".join(output).lower()
     
     # Should not see critical errors
-    assert "failed" not in text or "Failed to" not in text
-    assert "error" not in text or "ERROR:" not in text
+    assert "failed" not in text and "failed to" not in text
+    assert "error" not in text and "error:" not in text
 
 
 # Additional tests that could be implemented with USB host tools:
+# - USB Audio device enumeration on host (requires pyusb)
+# - Audio playback to SA818 TX (requires host audio tools)
+# - Audio capture from SA818 RX (requires host audio tools)
 #
-# def test_usb_audio_enumeration():
-#     """Test USB Audio device enumeration on host (requires pyusb)"""
-#     pass
-#
-# def test_usb_audio_playback():
-#     """Test audio playback to SA818 TX (requires host audio tools)"""
-#     pass
-#
-# def test_usb_audio_capture():
-#     """Test audio capture from SA818 RX (requires host audio tools)"""
-#     pass
+# These are currently design notes only and are not implemented as tests yet.
+
