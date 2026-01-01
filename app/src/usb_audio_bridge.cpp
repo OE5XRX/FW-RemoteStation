@@ -304,8 +304,8 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
   }
 }
 
-/* Define thread with K_FOREVER - will be started manually after initialization */
-K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, K_FOREVER);
+/* USB IN thread - priority 7, starts immediately */
+K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, 0);
 
 /**
  * @brief Initialize USB Audio Bridge
