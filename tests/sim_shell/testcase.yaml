@@ -8,6 +8,7 @@ tests:
   fm.sim_shell:
     platform_allow:
       - native_sim/native/64
+#      - fm_board
     harness: pytest
     harness_config:
       pytest_root:

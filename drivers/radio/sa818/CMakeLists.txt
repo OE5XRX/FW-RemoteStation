@@ -12,8 +12,10 @@ zephyr_library_sources(
   src/sa818_at.cpp
   src/sa818_audio.cpp
   src/sa818_audio_stream.cpp
-  src/sa818_shell.cpp
 )
+
+# Shell interface (optional)
+zephyr_library_sources_ifdef(CONFIG_SHELL src/sa818_shell.cpp)
 
 # Include directories
 zephyr_include_directories(include)
