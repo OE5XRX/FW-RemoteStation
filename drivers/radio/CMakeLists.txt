@@ -3,4 +3,4 @@
 
 # Radio Drivers CMake Configuration
 
-add_subdirectory(sa818)
+add_subdirectory_ifdef(CONFIG_SA818 sa818)

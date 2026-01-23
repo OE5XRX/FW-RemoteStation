@@ -13,6 +13,8 @@
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AUDIO_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AUDIO_H_
 
+#ifdef CONFIG_SA818
+
 #include <sa818/sa818.h>
 #include <stdint.h>
 #include <zephyr/device.h>
@@ -90,5 +92,7 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* CONFIG_SA818 */
 
 #endif /* ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AUDIO_H_ */
