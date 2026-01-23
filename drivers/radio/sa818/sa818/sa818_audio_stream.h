@@ -13,6 +13,8 @@
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_AUDIO_STREAM_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_AUDIO_STREAM_H_
 
+#ifdef CONFIG_SA818
+
 #include <sa818/sa818.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -121,5 +123,7 @@ sa818_result sa818_audio_stream_get_format(const struct device *dev, struct sa81
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* CONFIG_SA818 */
 
 #endif /* ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_AUDIO_STREAM_H_ */

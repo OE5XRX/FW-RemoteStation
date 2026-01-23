@@ -20,6 +20,8 @@
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_H_
 
+#ifdef CONFIG_SA818
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <zephyr/device.h>
@@ -201,5 +203,7 @@ struct sa818_status sa818_get_status(const struct device *dev);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* CONFIG_SA818 */
 
 #endif /* ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_H_ */

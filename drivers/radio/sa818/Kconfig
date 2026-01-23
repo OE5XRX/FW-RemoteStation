@@ -6,10 +6,21 @@
 
 config SA818
   bool "SA818 FM transceiver driver"
-  default y
+  default n
   depends on UART
   depends on GPIO
   depends on ADC
   depends on DAC
   help
     Driver for SA818 / SA818S UART-controlled FM transceiver modules.
+
+if SA818
+
+config SA818_SHELL
+  bool "SA818 shell commands"
+  default n
+  depends on SHELL
+  help
+    Enable shell commands for SA818 driver (status, power, ptt, frequency, etc.)
+
+endif # SA818
