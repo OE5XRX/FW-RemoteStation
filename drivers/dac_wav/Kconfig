@@ -3,7 +3,6 @@
 
 menuconfig DAC_WAV
 	bool "WAV File DAC Emulator"
-	depends on DAC
 	help
 	  Enable WAV file DAC emulator driver. This driver implements
 	  the Zephyr DAC API but writes audio samples to a WAV file
