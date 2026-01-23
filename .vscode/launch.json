@@ -7,6 +7,68 @@
 			"name": "Launch build",
 			"config": "${workspaceFolder}/app/build",
 			"runToEntryPoint": "main"
+		},
+		{
+			"name": "Debug with PyOCD",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/zephyr/zephyr.elf",
+			"args": [],
+			"stopAtEntry": true,
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "gdb",
+			"miDebuggerPath": "${env:HOME}/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
+			"miDebuggerServerAddress": "localhost:3333",
+			"serverStarted": "listening on port",
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				}
+			],
+			"postRemoteConnectCommands": [
+				{
+					"description": "Reset and halt the target",
+					"text": "monitor reset halt",
+					"ignoreFailures": false
+				},
+				{
+					"description": "Load the binary",
+					"text": "load",
+					"ignoreFailures": false
+				},
+				{
+					"description": "Reset again after load",
+					"text": "monitor reset halt",
+					"ignoreFailures": false
+				}
+			],
+			"preLaunchTask": "West Debug Server (PyOCD)",
+			"logging": {
+				"engineLogging": false
+			}
+		},
+		{
+			"name": "Attach with PyOCD",
+			"type": "cppdbg",
+			"request": "attach",
+			"program": "${workspaceFolder}/build/zephyr/zephyr.elf",
+			"MIMode": "gdb",
+			"miDebuggerPath": "${env:HOME}/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
+			"miDebuggerServerAddress": "localhost:3333",
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				}
+			],
+			"logging": {
+				"engineLogging": false
+			}
 		}
 	]
 }
