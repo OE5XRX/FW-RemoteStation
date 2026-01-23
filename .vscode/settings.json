@@ -13,5 +13,13 @@
   ],
   "python.autoComplete.extraPaths": [
     "${env:ZEPHYR_BASE}/scripts/pylib/pytest-twister-harness/src"
-  ]
+  ],
+  // Optional: Set ZEPHYR_VENV to enable venv auto-activation in tasks
+  // Uncomment and adjust path if you use a local Python venv:
+  //"terminal.integrated.env.osx": {
+  //  "ZEPHYR_VENV": "${env:HOME}/zephyrproject/.venv"
+  //},
+  // "terminal.integrated.env.linux": {
+  //   "ZEPHYR_VENV": "${env:HOME}/zephyrproject/.venv"
+  // }
 }

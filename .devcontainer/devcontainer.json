@@ -5,7 +5,13 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/workspace,type=bind",
   "workspaceFolder": "/home/user/workspace",
+  "postStartCommand": "west init -l . && west update && mkdir /home/user/.oh-my-zsh/functions && west completion zsh > /home/user/.oh-my-zsh/functions/_west",
   "remoteUser": "user",
+  "runArgs": [
+    "-v",
+    "/dev:/dev", //
+    "--privileged" // allows access to tty* devices
+  ],
   "customizations": {
     "vscode": {
       "extensions": [

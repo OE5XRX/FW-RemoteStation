@@ -1,0 +1,104 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "West Build",
+      "type": "shell",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west build -p auto -b fm_board app",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "West Build (Pristine)",
+      "type": "shell",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west build -p always -b fm_board app",
+      "group": "build",
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "West Flash (PyOCD)",
+      "type": "shell",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west flash --runner pyocd",
+      "group": "test",
+      "dependsOn": [
+        "West Build"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "West Flash (OpenOCD)",
+      "type": "shell",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west flash --runner openocd",
+      "group": "test",
+      "dependsOn": [
+        "West Build"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "PyOCD Flash Only",
+      "type": "shell",
+      "command": "pyocd flash -t stm32f302vctx build/zephyr/zephyr.hex",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "West Clean",
+      "type": "shell",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west build -t clean",
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "West Debug Server (PyOCD)",
+      "type": "shell",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west debugserver --runner pyocd",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*PyOCD.*$",
+          "endsPattern": "^.*listening on port.*$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}
