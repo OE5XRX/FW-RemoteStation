@@ -149,8 +149,8 @@
     io-channel-names = "audio_in", "audio_out";
 
     h-l-power-gpios    = <&gpiob 11 GPIO_ACTIVE_HIGH>;
-    nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_LOW>;
-    npower-down-gpios  = <&gpiob 10 GPIO_ACTIVE_LOW>;
+    nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_HIGH>;
+    npower-down-gpios  = <&gpiob 10 GPIO_ACTIVE_HIGH>;
     nsquelch-gpios     = <&gpiob 1 GPIO_ACTIVE_LOW>;
 
     tx-enable-delay-ms = <20>;
@@ -186,7 +186,7 @@
 &usart1 {
 	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
 	pinctrl-names = "default";
-	current-speed = <115200>;
+	current-speed = <9600>;
 	status = "okay";
 };
 

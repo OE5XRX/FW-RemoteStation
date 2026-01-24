@@ -14,6 +14,16 @@ static int sa818_init_device(void) {
     LOG_ERR("SA818 device not ready");
     return -ENODEV;
   }
+
+  if (sa818_set_ptt(sa818, SA818_PTT_OFF) != SA818_OK) {
+    LOG_ERR("Failed to disable PTT during init");
+    return -EIO;
+  }
+
+  if (sa818_set_power(sa818, SA818_DEVICE_OFF) != SA818_OK) {
+    LOG_ERR("Failed to power off SA818 during init");
+    return -EIO;
+  }
   LOG_INF("SA818 device ready");
 
   return 0;
