@@ -89,6 +89,27 @@ extern "C" {
  */
 [[nodiscard]] enum sa818_result sa818_audio_stop_test_tone(const struct device *dev);
 
+/**
+ * @brief Generate frequency sweep on TX audio output
+ *
+ * Continuously sweeps between start and end frequency, looping endlessly.
+ * Each sweep cycle takes the specified duration, then restarts from the beginning.
+ * If a test tone or sweep is already active, it will be stopped and replaced.
+ *
+ * To stop the sweep, call sa818_audio_stop_test_tone().
+ *
+ * @param dev SA818 device
+ * @param start_freq_hz Start frequency in Hz (100-3000)
+ * @param end_freq_hz End frequency in Hz (100-3000, must be > start_freq_hz)
+ * @param duration_ms Sweep cycle duration in milliseconds (minimum 1000, max 60000)
+ * @param amplitude Sweep amplitude (0-255)
+ * @return SA818_OK on success; SA818_ERROR_INVALID_DEVICE if @p dev is not valid;
+ *         SA818_ERROR_INVALID_PARAM if parameters are out of range;
+ *         SA818_ERROR_DAC if the DAC device is not available
+ */
+[[nodiscard]] enum sa818_result sa818_audio_generate_sweep(const struct device *dev, uint16_t start_freq_hz, uint16_t end_freq_hz, uint32_t duration_ms,
+                                                           uint8_t amplitude);
+
 #ifdef __cplusplus
 }
 #endif

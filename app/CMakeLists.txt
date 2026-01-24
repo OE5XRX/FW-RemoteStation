@@ -5,10 +5,6 @@ project(app LANGUAGES C CXX ASM)
 
 target_sources(app PRIVATE src/main.cpp)
 
-if (CONFIG_SA818)
-    target_sources(app PRIVATE src/sa818.cpp)
-endif()
-
 if (CONFIG_USB_DEVICE_STACK_NEXT)
     target_sources(app PRIVATE src/usb_config.cpp)
 endif()

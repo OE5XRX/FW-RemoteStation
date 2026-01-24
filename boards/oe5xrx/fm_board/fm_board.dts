@@ -145,7 +145,7 @@
 
     uart = <&usart1>;
 		
-    io-channels = <&adc1 1>, <&dac1 0>;
+    io-channels = <&adc1 1>, <&dac1 1>;
     io-channel-names = "audio_in", "audio_out";
 
     h-l-power-gpios    = <&gpiob 11 GPIO_ACTIVE_HIGH>;

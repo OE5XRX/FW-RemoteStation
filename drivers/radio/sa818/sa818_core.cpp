@@ -202,7 +202,7 @@ sa818_status sa818_get_status(const struct device *dev) {
       .audio_in = ADC_DT_SPEC_GET_BY_IDX(node_id, 0),                                                                                                          \
       .audio_out_dev = SA818_AUDIO_OUT_DEV(node_id),                                                                                                           \
       .audio_out_channel = SA818_AUDIO_OUT_CHANNEL(node_id),                                                                                                   \
-      .audio_out_resolution = 16,                                                                                                                              \
+      .audio_out_resolution = 12,                                                                                                                              \
       .h_l_power = GPIO_DT_SPEC_GET(node_id, h_l_power_gpios),                                                                                                 \
       .nptt = GPIO_DT_SPEC_GET(node_id, nptt_gpios),                                                                                                           \
       .npower_down = GPIO_DT_SPEC_GET(node_id, npower_down_gpios),                                                                                             \

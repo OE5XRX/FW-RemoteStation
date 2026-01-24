@@ -208,19 +208,33 @@ static void test_tone_work_handler(struct k_work *work) {
     return;
   }
 
-  /* Check if duration has expired */
+  /* Check if duration has expired (for fixed tone) or sweep completed */
   if (data->test_tone_end_time > 0) {
     int64_t now = k_uptime_get();
     if (now >= data->test_tone_end_time) {
       LOG_INF("Test tone duration expired");
       data->test_tone_active = false;
       data->audio_tx_enabled = false;
+      data->sweep_active = false;
 
       /* Reset DAC to midpoint before stopping */
       reset_dac_to_midpoint(cfg);
 
       k_mutex_unlock(&data->lock);
       return;
+    }
+  }
+
+  /* Check if sweep has completed */
+  if (data->sweep_active) {
+    int64_t now = k_uptime_get();
+    int64_t elapsed_ms = now - data->sweep_start_time;
+    if (elapsed_ms >= static_cast<int64_t>(data->sweep_duration_ms)) {
+      /* Loop sweep continuously - restart from beginning */
+      LOG_DBG("Frequency sweep looping, restarting from %u Hz", data->sweep_start_freq);
+      data->sweep_start_time = now;
+      data->test_tone_freq = data->sweep_start_freq;
+      data->test_tone_phase = 0.0f;
     }
   }
 
@@ -252,6 +266,22 @@ static void test_tone_work_handler(struct k_work *work) {
 
   /* Update phase for next sample */
   constexpr double two_pi = 2.0 * std::numbers::pi_v<double>;
+
+  /* Handle frequency sweep */
+  if (data->sweep_active) {
+    int64_t now = k_uptime_get();
+    int64_t elapsed_ms = now - data->sweep_start_time;
+
+    if (elapsed_ms >= static_cast<int64_t>(data->sweep_duration_ms)) {
+      elapsed_ms = static_cast<int64_t>(data->sweep_duration_ms);
+    }
+
+    /* Linear interpolation of frequency */
+    float progress = static_cast<float>(elapsed_ms) / static_cast<float>(data->sweep_duration_ms);
+    float freq_range = static_cast<float>(data->sweep_end_freq - data->sweep_start_freq);
+    data->test_tone_freq = data->sweep_start_freq + static_cast<uint16_t>(progress * freq_range);
+  }
+
   double phase_increment = two_pi * static_cast<double>(data->test_tone_freq) / static_cast<double>(TEST_TONE_SAMPLE_RATE_HZ);
   data->test_tone_phase += static_cast<float>(phase_increment);
 
@@ -363,6 +393,7 @@ sa818_result sa818_audio_stop_test_tone(const struct device *dev) {
 
   /* Stop test tone */
   data->test_tone_active = false;
+  data->sweep_active = false;
   k_work_cancel_delayable(&data->test_tone_work);
 
   /* Reset DAC to midpoint before disabling TX path */
@@ -375,6 +406,72 @@ sa818_result sa818_audio_stop_test_tone(const struct device *dev) {
   LOG_INF("Test tone stopped");
 
   k_mutex_unlock(&data->lock);
+
+  return SA818_OK;
+}
+
+/**
+ * @brief Generate frequency sweep on TX audio output
+ */
+enum sa818_result sa818_audio_generate_sweep(const struct device *dev, uint16_t start_freq_hz, uint16_t end_freq_hz, uint32_t duration_ms, uint8_t amplitude) {
+  if (!dev || !device_is_ready(dev)) {
+    return SA818_ERROR_INVALID_DEVICE;
+  }
+
+  /* Validate parameters */
+  if (start_freq_hz < 100 || start_freq_hz > 3000 || end_freq_hz < 100 || end_freq_hz > 3000) {
+    LOG_ERR("Invalid frequency range: %u-%u Hz (valid: 100-3000 Hz)", start_freq_hz, end_freq_hz);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  if (end_freq_hz <= start_freq_hz) {
+    LOG_ERR("End frequency must be greater than start frequency");
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  if (duration_ms < 1000 || duration_ms > 60000) {
+    LOG_ERR("Invalid sweep duration: %u ms (valid: 1000-60000 ms)", duration_ms);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
+
+  /* Check if DAC is available */
+  if (!cfg->audio_out_dev || !device_is_ready(cfg->audio_out_dev)) {
+    LOG_ERR("DAC device not available");
+    return SA818_ERROR_DAC;
+  }
+
+  k_mutex_lock(&data->lock, K_FOREVER);
+
+  /* Stop any existing test tone or sweep */
+  if (data->test_tone_active) {
+    k_work_cancel_delayable(&data->test_tone_work);
+    data->test_tone_active = false;
+  }
+
+  /* Initialize sweep state */
+  data->test_tone_freq = start_freq_hz;
+  data->test_tone_amplitude = amplitude;
+  data->test_tone_phase = 0.0f;
+  data->test_tone_end_time = 0;
+  data->test_tone_active = true;
+  data->sweep_active = true;
+  data->sweep_start_freq = start_freq_hz;
+  data->sweep_end_freq = end_freq_hz;
+  data->sweep_duration_ms = duration_ms;
+  data->sweep_start_time = k_uptime_get();
+
+  /* Enable TX audio path */
+  data->audio_tx_enabled = true;
+
+  LOG_INF("Starting frequency sweep: %u-%u Hz over %u ms", start_freq_hz, end_freq_hz, duration_ms);
+
+  k_mutex_unlock(&data->lock);
+
+  /* Start work handler */
+  k_work_schedule(&data->test_tone_work, K_NO_WAIT);
 
   return SA818_OK;
 }

@@ -84,6 +84,13 @@ struct sa818_data {
   uint8_t test_tone_amplitude;
   float test_tone_phase;
   int64_t test_tone_end_time;
+
+  /* Sweep state */
+  bool sweep_active;
+  uint16_t sweep_start_freq;
+  uint16_t sweep_end_freq;
+  uint32_t sweep_duration_ms;
+  int64_t sweep_start_time;
 };
 
 /**

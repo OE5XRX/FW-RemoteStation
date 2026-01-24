@@ -32,6 +32,48 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #warning "USB Audio (uac2_radio) not found in device tree"
 #endif
 
+static struct usbd_context *sample_usbd;
+
+static void sample_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *msg) {
+  LOG_INF("USBD message: %s", usbd_msg_type_string(msg->type));
+
+  if (usbd_can_detect_vbus(ctx)) {
+    if (msg->type == USBD_MSG_VBUS_READY) {
+      if (usbd_enable(ctx)) {
+        LOG_ERR("Failed to enable device support");
+      }
+    }
+
+    if (msg->type == USBD_MSG_VBUS_REMOVED) {
+      if (usbd_disable(ctx)) {
+        LOG_ERR("Failed to disable device support");
+      }
+    }
+  }
+}
+
+static int enable_usb_device_next(void) {
+  int err;
+
+  sample_usbd = sample_usbd_init_device(sample_msg_cb);
+  if (sample_usbd == NULL) {
+    LOG_ERR("Failed to initialize USB device");
+    return -ENODEV;
+  }
+
+  if (!usbd_can_detect_vbus(sample_usbd)) {
+    err = usbd_enable(sample_usbd);
+    if (err) {
+      LOG_ERR("Failed to enable device support");
+      return err;
+    }
+  }
+
+  LOG_INF("USB device support enabled");
+
+  return 0;
+}
+
 /**
  * @brief Main application
  */
@@ -39,20 +81,12 @@ int main(void) {
   LOG_INF("SA818 USB Audio Application Starting...");
   LOG_INF("Build: %s %s", __DATE__, __TIME__);
 
-  /* Initialize USB device (provided by common sample code) */
-  struct usbd_context *sample_usbd = sample_usbd_init_device(NULL);
-  if (sample_usbd == NULL) {
-    LOG_ERR("Failed to initialize USB device");
-    return -ENODEV;
-  }
-
-  /* Enable USB device */
-  int ret = usbd_enable(sample_usbd);
+  /* Initialize USB device */
+  int ret = enable_usb_device_next();
   if (ret != 0) {
-    LOG_ERR("Failed to enable USB device: %d", ret);
+    LOG_ERR("Failed to enable USB device support");
     return ret;
   }
-  LOG_INF("USB device enabled");
 
   /* Get SA818 device */
   const struct device *sa818 = DEVICE_DT_GET(SA818_NODE);
@@ -63,6 +97,7 @@ int main(void) {
   }
   LOG_INF("SA818 device ready");
 
+#if 0
 #if DT_NODE_EXISTS(UAC2_NODE)
   /* Get UAC2 device */
   const struct device *uac2 = DEVICE_DT_GET(UAC2_NODE);
@@ -85,6 +120,7 @@ int main(void) {
 #else
   LOG_WRN("USB Audio not configured in device tree");
 #endif
+#endif
 
   /* Power on SA818 */
   ret = sa818_set_power(sa818, SA818_DEVICE_ON);
@@ -105,9 +141,9 @@ int main(void) {
     k_sleep(K_SECONDS(10));
 
     /* Optional: Print status periodically */
-    sa818_status status = sa818_get_status(sa818);
-    LOG_INF("SA818 Status - Power: %s, PTT: %s, SQL: %s", status.device_power == SA818_DEVICE_ON ? "ON" : "OFF",
-            status.ptt_state == SA818_PTT_ON ? "ON" : "OFF", status.squelch_state == SA818_SQUELCH_OPEN ? "OPEN" : "CLOSED");
+    // sa818_status status = sa818_get_status(sa818);
+    // LOG_INF("SA818 Status - Power: %s, PTT: %s, SQL: %s", status.device_power == SA818_DEVICE_ON ? "ON" : "OFF",
+    //         status.ptt_state == SA818_PTT_ON ? "ON" : "OFF", status.squelch_state == SA818_SQUELCH_OPEN ? "OPEN" : "CLOSED");
   }
 
   return 0;

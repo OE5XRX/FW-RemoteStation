@@ -7,6 +7,7 @@
 zephyr_library()
 zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 zephyr_library_sources(
+  sa818_driver.cpp
   sa818_core.cpp
   sa818_at.cpp
   sa818_audio.cpp
