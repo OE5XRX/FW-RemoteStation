@@ -13,6 +13,9 @@ config SA818
   help
     Driver for SA818 / SA818S UART-controlled FM transceiver modules.
     Requires UART, GPIO, ADC, and DAC peripherals configured in device tree.
+    
+    Note: Requires CONFIG_PICOLIBC_IO_FLOAT=y for AT commands that format
+    frequency values (e.g., AT+DMOSETGROUP). This must be set in prj.conf.
 
 if SA818
 
