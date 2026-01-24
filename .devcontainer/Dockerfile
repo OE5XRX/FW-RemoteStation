@@ -18,3 +18,5 @@ RUN sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/b
 # Install pyocd for ST-Link support
 RUN pipx install pyocd && pipx ensurepath
 RUN /home/user/.local/bin/pyocd pack install stm32f3
+
+RUN sudo usermod -a -G dialout user
