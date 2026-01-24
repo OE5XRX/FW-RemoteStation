@@ -7,12 +7,12 @@
 config SA818
   bool "SA818 FM transceiver driver"
   default n
-  depends on UART
-  depends on GPIO
-  depends on ADC
-  depends on DAC
+  depends on DT_HAS_SA_SA818_ENABLED
+  select SERIAL
+  select GPIO
   help
     Driver for SA818 / SA818S UART-controlled FM transceiver modules.
+    Requires UART, GPIO, ADC, and DAC peripherals configured in device tree.
 
 if SA818
 

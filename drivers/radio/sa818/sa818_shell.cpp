@@ -9,8 +9,6 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
-#ifdef CONFIG_SA818_SHELL
-
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
 #include <sa818/sa818_audio.h>
@@ -582,5 +580,3 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 // clang-format on
 
 SHELL_CMD_REGISTER(sa818, &sa818_cmds, "SA818 control", NULL);
-
-#endif /* CONFIG_SA818_SHELL */

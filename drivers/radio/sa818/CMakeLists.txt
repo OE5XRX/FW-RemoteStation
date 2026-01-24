@@ -5,7 +5,7 @@
 # Builds core driver, AT command handler, audio subsystem, and shell interface
 
 zephyr_library()
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 zephyr_library_sources(
   sa818_core.cpp
   sa818_at.cpp

@@ -25,6 +25,12 @@ CONFIG_REGULATOR=y
 # EEPROM - AT24C256 for persistent storage
 CONFIG_EEPROM=y
 
+# ADC - Analog-to-Digital Converter for audio input
+CONFIG_ADC=y
+
+# DAC - Digital-to-Analog Converter for audio output  
+CONFIG_DAC=y
+
 # =============================================================================
 # USB Hardware Stack
 # =============================================================================
