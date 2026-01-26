@@ -8,9 +8,11 @@
 
 #include <stdint.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/usb/class/usbd_uac2.h>
 #include <zephyr/usb/usbd.h>
 
 #define CONFIG_CDC_ACM_SERIAL_MANUFACTURER_STRING "OE5XRX"
@@ -46,6 +48,12 @@ static int register_cdc_acm_0(struct usbd_context *const uds_ctx, const enum usb
     return err;
   }
 
+  /*err = usbd_register_all_classes(&cdc_acm_serial, speed, 1, NULL);
+  if (err) {
+    LOG_ERR("Failed to register classes");
+    return err;
+  }*/
+
   err = usbd_register_class(&cdc_acm_serial, "cdc_acm_0", speed, 1);
   if (err) {
     LOG_ERR("Failed to register classes");
@@ -54,6 +62,9 @@ static int register_cdc_acm_0(struct usbd_context *const uds_ctx, const enum usb
 
   return usbd_device_set_code_triple(uds_ctx, speed, USB_BCC_MISCELLANEOUS, 0x02, 0x01);
 }
+
+/* USB Pullup: PB12 - just for V0.2 board revision, remove for next revision */
+static const struct gpio_dt_spec pullup = {.port = DEVICE_DT_GET(DT_NODELABEL(gpiob)), .pin = 12, .dt_flags = GPIO_ACTIVE_HIGH};
 
 static int cdc_acm_serial_init_device(void) {
   int err;
@@ -93,11 +104,21 @@ static int cdc_acm_serial_init_device(void) {
     return err;
   }
 
+  /* Sicher disconnected - just for V0.2 board revision, remove for next revision */
+  gpio_pin_configure_dt(&pullup, GPIO_INPUT);
+  k_sleep(K_MSEC(300)); /* Host muss Disconnect sehen */
+  /* end remove */
+
   err = usbd_enable(&cdc_acm_serial);
   if (err) {
     LOG_ERR("Failed to enable %s (%d)", "device support", err);
     return err;
   }
+
+  /* Pull-Up aktivieren - just for V0.2 board revision, remove for next revision */
+  k_sleep(K_MSEC(50));
+  gpio_pin_configure_dt(&pullup, GPIO_OUTPUT_HIGH);
+  /* end remove */
 
   return 0;
 }
