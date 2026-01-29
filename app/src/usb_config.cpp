@@ -48,17 +48,19 @@ static int register_cdc_acm_0(struct usbd_context *const uds_ctx, const enum usb
     return err;
   }
 
-  /*err = usbd_register_all_classes(&cdc_acm_serial, speed, 1, NULL);
-  if (err) {
-    LOG_ERR("Failed to register classes");
-    return err;
-  }*/
-
+  /* Register CDC ACM class */
   err = usbd_register_class(&cdc_acm_serial, "cdc_acm_0", speed, 1);
   if (err) {
-    LOG_ERR("Failed to register classes");
+    LOG_ERR("Failed to register CDC ACM class");
     return err;
   }
+
+  /* Register UAC2 class for audio streaming */
+  /*err = usbd_register_class(&cdc_acm_serial, "uac2_radio", speed, 2);
+  if (err) {
+    LOG_ERR("Failed to register UAC2 class");
+    return err;
+  }*/
 
   return usbd_device_set_code_triple(uds_ctx, speed, USB_BCC_MISCELLANEOUS, 0x02, 0x01);
 }

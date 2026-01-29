@@ -6,7 +6,11 @@ project(app LANGUAGES C CXX ASM)
 target_sources(app PRIVATE src/main.cpp)
 
 if (CONFIG_USB_DEVICE_STACK_NEXT)
-    target_sources(app PRIVATE src/usb_config.cpp)
+    target_sources(app PRIVATE 
+        src/usb_config.cpp
+        src/audio_bridge/bridge.cpp
+    )
+    target_include_directories(app PRIVATE src/audio_bridge)
 endif()
 
 if (CONFIG_BOARD_NATIVE_SIM)
