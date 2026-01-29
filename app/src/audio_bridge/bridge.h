@@ -104,7 +104,7 @@ private:
   BufferPool<BufferConfig::USB_POOL_COUNT, BufferConfig::USB_BUF_SIZE> usb_in_pool_;
 
   k_mutex mutex_{};
-  k_sem tx_sem_{};
+  k_sem usb_in_sem_{}; // Signals USB IN thread when SA818 RX data is ready
 
   StreamState state_{};
   ImplicitFeedbackController feedback_;

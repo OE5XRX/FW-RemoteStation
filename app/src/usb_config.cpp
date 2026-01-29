@@ -56,11 +56,11 @@ static int register_cdc_acm_0(struct usbd_context *const uds_ctx, const enum usb
   }
 
   /* Register UAC2 class for audio streaming */
-  /*err = usbd_register_class(&cdc_acm_serial, "uac2_radio", speed, 2);
+  err = usbd_register_class(&cdc_acm_serial, "uac2_radio", speed, 2);
   if (err) {
     LOG_ERR("Failed to register UAC2 class");
     return err;
-  }*/
+  }
 
   return usbd_device_set_code_triple(uds_ctx, speed, USB_BCC_MISCELLANEOUS, 0x02, 0x01);
 }
