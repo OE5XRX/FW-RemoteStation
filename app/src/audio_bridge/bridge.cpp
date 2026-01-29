@@ -95,9 +95,11 @@ void UsbAudioBridge::thread_entry(void *p1, void *, void *) {
 void UsbAudioBridge::handle_sof() {
   // Inject zero-fill if no data received this SOF
   if (!state_.usb_data_received && state_.any_enabled()) {
-    MutexLock lock(mutex_);
-    void *buf = usb_out_pool_.acquire();
-    lock.~MutexLock(); // Unlock before recursive call
+    void *buf = nullptr;
+    {
+      MutexLock lock(mutex_);
+      buf = usb_out_pool_.acquire();
+    } // lock is automatically released here before recursive call
     handle_usb_data(UsbTerminals::OUT, buf, 0);
   }
   state_.usb_data_received = false;
@@ -114,7 +116,7 @@ void UsbAudioBridge::handle_sof() {
     if (state_.sof_counter < 255)
       state_.sof_counter++;
     if (state_.sof_counter >= SyncConfig::RX_START_DELAY) {
-      k_sem_give(&tx_sem_);
+      k_sem_give(&usb_in_sem_);
     }
   }
 }
@@ -194,28 +196,38 @@ void UsbAudioBridge::handle_usb_data(uint8_t terminal, void *buf, uint16_t size)
 
 void UsbAudioBridge::handle_usb_in_thread() {
   while (true) {
-    k_sem_take(&tx_sem_, K_MSEC(2));
+    k_sem_take(&usb_in_sem_, K_MSEC(2));
 
-    MutexLock lock(mutex_);
+    int samples = 0;
+    uint16_t bytes = 0;
+    void *buf = nullptr;
+    size_t read = 0;
+    bool should_continue = false;
 
-    if (!state_.rx_enabled || !state_.streaming_active) {
+    {
+      MutexLock lock(mutex_);
+
+      if (!state_.rx_enabled || !state_.streaming_active) {
+        should_continue = true;
+      } else {
+        samples = feedback_.calculate_samples();
+        bytes = samples * AudioConfig::BYTES_PER_SAMPLE;
+
+        if (rx_ring_.available() < bytes) {
+          LOG_DBG("Not enough RX data: %u < %u", rx_ring_.available(), bytes);
+          should_continue = true;
+        } else {
+          buf = usb_in_pool_.acquire();
+          read = rx_ring_.read(static_cast<uint8_t *>(buf), bytes);
+        }
+      }
+    } // mutex_ unlocked here
+
+    if (should_continue) {
       continue;
     }
 
-    const int samples = feedback_.calculate_samples();
-    const uint16_t bytes = samples * AudioConfig::BYTES_PER_SAMPLE;
-
-    if (rx_ring_.available() < bytes) {
-      LOG_DBG("Not enough RX data: %u < %u", rx_ring_.available(), bytes);
-      continue;
-    }
-
-    void *buf = usb_in_pool_.acquire();
-    const auto read = rx_ring_.read(static_cast<uint8_t *>(buf), bytes);
-
-    lock.~MutexLock(); // Unlock before USB call
-
-    if (read == bytes) {
+    if (read == bytes && buf != nullptr) {
       const int ret = usbd_uac2_send(uac2_dev_, UsbTerminals::IN, buf, read);
       if (ret == 0) {
         LOG_DBG("USB IN: %u bytes sent (%d samples)", read, samples);
@@ -247,7 +259,7 @@ int UsbAudioBridge::initialize(const device *sa818, const device *uac2) {
 
   // Initialize sync primitives
   k_mutex_init(&mutex_);
-  k_sem_init(&tx_sem_, 0, 1);
+  k_sem_init(&usb_in_sem_, 0, 1);
 
   // Reset state
   state_ = StreamState{};
@@ -285,7 +297,7 @@ int UsbAudioBridge::initialize(const device *sa818, const device *uac2) {
   LOG_INF("  TX buffer: %zu bytes | RX buffer: %zu bytes", BufferConfig::TX_RING_SIZE, BufferConfig::RX_RING_SIZE);
 
   // Create USB IN thread (for SA818 RX -> USB IN)
-  k_thread_create(&thread_data_, usb_in_thread_stack, 1024, thread_entry, this, nullptr, nullptr, 7, 0, K_NO_WAIT);
+  k_thread_create(&thread_data_, usb_in_thread_stack, K_KERNEL_STACK_SIZEOF(usb_in_thread_stack), thread_entry, this, nullptr, nullptr, 7, 0, K_NO_WAIT);
 
   LOG_INF("USB IN thread started");
 
