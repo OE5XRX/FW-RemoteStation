@@ -2,7 +2,7 @@
  * @file sa818_driver.cpp
  * @brief SA818 Driver Initialization
  *
- * @copyright Copyright (c) 2025 OE5XRX
+ * @copyright Copyright (c) 2026 OE5XRX
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
