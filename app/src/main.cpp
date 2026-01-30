@@ -15,7 +15,9 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-int main(void) {
+int main(void) {}
+
+static int init_audio_bridge(void) {
   LOG_INF("FM Transceiver Application Starting");
 
   /* Get device references from device tree */
@@ -45,3 +47,5 @@ int main(void) {
 
   return 0;
 }
+
+SYS_INIT(init_audio_bridge, APPLICATION, 80);
