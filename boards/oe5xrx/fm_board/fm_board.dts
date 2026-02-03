@@ -77,7 +77,7 @@
 		uac_aclk: aclk {
 			compatible = "zephyr,uac2-clock-source";
 			clock-type = "internal-fixed";
-			frequency-control = "read-only";
+			//frequency-control = "read-only";
 			sampling-frequencies = <8000>;
 		};
 
@@ -112,12 +112,12 @@
 			front-center;
 		};
 
-		usb_in_terminal: usb_in {
-			compatible = "zephyr,uac2-output-terminal";
-			data-source = <&sa818_rx_input>;
-			clock-source = <&uac_aclk>;
-			terminal-type = <USB_TERMINAL_STREAMING>;
-		};
+		//usb_in_terminal: usb_in {
+		//	compatible = "zephyr,uac2-output-terminal";
+		//	data-source = <&sa818_rx_input>;
+		//	clock-source = <&uac_aclk>;
+		//	terminal-type = <USB_TERMINAL_STREAMING>;
+		//};
 
 		/*
 		 * Audio Streaming Interfaces
@@ -125,18 +125,18 @@
 		as_iso_out: out_interface {
 			compatible = "zephyr,uac2-audio-streaming";
 			linked-terminal = <&usb_out_terminal>;
-			implicit-feedback;
+			//implicit-feedback;
 			subslot-size = <2>;
 			bit-resolution = <16>;
 		};
 
-		as_iso_in: in_interface {
-			compatible = "zephyr,uac2-audio-streaming";
-			linked-terminal = <&usb_in_terminal>;
-			implicit-feedback;
-			subslot-size = <2>;
-			bit-resolution = <16>;
-		};
+		//as_iso_in: in_interface {
+		//	compatible = "zephyr,uac2-audio-streaming";
+		//	linked-terminal = <&usb_in_terminal>;
+		//	//implicit-feedback;
+		//	subslot-size = <2>;
+		//	bit-resolution = <16>;
+		//};
 	};
 
 	sa818: sa818 {
