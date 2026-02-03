@@ -91,7 +91,7 @@ static int usb_init_device(void) {
     return err;
   }
 
-  if (USBD_SUPPORTS_HIGH_SPEED && usbd_caps_speed(&cdc_acm_serial) == USBD_SPEED_HS) {
+  /*if (USBD_SUPPORTS_HIGH_SPEED && usbd_caps_speed(&cdc_acm_serial) == USBD_SPEED_HS) {
     err = usbd_add_configuration(&cdc_acm_serial, USBD_SPEED_HS, &cdc_acm_serial_hs_config);
     if (err) {
       LOG_ERR("Failed to add High-Speed configuration");
@@ -102,7 +102,7 @@ static int usb_init_device(void) {
     if (err) {
       LOG_ERR("Failed to register CDC ACM class");
       return err;
-    }*/
+    }*
 
     err = usbd_register_all_classes(&cdc_acm_serial, USBD_SPEED_HS, 1, blocklist);
     if (err) {
@@ -111,7 +111,7 @@ static int usb_init_device(void) {
     }
 
     set_code_triple(&cdc_acm_serial, USBD_SPEED_HS);
-  }
+  }*/
 
   /* doc configuration register start */
   err = usbd_add_configuration(&cdc_acm_serial, USBD_SPEED_FS, &cdc_acm_serial_fs_config);
@@ -121,18 +121,24 @@ static int usb_init_device(void) {
   }
   /* doc configuration register end */
 
-  /*err = usbd_register_class(&cdc_acm_serial, "cdc_acm_0", USBD_SPEED_FS, 1);
+  err = usbd_register_class(&cdc_acm_serial, "uac2_0", USBD_SPEED_FS, 1); // uac2_0, cdc_acm_0
   if (err) {
     LOG_ERR("Failed to register CDC ACM class");
     return err;
-  }*/
+  }
+
+  err = usbd_register_class(&cdc_acm_serial, "cdc_acm_0", USBD_SPEED_FS, 1); // uac2_0, cdc_acm_0
+  if (err) {
+    LOG_ERR("Failed to register CDC ACM class");
+    return err;
+  }
 
   /* doc functions register start */
-  err = usbd_register_all_classes(&cdc_acm_serial, USBD_SPEED_FS, 1, blocklist);
+  /*err = usbd_register_all_classes(&cdc_acm_serial, USBD_SPEED_FS, 1, blocklist);
   if (err) {
     LOG_ERR("Failed to add register classes");
     return err;
-  }
+  }*/
   /* doc functions register end */
 
   set_code_triple(&cdc_acm_serial, USBD_SPEED_FS);

@@ -31,12 +31,15 @@ K_THREAD_STACK_DEFINE(usb_in_thread_stack, 1024);
 // UAC2 Operations Table
 // ============================================================================
 
+static uint32_t feedback_callback(const device *dev, uint8_t terminal, void *ctx);
+
 constexpr uac2_ops uac2_ops_table = {
     .sof_cb = UsbAudioBridge::sof_callback,
     .terminal_update_cb = UsbAudioBridge::terminal_callback,
     .get_recv_buf = UsbAudioBridge::buffer_callback,
     .data_recv_cb = UsbAudioBridge::data_callback,
     .buf_release_cb = UsbAudioBridge::release_callback,
+    .feedback_cb = feedback_callback,
 };
 
 // ============================================================================
@@ -61,6 +64,17 @@ void UsbAudioBridge::data_callback(const device *, uint8_t terminal, void *buf, 
 
 void UsbAudioBridge::release_callback(const device *, uint8_t, void *, void *) {
   // Static pools, nothing to release
+}
+
+static uint32_t feedback_callback(const device *dev, uint8_t terminal, void *ctx) {
+  // nur für Playback/OUT-Terminal Feedback liefern
+  if (terminal != UsbTerminals::OUT) {
+    return 0;
+  }
+
+  // Full-Speed: Q10.14, Samples pro Frame (1 ms)
+  // 8kHz => 8 samples/frame
+  return (8u << 14); // 0x020000
 }
 
 size_t UsbAudioBridge::sa818_tx_callback(const device *, uint8_t *buf, size_t size, void *ctx) {
@@ -154,9 +168,28 @@ void *UsbAudioBridge::handle_buffer_request(uint8_t terminal, uint16_t size) {
     return nullptr;
   }
 
+  void *p = usb_out_pool_.acquire();
+  if (p == nullptr) {
+    // Diagnose: Pool leer -> gib einen Fallback-Buffer, damit der EP nicht stirbt
+    static uint8_t fallback[BufferConfig::USB_BUF_SIZE] __aligned(4);
+    return fallback;
+  }
+  return p;
+}
+/*
+void *UsbAudioBridge::handle_buffer_request(uint8_t terminal, uint16_t size) {
+  if (terminal != UsbTerminals::OUT || !state_.tx_enabled) {
+    return nullptr;
+  }
+
+  if (size > BufferConfig::USB_BUF_SIZE) {
+    LOG_ERR("Buffer request too large: %u > %zu", size, BufferConfig::USB_BUF_SIZE);
+    return nullptr;
+  }
+
   MutexLock lock(mutex_);
   return usb_out_pool_.acquire();
-}
+}*/
 
 void UsbAudioBridge::handle_usb_data(uint8_t terminal, void *buf, uint16_t size) {
   if (terminal != UsbTerminals::OUT)
