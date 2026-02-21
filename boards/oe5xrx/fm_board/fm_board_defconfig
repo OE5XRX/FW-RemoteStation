@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 # FM Board Hardware Configuration (fm_board_defconfig)
-# Board-specific hardware enablement for STM32F302VC-based FM transceiver.
+# Board-specific hardware enablement for STM32U575CITx-based FM transceiver.
 # This file contains only hardware-specific configurations that are tied to
 # the physical board design. Software-level configs belong in app/prj.conf.
 
 # =============================================================================
-# ARM Cortex-M4 Core Features
+# ARM Cortex-M33 Core Features
 # =============================================================================
 CONFIG_ARM_MPU=y
 CONFIG_HW_STACK_PROTECTION=y

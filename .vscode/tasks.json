@@ -61,7 +61,7 @@
     {
       "label": "PyOCD Flash Only",
       "type": "shell",
-      "command": "pyocd flash -t stm32f302vctx build/zephyr/zephyr.hex",
+      "command": "pyocd flash -t stm32u575citx build/zephyr/zephyr.hex",
       "group": "test",
       "problemMatcher": [],
       "presentation": {

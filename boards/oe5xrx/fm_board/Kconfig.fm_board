@@ -1,2 +1,2 @@
 config BOARD_FM_BOARD
-	select SOC_STM32F302XC
+	select SOC_STM32U575XX

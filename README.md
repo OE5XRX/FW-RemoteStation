@@ -26,7 +26,7 @@ zu testen – noch bevor echte Hardware erforderlich ist.
 ## Unterstützte Targets
 
 - fm_board  
-  STM32F302-basiertes FM-Transceiver-Board
+  STM32U575CITx-basiertes FM-Transceiver-Board
 
 - native_sim/native/64  
   Host-Simulation (Linux), primär für Tests und Entwicklung

@@ -1,0 +1,240 @@
+/*
+ * Copyright (c) 2025 OE5XRX
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ *
+ * FM Board Common Device Tree
+ * Hardware configuration for STM32U575CITx-based FM transceiver board
+ * with SA818 radio module and USB composite device (CDC, UAC2)
+ * 
+ * Based on nucleo_u575zi_q-common.dtsi structure
+ */
+
+#include <st/u5/stm32u575Xi.dtsi>
+#include "fm_board-pinctrl.dtsi"
+#include <zephyr/dt-bindings/usb/audio.h>
+
+/ {
+	sa818: sa818 {
+		compatible = "sa,sa818";
+		status = "okay";
+
+		uart = <&usart1>;
+		
+		io-channels = <&adc1 5>, <&dac1 1>;
+		io-channel-names = "audio_in", "audio_out";
+
+		h-l-power-gpios    = <&gpiob 10 GPIO_ACTIVE_HIGH>;
+		nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_LOW>;
+		npower-down-gpios  = <&gpiob 1 GPIO_ACTIVE_LOW>;
+		nsquelch-gpios     = <&gpiob 0 GPIO_ACTIVE_LOW>;
+
+		tx-enable-delay-ms = <20>;
+		rx-settle-time-ms  = <50>;
+	};
+
+	/*
+	 * USB Audio Class 2 (UAC2) Configuration
+	 * Provides bidirectional audio streaming for SA818 radio
+	 * - OUT: USB Host -> SA818 TX (audio to transmit)
+	 * - IN: SA818 RX -> USB Host (received audio)
+	 */
+	uac2_radio: usb_audio2 {
+		compatible = "zephyr,uac2";
+		status = "okay";
+		full-speed;
+		audio-function = <AUDIO_FUNCTION_HEADSET>;
+
+		/* Audio Clock Source - 8kHz for SA818 */
+		uac_aclk: aclk {
+			compatible = "zephyr,uac2-clock-source";
+			clock-type = "internal-fixed";
+			sampling-frequencies = <8000>;
+		};
+
+		/*
+		 * Output Path: USB -> SA818 TX
+		 * Audio from host is sent to SA818 for transmission
+		 */
+		usb_out_terminal: usb_out {
+			compatible = "zephyr,uac2-input-terminal";
+			clock-source = <&uac_aclk>;
+			terminal-type = <USB_TERMINAL_STREAMING>;
+			/* Mono audio for radio transmission */
+			front-center;
+		};
+
+		sa818_tx_output: sa818_tx {
+			compatible = "zephyr,uac2-output-terminal";
+			data-source = <&usb_out_terminal>;
+			clock-source = <&uac_aclk>;
+			terminal-type = <EMBEDDED_TERMINAL_RADIO_TRANSMITTER>;
+		};
+
+		/*
+		 * Input Path: SA818 RX -> USB
+		 * Received audio from SA818 is sent to host
+		 */
+		sa818_rx_input: sa818_rx {
+			compatible = "zephyr,uac2-input-terminal";
+			clock-source = <&uac_aclk>;
+			terminal-type = <EMBEDDED_TERMINAL_RADIO_RECEIVER>;
+			/* Mono audio from radio receiver */
+			front-center;
+		};
+
+		/*
+		 * Audio Streaming Interfaces
+		 */
+		as_iso_out: out_interface {
+			compatible = "zephyr,uac2-audio-streaming";
+			linked-terminal = <&usb_out_terminal>;
+			subslot-size = <2>;
+			bit-resolution = <16>;
+		};
+	};
+};
+
+&clk_lsi {
+	status = "okay";
+};
+
+&clk_hse {
+	clock-frequency = <DT_FREQ_M(8)>;
+	status = "okay";
+};
+
+&pll1 {
+	div-m = <1>;
+	mul-n = <36>;
+	div-p = <2>;
+	div-q = <2>;
+	div-r = <2>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll1>;
+	clock-frequency = <DT_FREQ_M(144)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <1>;
+	apb2-prescaler = <1>;
+	apb3-prescaler = <1>;
+	status = "okay";
+};
+
+&usart1 {
+	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
+	pinctrl-names = "default";
+	current-speed = <9600>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-0 = <&i2c1_scl_pb13 &i2c1_sda_pb14>;
+	pinctrl-names = "default";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	status = "okay";
+};
+
+&i2c2 {
+	pinctrl-0 = <&i2c2_scl_pb8 &i2c2_sda_pb9>;
+	pinctrl-names = "default";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	status = "okay";
+
+	eeprom: cat24c32@50 {
+		compatible = "atmel,at24";
+		reg = <0x50>;
+		size = <4096>;
+		pagesize = <32>;
+		address-width = <8>;
+		timeout = <5>;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/*
+		 * MCUboot Dual-Image Layout (Swap Move) - 2MB total
+		 * MCUboot: 48KB
+		 * Slot 0 (Primary): 960KB
+		 * Slot 1 (Secondary): 960KB
+		 * Scratch: 8KB
+		 * Storage: 56KB
+		 */
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 DT_SIZE_K(48)>;
+			read-only;
+		};
+
+		slot0_partition: partition@C000 {
+			label = "image-0";
+			reg = <0x0000C000 DT_SIZE_K(960)>;
+		};
+
+		slot1_partition: partition@FC000 {
+			label = "image-1";
+			reg = <0x000FC000 DT_SIZE_K(960)>;
+		};
+
+		scratch_partition: partition@1EC000 {
+			label = "image-scratch";
+			reg = <0x001EC000 DT_SIZE_K(8)>;
+		};
+
+		storage_partition: partition@1EE000 {
+			label = "storage";
+			reg = <0x001EE000 DT_SIZE_K(56)>;
+		};
+	};
+};
+
+&adc1 {
+	status = "okay";
+	pinctrl-0 = <&adc1_in5_pa0>;
+	pinctrl-names = "default";
+	st,adc-clock-source = "ASYNC";
+	st,adc-prescaler = <4>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@5 {
+		reg = <5>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <14>;
+	};
+};
+
+&dac1 {
+	status = "okay";
+	pinctrl-0 = <&dac_out1_pa4>;
+	pinctrl-names = "default";
+};
+
+&rtc {
+	clocks = <&rcc STM32_CLOCK_BUS_APB3 0x00200000>,
+		 <&rcc STM32_SRC_LSI RTC_SEL(2)>;
+	status = "okay";
+};
+
+&iwdg {
+	status = "okay";
+};
+
+zephyr_udc0: &usbotg_fs {
+	pinctrl-0 = <&usb_otg_fs_dm_pa11 &usb_otg_fs_dp_pa12>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
