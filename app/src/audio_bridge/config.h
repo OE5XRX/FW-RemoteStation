@@ -8,13 +8,16 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
 
 namespace oe5xrx::audio {
 
 /**
  * @brief Audio stream configuration
+ *
+ * C++20: All values are constexpr for compile-time evaluation
  */
 struct AudioConfig {
   static constexpr uint32_t SAMPLE_RATE_HZ = 8000;
@@ -28,6 +31,8 @@ struct AudioConfig {
 
 /**
  * @brief Buffer sizes and pool configuration
+ *
+ * C++20: Compile-time validation with static_assert
  */
 struct BufferConfig {
   static constexpr size_t TX_RING_SIZE = 512; // 32ms buffer (USB->SA818)
@@ -38,6 +43,10 @@ struct BufferConfig {
   // Validate power of 2 for ring buffers
   static_assert((TX_RING_SIZE & (TX_RING_SIZE - 1)) == 0, "TX_RING_SIZE must be power of 2");
   static_assert((RX_RING_SIZE & (RX_RING_SIZE - 1)) == 0, "RX_RING_SIZE must be power of 2");
+
+  // Calculate buffer duration in milliseconds at compile time
+  static constexpr uint32_t TX_BUFFER_DURATION_MS = (TX_RING_SIZE * 1000u) / (AudioConfig::SAMPLE_RATE_HZ * AudioConfig::BYTES_PER_SAMPLE);
+  static constexpr uint32_t RX_BUFFER_DURATION_MS = (RX_RING_SIZE * 1000u) / (AudioConfig::SAMPLE_RATE_HZ * AudioConfig::BYTES_PER_SAMPLE);
 };
 
 /**

@@ -67,6 +67,12 @@ static sa818_result uart_read_response(const struct device *uart, char *response
     return SA818_ERROR_INVALID_PARAM;
   }
 
+  /* Buffer must have space for at least one char + null terminator */
+  if (response_len < 2) {
+    LOG_ERR("Response buffer too small: %zu bytes (minimum 2)", response_len);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
   const int64_t start_time = k_uptime_get();
   int64_t current_time = start_time;
   size_t pos = 0;

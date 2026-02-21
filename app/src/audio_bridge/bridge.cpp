@@ -168,13 +168,27 @@ void *UsbAudioBridge::handle_buffer_request(uint8_t terminal, uint16_t size) {
     return nullptr;
   }
 
+  // First attempt: try to acquire from pool
+  MutexLock lock(mutex_);
   void *p = usb_out_pool_.acquire();
-  if (p == nullptr) {
-    // Diagnose: Pool leer -> gib einen Fallback-Buffer, damit der EP nicht stirbt
-    static uint8_t fallback[BufferConfig::USB_BUF_SIZE] __aligned(4);
-    return fallback;
+
+  if (p != nullptr) {
+    return p;
   }
-  return p;
+
+  // Pool exhausted - log diagnostics
+  const auto &stats = usb_out_pool_.stats();
+  LOG_ERR("USB OUT buffer pool exhausted!");
+  LOG_ERR("  Acquired: %u | Released: %u | In use: %u/%zu", stats.acquired, stats.released, stats.current_usage, BufferConfig::USB_POOL_COUNT);
+  LOG_ERR("  Peak usage: %u | Exhaustion count: %u", stats.peak_usage, stats.pool_exhausted);
+
+  // Emergency fallback: return dedicated emergency buffer
+  // Note: This is NOT thread-safe if multiple endpoints request simultaneously!
+  // Only used to prevent USB stack from crashing.
+  static uint8_t emergency_buffer[BufferConfig::USB_BUF_SIZE] __aligned(4);
+  LOG_WRN("Using emergency buffer - potential data corruption risk!");
+
+  return emergency_buffer;
 }
 /*
 void *UsbAudioBridge::handle_buffer_request(uint8_t terminal, uint16_t size) {

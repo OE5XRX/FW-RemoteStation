@@ -5,8 +5,9 @@ project(app LANGUAGES C CXX ASM)
 
 target_sources(app PRIVATE
   src/main.cpp
-        src/usb_config.cpp
-        src/uac2_simple.c
+  src/usb_config.cpp
+  src/uac2_simple.c
+  src/audio_bridge/buffer.cpp
 )
 
 #if (CONFIG_USB_DEVICE_STACK_NEXT)

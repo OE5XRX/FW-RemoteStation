@@ -13,7 +13,7 @@ static const struct device *uac2_dev;
 /* simple static buffers */
 #define USB_BUF_SIZE 256
 static uint8_t out_buf[USB_BUF_SIZE];
-static uint8_t in_buf[USB_BUF_SIZE];
+// static uint8_t in_buf[USB_BUF_SIZE];
 
 /* ---- Callbacks ------------------------------------------------ */
 

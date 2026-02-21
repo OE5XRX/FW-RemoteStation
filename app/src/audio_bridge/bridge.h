@@ -44,7 +44,7 @@ public:
    * @param uac2 USB UAC2 device
    * @return 0 on success, negative error code otherwise
    */
-  int initialize(const device *sa818, const device *uac2);
+  [[nodiscard]] int initialize(const device *sa818, const device *uac2);
 
   // ---- Static Callback Trampolines (C -> C++) ----
   // Must be public for uac2_ops_table and SA818 callbacks
@@ -77,8 +77,9 @@ private:
     bool usb_data_received{false}; // Data received this SOF
     uint8_t sof_counter{0};        // SOF frame counter
 
-    bool any_enabled() const { return tx_enabled || rx_enabled; }
-    void reset() {
+    [[nodiscard]] constexpr bool any_enabled() const noexcept { return tx_enabled || rx_enabled; }
+
+    constexpr void reset() noexcept {
       streaming_active = false;
       sof_counter = 0;
     }
