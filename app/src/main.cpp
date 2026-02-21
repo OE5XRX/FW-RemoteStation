@@ -17,10 +17,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 int main(void) {}
 
+/*
 static int init_audio_bridge(void) {
   LOG_INF("FM Transceiver Application Starting");
 
-  /* Get device references from device tree */
+  // Get device references from device tree
   const struct device *sa818_dev = DEVICE_DT_GET(DT_ALIAS(sa818));
   if (!device_is_ready(sa818_dev)) {
     LOG_ERR("SA818 device not ready");
@@ -35,7 +36,7 @@ static int init_audio_bridge(void) {
   }
   LOG_INF("UAC2 device ready");
 
-  /* Initialize USB Audio Bridge to connect USB UAC2 with SA818 */
+  // Initialize USB Audio Bridge to connect USB UAC2 with SA818
   int ret = oe5xrx::audio::UsbAudioBridge::instance().initialize(sa818_dev, uac2_dev);
   if (ret != 0) {
     LOG_ERR("Failed to initialize USB Audio Bridge: %d", ret);
@@ -49,3 +50,4 @@ static int init_audio_bridge(void) {
 }
 
 SYS_INIT(init_audio_bridge, APPLICATION, 80);
+*/

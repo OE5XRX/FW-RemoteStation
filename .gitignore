@@ -1,6 +1,7 @@
 # editors
 *.swp
 *~
+.DS_Store
 
 # python
 .venv

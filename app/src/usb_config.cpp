@@ -60,9 +60,6 @@ static void set_code_triple(struct usbd_context *uds_ctx, const enum usbd_speed 
   }
 }
 
-/* USB Pullup: PB12 - just for V0.2 board revision, remove for next revision */
-static const struct gpio_dt_spec pullup = {.port = DEVICE_DT_GET(DT_NODELABEL(gpiob)), .pin = 12, .dt_flags = GPIO_ACTIVE_HIGH};
-
 static int usb_init_device(void) {
   LOG_INF("USB Init Starting");
   int err;
@@ -91,27 +88,27 @@ static int usb_init_device(void) {
     return err;
   }
 
-  /*if (USBD_SUPPORTS_HIGH_SPEED && usbd_caps_speed(&cdc_acm_serial) == USBD_SPEED_HS) {
+  if (USBD_SUPPORTS_HIGH_SPEED && usbd_caps_speed(&cdc_acm_serial) == USBD_SPEED_HS) {
     err = usbd_add_configuration(&cdc_acm_serial, USBD_SPEED_HS, &cdc_acm_serial_hs_config);
     if (err) {
       LOG_ERR("Failed to add High-Speed configuration");
       return err;
     }
 
-    /*err = usbd_register_class(&cdc_acm_serial, "cdc_acm_0", USBD_SPEED_HS, 1);
+    err = usbd_register_class(&cdc_acm_serial, "cdc_acm_0", USBD_SPEED_HS, 1);
     if (err) {
       LOG_ERR("Failed to register CDC ACM class");
       return err;
-    }*
+    }
 
-    err = usbd_register_all_classes(&cdc_acm_serial, USBD_SPEED_HS, 1, blocklist);
+    /*err = usbd_register_all_classes(&cdc_acm_serial, USBD_SPEED_HS, 1, blocklist);
     if (err) {
       LOG_ERR("Failed to add register classes");
       return err;
-    }
+    }*/
 
     set_code_triple(&cdc_acm_serial, USBD_SPEED_HS);
-  }*/
+  }
 
   /* doc configuration register start */
   err = usbd_add_configuration(&cdc_acm_serial, USBD_SPEED_FS, &cdc_acm_serial_fs_config);
@@ -149,21 +146,11 @@ static int usb_init_device(void) {
     return err;
   }
 
-  /* Sicher disconnected - just for V0.2 board revision, remove for next revision */
-  gpio_pin_configure_dt(&pullup, GPIO_INPUT);
-  k_sleep(K_MSEC(300)); /* Host muss Disconnect sehen */
-  /* end remove */
-
   err = usbd_enable(&cdc_acm_serial);
   if (err) {
     LOG_ERR("Failed to enable %s (%d)", "device support", err);
     return err;
   }
-
-  /* Pull-Up aktivieren - just for V0.2 board revision, remove for next revision */
-  k_sleep(K_MSEC(50));
-  gpio_pin_configure_dt(&pullup, GPIO_OUTPUT_HIGH);
-  /* end remove */
 
   LOG_INF("USB Init finished");
   return 0;

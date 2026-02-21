@@ -1,0 +1,98 @@
+
+#include <zephyr/dt-bindings/usb/audio.h>
+
+/ {
+  chosen {
+    zephyr,console = &cdc_acm_uart0;
+    zephyr,shell-uart = &cdc_acm_uart0;
+  };
+
+  /*
+   * USB Audio Class 2 (UAC2)
+   * - Playback (OUT): Host -> Device  (z.B. SA818 TX / DAC)
+   * - Capture  (IN):  Device -> Host  (z.B. SA818 RX / ADC)
+   *
+   * If you only need playback first, you can comment out the IN path.
+   */
+  uac2_radio: usb_audio2 {
+    compatible = "zephyr,uac2";
+    status = "okay";
+    full-speed;
+		audio-function = <AUDIO_FUNCTION_HEADSET>;
+
+    /* Clock Source: fixed 8kHz */
+    uac_aclk: aclk {
+      compatible = "zephyr,uac2-clock-source";
+      clock-type = "internal-fixed";
+      sampling-frequencies = <8000>;
+      /* optionally:
+       * frequency-control = "read-only";
+       */
+    };
+
+    /* ===== Playback path (Host -> Device) ===== */
+
+    usb_out_terminal: usb_out {
+      compatible = "zephyr,uac2-input-terminal";
+      clock-source = <&uac_aclk>;
+      terminal-type = <USB_TERMINAL_STREAMING>;
+      front-center; /* mono */
+    };
+
+    device_playback_sink: playback_sink {
+      compatible = "zephyr,uac2-output-terminal";
+      data-source = <&usb_out_terminal>;
+      clock-source = <&uac_aclk>;
+      /* pick something that matches your use-case; radio transmitter works too */
+      terminal-type = <EMBEDDED_TERMINAL_RADIO_TRANSMITTER>;
+    };
+
+    as_iso_out: out_interface {
+      compatible = "zephyr,uac2-audio-streaming";
+      linked-terminal = <&usb_out_terminal>;
+      subslot-size = <2>;
+      bit-resolution = <16>;
+
+      /*
+       * If your host/ALSA expects asynchronous OUT with explicit feedback,
+       * enable exactly one of these depending on how Zephyr currently implements it:
+       *
+       * - implicit-feedback;          (feedback on IN endpoint, no separate sync EP)
+       * - feedback-endpoint;          (if such property exists in your Zephyr rev)
+       *
+       * Keep it commented for first bring-up and enable only if needed.
+       */
+      // implicit-feedback;
+    };
+
+    /* ===== Capture path (Device -> Host) ===== */
+
+    //device_capture_source: capture_src {
+    //  compatible = "zephyr,uac2-input-terminal";
+    //  clock-source = <&uac_aclk>;
+    //  terminal-type = <EMBEDDED_TERMINAL_RADIO_RECEIVER>;
+    //  front-center; /* mono */
+    //};
+//
+    //usb_in_terminal: usb_in {
+    //  compatible = "zephyr,uac2-output-terminal";
+    //  data-source = <&device_capture_source>;
+    //  clock-source = <&uac_aclk>;
+    //  terminal-type = <USB_TERMINAL_STREAMING>;
+    //};
+//
+    //as_iso_in: in_interface {
+    //  compatible = "zephyr,uac2-audio-streaming";
+    //  linked-terminal = <&usb_in_terminal>;
+    //  subslot-size = <2>;
+    //  bit-resolution = <16>;
+    //  // implicit-feedback;
+    //};
+  };
+};
+
+&zephyr_udc0 {
+  cdc_acm_uart0: cdc_acm_uart0 {
+    compatible = "zephyr,cdc-acm-uart";
+  };
+};
