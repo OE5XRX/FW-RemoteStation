@@ -160,12 +160,20 @@
 		#size-cells = <1>;
 
 		/*
-		 * MCUboot Dual-Image Layout (Swap Move) - 2MB total
+		 * MCUboot Dual-Image Layout (Swap Move without Scratch) - 2MB total
+		 * Primary slot is one sector (4KB) larger than secondary slot
+		 * to accommodate the swap operation without needing a dedicated scratch area.
+		 *
 		 * MCUboot: 48KB
-		 * Slot 0 (Primary): 960KB
+		 * Slot 0 (Primary): 964KB   (960KB app + 4KB swap overhead)
 		 * Slot 1 (Secondary): 960KB
-		 * Scratch: 8KB
-		 * Storage: 56KB
+		 * Storage: 64KB
+		 * Total: 2MB
+		 *
+		 * Swap using Move Configuration:
+		 * - No scratch partition needed
+		 * - Primary slot larger by one sector
+		 * - Reduces flash usage compared to swap-using-scratch
 		 */
 		boot_partition: partition@0 {
 			label = "mcuboot";
@@ -175,22 +183,17 @@
 
 		slot0_partition: partition@C000 {
 			label = "image-0";
-			reg = <0x0000C000 DT_SIZE_K(960)>;
+			reg = <0x0000C000 DT_SIZE_K(964)>;
 		};
 
-		slot1_partition: partition@FC000 {
+		slot1_partition: partition@FD000 {
 			label = "image-1";
-			reg = <0x000FC000 DT_SIZE_K(960)>;
+			reg = <0x000FD000 DT_SIZE_K(960)>;
 		};
 
-		scratch_partition: partition@1EC000 {
-			label = "image-scratch";
-			reg = <0x001EC000 DT_SIZE_K(8)>;
-		};
-
-		storage_partition: partition@1EE000 {
+		storage_partition: partition@1ED000 {
 			label = "storage";
-			reg = <0x001EE000 DT_SIZE_K(56)>;
+			reg = <0x001ED000 DT_SIZE_K(64)>;
 		};
 	};
 };

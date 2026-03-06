@@ -4,6 +4,7 @@ sample:
 
 tests:
   fm.app.build:
+    sysbuild: true
     build_only: true
     integration_platforms:
       - fm_board
