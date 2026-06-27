@@ -145,7 +145,7 @@
 
 		uart = <&usart1>;
 
-		io-channels = <&adc1 5>, <&dac1 0>;
+		io-channels = <&adc1 5>, <&dac1 1>;
 		io-channel-names = "audio_in", "audio_out";
 
 		h-l-power-gpios    = <&gpiob 10 GPIO_ACTIVE_HIGH>;
@@ -196,7 +196,7 @@
 &usart1 {
 	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
 	pinctrl-names = "default";
-	current-speed = <115200>;
+	current-speed = <9600>;
 	status = "okay";
 };
 
