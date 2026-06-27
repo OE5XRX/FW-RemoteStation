@@ -28,13 +28,13 @@ extern "C" {
  */
 
 /* AT Command timeouts and constants */
-#define SA818_AT_TIMEOUT_MS 2000
+#define SA818_AT_TIMEOUT_MS 5000
 #define SA818_AT_RESPONSE_MAX_LEN 128
 #define SA818_UART_BAUDRATE 9600
 
 /* Initialization delays */
 #define SA818_INIT_DELAY_MS 10
-#define SA818_POWER_ON_DELAY_MS 100
+#define SA818_POWER_ON_DELAY_MS 1500
 
 /**
  * @brief SA818 device configuration (from devicetree)
