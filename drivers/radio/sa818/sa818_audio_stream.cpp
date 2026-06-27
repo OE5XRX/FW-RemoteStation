@@ -100,8 +100,15 @@ static void audio_stream_work_handler(struct k_work *work) {
     for (size_t i = 0; i < samples; ++i) {
       const uint8_t *sample_ptr = &ctx->tx_buffer[i * SA818_AUDIO_SAMPLE_SIZE];
       int16_t pcm_sample = (int16_t)((sample_ptr[1] << 8) | sample_ptr[0]);
-      /* Scale signed 16-bit (-32768 to 32767) to unsigned DAC range */
-      uint32_t dac_value = ((uint32_t)(pcm_sample + 32768) << (cfg->audio_out_resolution - 16));
+      /* Scale signed 16-bit PCM (-32768..32767) to the DAC's unsigned range.
+       * pcm_sample + 32768 is the full 16-bit unsigned value; shift it to the
+       * DAC resolution. A left-shift by a negative amount is undefined
+       * behaviour, so right-shift when the DAC has fewer than 16 bits
+       * (e.g. the STM32U5 12-bit DAC => >> 4). */
+      uint32_t unsigned_sample = (uint32_t)(pcm_sample + 32768);
+      uint32_t dac_value = (cfg->audio_out_resolution >= 16)
+                               ? (unsigned_sample << (cfg->audio_out_resolution - 16))
+                               : (unsigned_sample >> (16 - cfg->audio_out_resolution));
       dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
     }
   }
@@ -118,13 +125,17 @@ static void audio_stream_work_handler(struct k_work *work) {
 
     int ret = adc_read_dt(&cfg->audio_in, &sequence);
     if (ret == 0) {
-      /* Convert ADC value to 16-bit PCM.
-       * We request 16-bit resolution from the ADC driver, so the sample is in
-       * the full unsigned 16-bit range (0-65535). Map this to signed 16-bit
-       * PCM (-32768 to 32767) by subtracting the midpoint.
+      /* Convert the ADC sample to signed 16-bit PCM.
+       * adc_sequence_init_dt() populated sequence.resolution from the channel's
+       * devicetree "zephyr,resolution" (12 bits on the STM32U5 ADC). Left-shift
+       * the unsigned reading up to the full 16-bit range, then subtract the
+       * midpoint. Clamp the shift to [0,16] so a 16-bit channel is a no-op and
+       * we never shift by a negative amount.
        */
+      uint8_t resolution = sequence.resolution;
+      uint8_t up_shift = (resolution < 16) ? (uint8_t)(16 - resolution) : 0;
       uint16_t adc_value = adc_sequence_buf[0];
-      int16_t pcm_sample = (int16_t)((int32_t)adc_value - 32768);
+      int16_t pcm_sample = (int16_t)(((int32_t)adc_value << up_shift) - 32768);
 
       ctx->rx_buffer[0] = (uint8_t)(pcm_sample & 0xFF);
       ctx->rx_buffer[1] = (uint8_t)((pcm_sample >> 8) & 0xFF);

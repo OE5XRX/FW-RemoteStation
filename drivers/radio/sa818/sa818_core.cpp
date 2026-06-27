@@ -51,7 +51,11 @@ static int sa818_init(const struct device *dev) {
     return -ENODEV;
   }
 
-  /* Ensure SA818 UART is configured for 9600 8N1, no flow control */
+  /* Ensure SA818 UART is configured for 9600 8N1, no flow control.
+   * The devicetree "current-speed = <9600>" already brings the port up at the
+   * right rate, so this runtime call is only a belt-and-suspenders override.
+   * When CONFIG_UART_USE_RUNTIME_CONFIGURE is disabled the driver returns
+   * -ENOSYS/-ENOTSUP; that is expected, not a failure, so don't warn on it. */
   const struct uart_config uart_cfg = {
       .baudrate = SA818_UART_BAUDRATE,
       .parity = UART_CFG_PARITY_NONE,
@@ -60,7 +64,7 @@ static int sa818_init(const struct device *dev) {
       .flow_ctrl = UART_CFG_FLOW_CTRL_NONE,
   };
   int uart_ret = uart_configure(cfg->uart, &uart_cfg);
-  if (uart_ret != 0) {
+  if (uart_ret != 0 && uart_ret != -ENOSYS && uart_ret != -ENOTSUP) {
     LOG_WRN("UART configure failed: %d", uart_ret);
   }
 
