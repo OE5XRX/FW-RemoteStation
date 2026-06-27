@@ -148,10 +148,15 @@
 		io-channels = <&adc1 5>, <&dac1 1>;
 		io-channel-names = "audio_in", "audio_out";
 
-		h-l-power-gpios    = <&gpiob 10 GPIO_ACTIVE_HIGH>;
-		nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_LOW>;
-		npower-down-gpios  = <&gpiob 1 GPIO_ACTIVE_LOW>;
-		nsquelch-gpios     = <&gpiob 0 GPIO_ACTIVE_LOW>;
+		/* Control lines per FMTransceiver schematic (U201 STM32U575 -> U101 SA818).
+		 * H_L_Power / nPTT / nPOWER_DOWN are driven through INVERTING buffer
+		 * stages (Q501 2N7002 common-source, Q701 BC847BS common-emitter), so
+		 * the active level is flipped relative to the active-low SA818 net.
+		 * nSQUELCH is a direct input via D101, so it stays active-low. */
+		h-l-power-gpios    = <&gpiob 10 GPIO_ACTIVE_LOW>;   /* PB10 -> Q501 (inverting) */
+		nptt-gpios         = <&gpiob 1 GPIO_ACTIVE_HIGH>;   /* PB1  -> Q701 (inverting) */
+		npower-down-gpios  = <&gpiob 2 GPIO_ACTIVE_HIGH>;   /* PB2  -> Q701 (inverting) */
+		nsquelch-gpios     = <&gpiob 0 GPIO_ACTIVE_LOW>;    /* PB0  <- D101 (direct) */
 
 		tx-enable-delay-ms = <20>;
 		rx-settle-time-ms  = <50>;
