@@ -155,7 +155,7 @@
 
 		tx-enable-delay-ms = <20>;
 		rx-settle-time-ms  = <50>;
-  };
+	};
 };
 
 &clk_hsi48 {
@@ -163,13 +163,16 @@
 };
 
 &clk_lse {
+	status = "disabled";
+};
+
+&clk_lsi {
 	status = "okay";
 };
 
 &clk_msis {
 	status = "okay";
 	msi-range = <4>;
-	msi-pll-mode;
 };
 
 &pll1 {
@@ -231,7 +234,7 @@ zephyr_udc0: &usbotg_fs {
 };
 
 &rtc {
-	clocks = <&rcc STM32_CLOCK(APB1, 28)>, <&rcc STM32_SRC_LSI RTC_SEL(2)>;
+	clocks = <&rcc STM32_CLOCK(APB3, 21)>, <&rcc STM32_SRC_LSI RTC_SEL(2)>;
 	status = "okay";
 };
 
