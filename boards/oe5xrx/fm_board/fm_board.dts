@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
  * FM Board Device Tree
- * Hardware configuration for STM32F302-based FM transceiver board
+ * Hardware configuration for STM32U575-based FM transceiver board
  * with SA818 radio module and USB composite device (CDC, UAC2; DFU configured via Kconfig)
  */
 
 /dts-v1/;
-#include <st/f3/stm32f302Xc.dtsi>
-#include <st/f3/stm32f302v(b-c)tx-pinctrl.dtsi>
+#include <st/u5/stm32u575Xi.dtsi>
+#include <st/u5/stm32u575citx-pinctrl.dtsi>
 #include <zephyr/dt-bindings/usb/audio.h>
 
 / {
@@ -140,47 +140,54 @@
 	};
 
 	sa818: sa818 {
-    compatible = "sa,sa818";
-    status = "okay";
+		compatible = "sa,sa818";
+		status = "okay";
 
-    uart = <&usart1>;
-		
-    io-channels = <&adc1 1>, <&dac1 0>;
-    io-channel-names = "audio_in", "audio_out";
+		uart = <&usart1>;
 
-    h-l-power-gpios    = <&gpiob 11 GPIO_ACTIVE_HIGH>;
-    nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_LOW>;
-    npower-down-gpios  = <&gpiob 10 GPIO_ACTIVE_LOW>;
-    nsquelch-gpios     = <&gpiob 1 GPIO_ACTIVE_LOW>;
+		io-channels = <&adc1 5>, <&dac1 0>;
+		io-channel-names = "audio_in", "audio_out";
 
-    tx-enable-delay-ms = <20>;
-    rx-settle-time-ms  = <50>;
+		h-l-power-gpios    = <&gpiob 10 GPIO_ACTIVE_HIGH>;
+		nptt-gpios         = <&gpiob 2 GPIO_ACTIVE_LOW>;
+		npower-down-gpios  = <&gpiob 1 GPIO_ACTIVE_LOW>;
+		nsquelch-gpios     = <&gpiob 0 GPIO_ACTIVE_LOW>;
+
+		tx-enable-delay-ms = <20>;
+		rx-settle-time-ms  = <50>;
   };
 };
 
-&clk_lsi {
+&clk_hsi48 {
 	status = "okay";
 };
 
-&clk_hse {
-	clock-frequency = <DT_FREQ_M(8)>;
+&clk_lse {
 	status = "okay";
 };
 
-&pll {
-	prediv = <1>;
-	mul = <9>;
-	clocks = <&clk_hse>;
+&clk_msis {
+	status = "okay";
+	msi-range = <4>;
+	msi-pll-mode;
+};
+
+&pll1 {
+	div-m = <1>;
+	mul-n = <80>;
+	div-q = <2>;
+	div-r = <2>;
+	clocks = <&clk_msis>;
 	status = "okay";
 };
 
 &rcc {
-	clocks = <&pll>;
-	clock-frequency = <DT_FREQ_M(72)>;
+	clocks = <&pll1>;
+	clock-frequency = <DT_FREQ_M(160)>;
 	ahb-prescaler = <1>;
-	apb1-prescaler = <2>;
+	apb1-prescaler = <1>;
 	apb2-prescaler = <1>;
-	status = "okay";
+	apb3-prescaler = <1>;
 };
 
 &usart1 {
@@ -191,7 +198,7 @@
 };
 
 &i2c1 {
-	pinctrl-0 = <&i2c1_scl_pa15 &i2c1_sda_pb9>;
+	pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb9>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_FAST>;
 	status = "okay";
@@ -207,14 +214,14 @@
 };
 
 &i2c2 {
-	pinctrl-0 = <&i2c2_scl_pa9 &i2c2_sda_pa10>;
+	pinctrl-0 = <&i2c2_scl_pb13 &i2c2_sda_pb14>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_FAST>;
 	status = "okay";
 };
 
-zephyr_udc0: &usb {
-	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+zephyr_udc0: &usbotg_fs {
+	pinctrl-0 = <&usb_otg_fs_dm_pa11 &usb_otg_fs_dp_pa12>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -224,8 +231,7 @@ zephyr_udc0: &usb {
 };
 
 &rtc {
-	clocks = <&rcc STM32_CLOCK(APB1, 28)>,
-					 <&rcc STM32_SRC_LSI RTC_SEL(2)>;
+	clocks = <&rcc STM32_CLOCK(APB1, 28)>, <&rcc STM32_SRC_LSI RTC_SEL(2)>;
 	status = "okay";
 };
 
@@ -270,15 +276,15 @@ zephyr_udc0: &usb {
 
 &adc1 {
 	status = "okay";
-	pinctrl-0 = <&adc1_in1_pa0>;
+	pinctrl-0 = <&adc1_in5_pa0>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
+	st,adc-clock-source = "ASYNC";
 	st,adc-prescaler = <2>;
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	channel@1 {
-		reg = <1>;
+	channel@5 {
+		reg = <5>;
 		zephyr,gain = "ADC_GAIN_1";
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
@@ -288,7 +294,7 @@ zephyr_udc0: &usb {
 
 &dac1 {
 	status = "okay";
-	pinctrl-0 = <&dac_out1_pa4>;
+	pinctrl-0 = <&dac1_out1_pa4>;
 	pinctrl-names = "default";
 };
 
