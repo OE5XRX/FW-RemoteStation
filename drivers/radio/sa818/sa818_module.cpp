@@ -77,20 +77,21 @@ void result_err(const struct shell *sh, const char *cap, const char *op, const c
 void emit_describe(const struct shell *sh) {
   static char buf[1024];
   int n = snprintf(buf, sizeof(buf),
-                   "MODULE-DESCRIBE {\"schema\":1,\"identity\":{\"type\":\"fm_transceiver\",\"model\":\"SA818-V\",\"version\":"
-                   "\"2m\"},\"capabilities\":[");
+                   "MODULE-DESCRIBE {\"schema\":1,\"identity\":{\"type\":\"fm_transceiver\","
+                   "\"model\":\"SA818-V\",\"version\":\"2m\"},\"capabilities\":[");
   for (size_t i = 0; i < ARRAY_SIZE(CAPS); ++i) {
+    if (n < 0 || (size_t)n >= sizeof(buf)) {
+      break; // truncation guard
+    }
     n += snprintf(buf + n, sizeof(buf) - n, "%s%s", i ? "," : "", CAPS[i].json);
   }
-  snprintf(buf + n, sizeof(buf) - n, "]}");
+  if (n >= 0 && (size_t)n < sizeof(buf)) {
+    snprintf(buf + n, sizeof(buf) - n, "]}");
+  }
   shell_print(sh, "%s", buf);
 }
 
 /* Dispatchers -- fleshed out in later tasks. */
-int do_set(const struct shell *sh, const char *cap, const char *valstr);
-int do_get(const struct shell *sh, const char *cap);
-int do_do(const struct shell *sh, const char *cap, const char *valstr);
-
 int do_set(const struct shell *sh, const char *cap, const char *) {
   result_err(sh, cap, "set", "unknown_capability");
   return 0;
