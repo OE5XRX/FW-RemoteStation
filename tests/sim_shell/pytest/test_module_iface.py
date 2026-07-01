@@ -158,3 +158,38 @@ def test_module_set_bandwidth(sa818_sim, shell):
     out = shell.exec_command("module set bandwidth 12.5")
     assert _payload(out, "MODULE-RESULT")["ok"] is True
     assert sa818_sim.get_state().bandwidth == 0
+
+
+def test_module_get_rssi(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module get rssi")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True
+    assert r["cap"] == "rssi" and r["op"] == "get"
+    assert isinstance(r["value"], int)
+
+
+def test_module_get_frequency_reads_shadow(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    shell.exec_command("module set frequency 146.000")
+    out = shell.exec_command("module get frequency")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] == 146.0
+
+
+def test_module_set_rssi_read_only(shell):
+    out = shell.exec_command("module set rssi 5")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "read_only"
+
+
+def test_module_unknown_capability(shell):
+    out = shell.exec_command("module set banana 1")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "unknown_capability"
+
+
+def test_module_get_unknown_capability(shell):
+    out = shell.exec_command("module get banana")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "unknown_capability"

@@ -190,10 +190,54 @@ int do_set(const struct shell *sh, const char *cap, const char *valstr) {
     return 0;
   }
 
+  if (!strcmp(cap, "rssi")) {
+    result_err(sh, cap, "set", "read_only");
+    return 0;
+  }
+
   result_err(sh, cap, "set", "unknown_capability");
   return 0;
 }
+
 int do_get(const struct shell *sh, const char *cap) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    result_err(sh, cap, "get", "driver_error");
+    return 0;
+  }
+
+  if (!strcmp(cap, "rssi")) {
+    uint8_t rssi = 0;
+    if (sa818_at_read_rssi(dev, &rssi) != SA818_OK) {
+      result_err(sh, cap, "get", "driver_error");
+      return 0;
+    }
+    result_ok_int(sh, cap, "get", (int)rssi);
+    return 0;
+  }
+  if (!strcmp(cap, "frequency")) {
+    result_ok_float(sh, cap, "get", (double)g_shadow.freq);
+    return 0;
+  }
+  if (!strcmp(cap, "bandwidth")) {
+    result_ok_str(sh, cap, "get", g_shadow.bw == SA818_BW_25_KHZ ? "25" : "12.5");
+    return 0;
+  }
+
+  sa818_status st = sa818_get_status(dev);
+  if (!strcmp(cap, "volume")) {
+    result_ok_int(sh, cap, "get", (int)st.volume);
+    return 0;
+  }
+  if (!strcmp(cap, "power_level")) {
+    result_ok_str(sh, cap, "get", st.power_level == SA818_POWER_HIGH ? "high" : "low");
+    return 0;
+  }
+  if (!strcmp(cap, "ptt")) {
+    result_ok_bool(sh, cap, "get", st.ptt_state == SA818_PTT_ON);
+    return 0;
+  }
+
   result_err(sh, cap, "get", "unknown_capability");
   return 0;
 }
