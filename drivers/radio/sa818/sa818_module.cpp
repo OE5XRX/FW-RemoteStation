@@ -58,7 +58,7 @@ void result_err(const struct shell *sh, const char *cap, const char *op, const c
   shell_print(sh, "MODULE-RESULT {\"ok\":false,\"cap\":\"%s\",\"op\":\"%s\",\"error\":\"%s\"}", cap, op, err);
 }
 
-[[maybe_unused]] void result_ok_int(const struct shell *sh, const char *cap, const char *op, int value) {
+void result_ok_int(const struct shell *sh, const char *cap, const char *op, int value) {
   shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%d}", cap, op, value);
 }
 
@@ -66,11 +66,11 @@ void result_ok_float(const struct shell *sh, const char *cap, const char *op, do
   shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%g}", cap, op, value);
 }
 
-[[maybe_unused]] void result_ok_bool(const struct shell *sh, const char *cap, const char *op, bool value) {
+void result_ok_bool(const struct shell *sh, const char *cap, const char *op, bool value) {
   shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%s}", cap, op, value ? "true" : "false");
 }
 
-[[maybe_unused]] void result_ok_str(const struct shell *sh, const char *cap, const char *op, const char *value) {
+void result_ok_str(const struct shell *sh, const char *cap, const char *op, const char *value) {
   shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":\"%s\"}", cap, op, value);
 }
 
@@ -89,6 +89,19 @@ void emit_describe(const struct shell *sh) {
     snprintf(buf + n, sizeof(buf) - n, "]}");
   }
   shell_print(sh, "%s", buf);
+}
+
+/* Parse on/off/1/0/true/false. Returns true on success and writes *out. */
+bool parse_bool(const char *s, bool *out) {
+  if (!strcmp(s, "on") || !strcmp(s, "1") || !strcmp(s, "true")) {
+    *out = true;
+    return true;
+  }
+  if (!strcmp(s, "off") || !strcmp(s, "0") || !strcmp(s, "false")) {
+    *out = false;
+    return true;
+  }
+  return false;
 }
 
 /* Dispatchers -- fleshed out in later tasks. */
@@ -120,6 +133,63 @@ int do_set(const struct shell *sh, const char *cap, const char *valstr) {
     return 0;
   }
 
+  if (!strcmp(cap, "power_level")) {
+    if (!strcmp(valstr, "high")) {
+      if (sa818_set_power_level(dev, SA818_POWER_HIGH) != SA818_OK) {
+        result_err(sh, cap, "set", "driver_error");
+        return 0;
+      }
+    } else if (!strcmp(valstr, "low")) {
+      if (sa818_set_power_level(dev, SA818_POWER_LOW) != SA818_OK) {
+        result_err(sh, cap, "set", "driver_error");
+        return 0;
+      }
+    } else {
+      result_err(sh, cap, "set", "bad_value");
+      return 0;
+    }
+    result_ok_str(sh, cap, "set", valstr);
+    return 0;
+  }
+
+  if (!strcmp(cap, "volume")) {
+    char *end = nullptr;
+    long v = strtol(valstr, &end, 10);
+    if (end == valstr || *end != '\0') {
+      result_err(sh, cap, "set", "bad_value");
+      return 0;
+    }
+    if (v < 1 || v > 8) {
+      result_err(sh, cap, "set", "out_of_range");
+      return 0;
+    }
+    if (sa818_at_set_volume(dev, static_cast<sa818_volume_level>(v)) != SA818_OK) {
+      result_err(sh, cap, "set", "driver_error");
+      return 0;
+    }
+    result_ok_int(sh, cap, "set", (int)v);
+    return 0;
+  }
+
+  if (!strcmp(cap, "bandwidth")) {
+    sa818_bandwidth bw;
+    if (!strcmp(valstr, "12.5")) {
+      bw = SA818_BW_12_5_KHZ;
+    } else if (!strcmp(valstr, "25")) {
+      bw = SA818_BW_25_KHZ;
+    } else {
+      result_err(sh, cap, "set", "bad_value");
+      return 0;
+    }
+    g_shadow.bw = bw;
+    if (sa818_at_set_group(dev, g_shadow.bw, g_shadow.freq, g_shadow.freq, g_shadow.tone, g_shadow.squelch, g_shadow.tone) != SA818_OK) {
+      result_err(sh, cap, "set", "driver_error");
+      return 0;
+    }
+    result_ok_str(sh, cap, "set", valstr);
+    return 0;
+  }
+
   result_err(sh, cap, "set", "unknown_capability");
   return 0;
 }
@@ -127,7 +197,27 @@ int do_get(const struct shell *sh, const char *cap) {
   result_err(sh, cap, "get", "unknown_capability");
   return 0;
 }
-int do_do(const struct shell *sh, const char *cap, const char *) {
+int do_do(const struct shell *sh, const char *cap, const char *valstr) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    result_err(sh, cap, "do", "driver_error");
+    return 0;
+  }
+
+  if (!strcmp(cap, "ptt")) {
+    bool on;
+    if (!parse_bool(valstr, &on)) {
+      result_err(sh, cap, "do", "bad_value");
+      return 0;
+    }
+    if (sa818_set_ptt(dev, on ? SA818_PTT_ON : SA818_PTT_OFF) != SA818_OK) {
+      result_err(sh, cap, "do", "driver_error");
+      return 0;
+    }
+    result_ok_bool(sh, cap, "do", on);
+    return 0;
+  }
+
   result_err(sh, cap, "do", "unknown_capability");
   return 0;
 }

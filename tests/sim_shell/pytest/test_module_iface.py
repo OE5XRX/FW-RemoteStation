@@ -88,3 +88,73 @@ def test_module_set_frequency_bad_value(sa818_sim, shell):
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False
     assert r["error"] == "bad_value"
+
+
+def _status(shell):
+    out = shell.exec_command("sa818 status")
+    text = "\n".join(_lines(out))
+    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+squelch=(\d+)\s+volume=(\d+)", text)
+    assert m, f"could not parse sa818 status: {text}"
+    return {"powered": int(m[1]), "ptt": int(m[2]), "high_power": int(m[3]),
+            "squelch": int(m[4]), "volume": int(m[5])}
+
+
+def test_module_do_ptt(shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module do ptt on")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] is True
+    assert _status(shell)["ptt"] == 1
+
+    out = shell.exec_command("module do ptt off")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] is False
+    assert _status(shell)["ptt"] == 0
+
+
+def test_module_do_ptt_bad_value(shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module do ptt maybe")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "bad_value"
+
+
+def test_module_set_power_level(shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set power_level high")
+    assert _payload(out, "MODULE-RESULT")["ok"] is True
+    assert _status(shell)["high_power"] == 1
+    out = shell.exec_command("module set power_level low")
+    assert _payload(out, "MODULE-RESULT")["ok"] is True
+    assert _status(shell)["high_power"] == 0
+
+
+def test_module_set_power_level_bad_value(shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set power_level medium")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "bad_value"
+
+
+def test_module_set_volume(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set volume 7")
+    assert _payload(out, "MODULE-RESULT")["ok"] is True
+    assert sa818_sim.get_state().volume == 7
+
+
+def test_module_set_volume_out_of_range(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set volume 9")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "out_of_range"
+
+
+def test_module_set_bandwidth(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set bandwidth 25")
+    assert _payload(out, "MODULE-RESULT")["ok"] is True
+    assert sa818_sim.get_state().bandwidth == 1
+    out = shell.exec_command("module set bandwidth 12.5")
+    assert _payload(out, "MODULE-RESULT")["ok"] is True
+    assert sa818_sim.get_state().bandwidth == 0
