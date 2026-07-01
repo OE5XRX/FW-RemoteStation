@@ -24,7 +24,7 @@
 
 namespace {
 
-[[maybe_unused]] const struct device *sa818_dev(void) {
+const struct device *sa818_dev(void) {
   return DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818));
 }
 
@@ -37,7 +37,7 @@ struct group_shadow {
   sa818_tone_code tone;
   sa818_squelch_level squelch;
 };
-[[maybe_unused]] group_shadow g_shadow = {SA818_BW_12_5_KHZ, 145.500f, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
+group_shadow g_shadow = {SA818_BW_12_5_KHZ, 145.500f, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
 
 /* Descriptor fragments -- single source of truth for `module describe`. */
 struct capability {
@@ -62,7 +62,7 @@ void result_err(const struct shell *sh, const char *cap, const char *op, const c
   shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%d}", cap, op, value);
 }
 
-[[maybe_unused]] void result_ok_float(const struct shell *sh, const char *cap, const char *op, double value) {
+void result_ok_float(const struct shell *sh, const char *cap, const char *op, double value) {
   shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%g}", cap, op, value);
 }
 
@@ -92,7 +92,34 @@ void emit_describe(const struct shell *sh) {
 }
 
 /* Dispatchers -- fleshed out in later tasks. */
-int do_set(const struct shell *sh, const char *cap, const char *) {
+int do_set(const struct shell *sh, const char *cap, const char *valstr) {
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    result_err(sh, cap, "set", "driver_error");
+    return 0;
+  }
+
+  if (!strcmp(cap, "frequency")) {
+    char *end = nullptr;
+    float f = strtof(valstr, &end);
+    if (end == valstr || *end != '\0') {
+      result_err(sh, cap, "set", "bad_value");
+      return 0;
+    }
+    if (f < 144.0f || f > 148.0f) {
+      result_err(sh, cap, "set", "out_of_range");
+      return 0;
+    }
+    g_shadow.freq = f;
+    sa818_result r = sa818_at_set_group(dev, g_shadow.bw, f, f, g_shadow.tone, g_shadow.squelch, g_shadow.tone);
+    if (r != SA818_OK) {
+      result_err(sh, cap, "set", "driver_error");
+      return 0;
+    }
+    result_ok_float(sh, cap, "set", (double)f);
+    return 0;
+  }
+
   result_err(sh, cap, "set", "unknown_capability");
   return 0;
 }

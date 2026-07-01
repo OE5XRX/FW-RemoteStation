@@ -55,3 +55,36 @@ def test_module_describe_valid_json(shell):
 
     assert caps["bandwidth"]["type"] == "enum"
     assert caps["bandwidth"]["values"] == ["12.5", "25"]
+
+
+def test_module_set_frequency_e2e(sa818_sim, shell):
+    """The §8 datapoint: typed set flows through the real driver to the module."""
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set frequency 145.500")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True
+    assert r["cap"] == "frequency"
+    assert r["op"] == "set"
+    assert r["value"] == 145.5
+    # Verify it actually drove the SA818 driver -> AT+DMOSETGROUP -> simulator state.
+    assert sa818_sim.get_state().freq_tx == 145.5
+    assert sa818_sim.get_state().freq_rx == 145.5
+
+
+def test_module_set_frequency_out_of_range(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    shell.exec_command("module set frequency 145.500")
+    out = shell.exec_command("module set frequency 150.0")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False
+    assert r["error"] == "out_of_range"
+    # Rejected value did not reach the module.
+    assert sa818_sim.get_state().freq_tx == 145.5
+
+
+def test_module_set_frequency_bad_value(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set frequency abc")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False
+    assert r["error"] == "bad_value"
