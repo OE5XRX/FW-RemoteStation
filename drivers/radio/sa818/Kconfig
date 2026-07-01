@@ -7,7 +7,7 @@
 config SA818
   bool "SA818 FM transceiver driver"
   default n
-  depends on UART
+  depends on SERIAL
   depends on GPIO
   depends on ADC
   depends on DAC
@@ -22,5 +22,14 @@ config SA818_SHELL
   depends on SHELL
   help
     Enable shell commands for SA818 driver (status, power, ptt, frequency, etc.)
+
+config SA818_MODULE_IFACE
+  bool "SA818 generic module interface (describe + typed commands)"
+  default n
+  depends on SHELL
+  help
+    Registers the generic, machine-readable `module` shell command group
+    (describe / set / get / do) mapping onto the SA818 driver. This is the
+    Firmware<->Agent contract surface; the human `sa818` command tree stays separate.
 
 endif # SA818

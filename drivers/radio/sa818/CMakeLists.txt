@@ -16,3 +16,7 @@ zephyr_library_sources(
 zephyr_library_sources_ifdef(
   CONFIG_SA818_SHELL
   sa818_shell.cpp)
+
+zephyr_library_sources_ifdef(
+  CONFIG_SA818_MODULE_IFACE
+  sa818_module.cpp)
