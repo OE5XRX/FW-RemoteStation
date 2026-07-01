@@ -124,8 +124,10 @@ def test_wav_load_start_adc(shell, tmp_path):
         for i in range(n)
     ]
 
-    wav_path = tmp_path / "test.wav"
-    _write_pcm16_mono_wav(str(wav_path), sr, samples)
+    # Use a short path: a long tmp_path line-wraps in the shell echo and breaks
+    # the harness's command match (test-harness robustness, not audio logic).
+    wav_path = "/tmp/t.wav"
+    _write_pcm16_mono_wav(wav_path, sr, samples)
 
     out = shell.exec_command(f"wav load {wav_path}")
     assert "loaded:" in _as_text(out)
