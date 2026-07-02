@@ -27,6 +27,7 @@ config SA818_MODULE_IFACE
   bool "SA818 generic module interface (describe + typed commands)"
   default n
   depends on SHELL
+  select CBPRINTF_FP_SUPPORT
   help
     Registers the generic, machine-readable `module` shell command group
     (describe / set / get / do) mapping onto the SA818 driver. This is the
