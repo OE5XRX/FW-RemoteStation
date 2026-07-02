@@ -21,6 +21,10 @@
 #ifndef OE5XRX_MODULE_IFACE_H_
 #define OE5XRX_MODULE_IFACE_H_
 
+#ifndef __cplusplus
+#error "oe5xrx/module_iface.h is a C++ header (namespaces/classes); include it only from C++."
+#endif
+
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>

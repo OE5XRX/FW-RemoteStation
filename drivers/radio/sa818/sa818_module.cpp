@@ -296,6 +296,12 @@ void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-RESULT ");
   r.render(w, cap, mod::opStr(op));
+  if (w.truncated()) {
+    // Pathologically long cap/value: fall back to a guaranteed-valid short result
+    // rather than emit truncated (invalid) JSON. op is a short internal literal.
+    shell_print(sh, "MODULE-RESULT {\"ok\":false,\"op\":\"%s\",\"error\":\"too_long\"}", mod::opStr(op));
+    return;
+  }
   shell_print(sh, "%s", w.c_str());
 }
 
@@ -304,6 +310,12 @@ int cmd_module_describe(const struct shell *sh, size_t, char **) {
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-DESCRIBE ");
   g_module.describe(w);
+  if (w.truncated()) {
+    // Descriptor outgrew the buffer: emit a minimal valid descriptor rather than
+    // truncated (invalid) JSON, so the machine-readable contract still holds.
+    shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"error\":\"too_long\"}");
+    return 0;
+  }
   shell_print(sh, "%s", w.c_str());
   return 0;
 }
