@@ -134,6 +134,7 @@ const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", nullptr, 0, BANDWID
 const FieldSpec SQUELCH_SPEC{"squelch", ValueType::Int, nullptr, SQUELCH_RANGES, 1};
 const FieldSpec TXTONE_SPEC{"tx_tone", ValueType::String};
 const FieldSpec RXTONE_SPEC{"rx_tone", ValueType::String};
+const FieldSpec BAND_SPEC{"band", ValueType::String, nullptr, nullptr, 0, nullptr, 0, /*readonly=*/true};
 
 class FrequencyCap : public Setting {
 public:
@@ -401,6 +402,29 @@ private:
   Sa818Context &ctx_;
 };
 
+class BandCap : public Telemetry {
+public:
+  explicit BandCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return BAND_SPEC; }
+
+protected:
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    double f = static_cast<double>(ctx_.freq_rx);
+    for (size_t i = 0; i < FREQ_SPEC.rangeCount; ++i) {
+      if (FREQ_SPEC.ranges[i].name != nullptr && f >= FREQ_SPEC.ranges[i].min && f <= FREQ_SPEC.ranges[i].max) {
+        return Result::okStr(FREQ_SPEC.ranges[i].name); // range name is a static literal
+      }
+    }
+    return Result::okNull();
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
 class TxToneCap : public Setting {
 public:
   explicit TxToneCap(Sa818Context &ctx) : ctx_(ctx) {}
@@ -515,8 +539,9 @@ BandwidthCap g_bandwidth{g_ctx};
 SquelchCap g_squelch{g_ctx};
 TxToneCap g_txtone{g_ctx};
 RxToneCap g_rxtone{g_ctx};
+BandCap g_band{g_ctx};
 
-Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone};
+Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band};
 const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};

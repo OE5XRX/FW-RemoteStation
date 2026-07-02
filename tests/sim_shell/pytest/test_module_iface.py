@@ -33,7 +33,7 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["version"] == "vhf"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band"}
 
     assert caps["frequency"]["kind"] == "setting"
     assert caps["frequency"]["type"] == "float"
@@ -57,6 +57,9 @@ def test_module_describe_valid_json(shell):
 
     assert caps["bandwidth"]["type"] == "enum"
     assert caps["bandwidth"]["values"] == ["12.5", "25"]
+
+    assert caps["band"]["kind"] == "telemetry"
+    assert caps["band"]["type"] == "string"
 
 
 def test_module_set_frequency_e2e(sa818_sim, shell):
@@ -300,3 +303,10 @@ def test_module_tone_dcs(sa818_sim, shell):
     assert _payload(shell.exec_command("module fm set tx_tone 023"), "MODULE-RESULT")["ok"]
     assert sa818_sim.get_state().ctcss_tx == 39      # DCS 023 -> code 39
     assert _payload(shell.exec_command("module fm get tx_tone"), "MODULE-RESULT")["value"] == "023"
+
+
+def test_module_band_telemetry(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    shell.exec_command("module fm set rx_frequency 145.500")
+    r = _payload(shell.exec_command("module fm get band"), "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] == "vhf"

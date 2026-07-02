@@ -215,6 +215,11 @@ public:
     r.s_ = v;
     return r;
   }
+  static Result okNull() {
+    Result r(true);
+    r.vk_ = VK::None;
+    return r;
+  }
   static Result okStrCopy(const char *v) {
     Result r(true);
     r.vk_ = VK::Str;
