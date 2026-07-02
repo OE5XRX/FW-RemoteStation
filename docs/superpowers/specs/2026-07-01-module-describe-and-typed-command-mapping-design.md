@@ -120,7 +120,7 @@ contract to one read + one parse per response.
 **Descriptor** (`module describe`):
 
 ```
-MODULE-DESCRIBE {"schema":1,"identity":{"type":"fm_transceiver","model":"SA818-V","version":"2m"},"capabilities":[{"name":"frequency","kind":"setting","type":"float","unit":"MHz","min":144.0,"max":148.0,"step":0.0125,"access":"operator"},{"name":"ptt","kind":"action","type":"bool","access":"operator"},{"name":"power_level","kind":"setting","type":"enum","values":["low","high"],"access":"operator"},{"name":"rssi","kind":"telemetry","type":"int","unit":"dBm","readonly":true,"access":"operator"},{"name":"volume","kind":"setting","type":"int","min":1,"max":8,"access":"operator"},{"name":"bandwidth","kind":"setting","type":"enum","values":["12.5","25"],"unit":"kHz","access":"operator"}]}
+MODULE-DESCRIBE {"schema":1,"identity":{"type":"fm_transceiver","model":"SA818-V","version":"2m"},"capabilities":[{"name":"frequency","kind":"setting","type":"float","unit":"MHz","min":144.0,"max":148.0,"access":"operator"},{"name":"ptt","kind":"action","type":"bool","access":"operator"},{"name":"power_level","kind":"setting","type":"enum","values":["low","high"],"access":"operator"},{"name":"rssi","kind":"telemetry","type":"int","unit":"dBm","readonly":true,"access":"operator"},{"name":"volume","kind":"setting","type":"int","min":1,"max":8,"access":"operator"},{"name":"bandwidth","kind":"setting","type":"enum","values":["12.5","25"],"unit":"kHz","access":"operator"}]}
 ```
 
 **Command result** (`set`/`get`/`do`):
@@ -147,7 +147,7 @@ Notes:
 
 | Capability | kind | type / constraints | Dispatch |
 |---|---|---|---|
-| `frequency` | setting | float, MHz, 144.0–148.0, step 0.0125 | shadow.tx=shadow.rx=value → `sa818_at_set_group(...)` |
+| `frequency` | setting | float, MHz, 144.0–148.0 (continuous — no enforced step) | shadow.tx=shadow.rx=value → `sa818_at_set_group(...)` |
 | `ptt` | action | bool (`on`/`off`/`1`/`0`/`true`/`false`) | `sa818_set_ptt(SA818_PTT_ON/OFF)` |
 | `power_level` | setting | enum `low`/`high` | `sa818_set_power_level(SA818_POWER_LOW/HIGH)` |
 | `rssi` | telemetry | int, dBm, readonly | `sa818_at_read_rssi(&v)` |

@@ -46,8 +46,7 @@ struct capability {
   const char *json;
 };
 const capability CAPS[] = {
-    {"frequency",
-     "{\"name\":\"frequency\",\"kind\":\"setting\",\"type\":\"float\",\"unit\":\"MHz\",\"min\":144.0,\"max\":148.0,\"step\":0.0125,\"access\":\"operator\"}"},
+    {"frequency", "{\"name\":\"frequency\",\"kind\":\"setting\",\"type\":\"float\",\"unit\":\"MHz\",\"min\":144.0,\"max\":148.0,\"access\":\"operator\"}"},
     {"ptt", "{\"name\":\"ptt\",\"kind\":\"action\",\"type\":\"bool\",\"access\":\"operator\"}"},
     {"power_level", "{\"name\":\"power_level\",\"kind\":\"setting\",\"type\":\"enum\",\"values\":[\"low\",\"high\"],\"access\":\"operator\"}"},
     {"rssi", "{\"name\":\"rssi\",\"kind\":\"telemetry\",\"type\":\"int\",\"unit\":\"dBm\",\"readonly\":true,\"access\":\"operator\"}"},
