@@ -31,6 +31,7 @@ using mod::Capability;
 using mod::FieldSpec;
 using mod::Identity;
 using mod::Module;
+using mod::ModuleRegistry;
 using mod::Op;
 using mod::Range;
 using mod::Result;
@@ -94,7 +95,7 @@ const Range VOLUME_RANGES[] = {{nullptr, 1.0, 8.0}};
 
 /* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side). */
 constexpr size_t RESULT_BUF_SIZE = 768;
-constexpr size_t DESCRIBE_BUF_SIZE = 1024;
+constexpr size_t DESCRIBE_BUF_SIZE = 2048;
 
 /* Enum value strings: defined once, used for BOTH the descriptor tables below and the
  * parse/serialize logic in the capabilities, so the advertised enum and the accepted
@@ -321,76 +322,105 @@ BandwidthCap g_bandwidth{g_ctx};
 
 Capability *const g_caps[] = {&g_freq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
 const Identity g_identity{"fm_transceiver", "SA818-V", "2m"};
-Module g_module{g_identity, g_caps};
+Module g_module{g_identity, "fm", g_caps};
+Module *const g_modules[] = {&g_module};
+ModuleRegistry g_registry{g_modules};
 
-void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op) {
+void emit_result(const struct shell *sh, const Result &r, const char *module, const char *cap, Op op) {
   char buf[RESULT_BUF_SIZE];
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-RESULT ");
-  r.render(w, cap, mod::opStr(op));
+  r.render(w, module, cap, mod::opStr(op));
   if (w.truncated()) {
     // Pathologically long cap/value: fall back to a guaranteed-valid short result
     // rather than emit truncated (invalid) JSON. op is a short internal literal.
-    shell_print(sh, "MODULE-RESULT {\"ok\":false,\"cap\":\"\",\"op\":\"%s\",\"error\":\"too_long\"}", mod::opStr(op));
+    shell_print(sh,
+                "MODULE-RESULT {\"ok\":false,\"module\":\"\",\"cap\":\"\",\"op\":\"%s\","
+                "\"error\":\"too_long\"}",
+                mod::opStr(op));
     return;
   }
   shell_print(sh, "%s", w.c_str());
 }
 
-int cmd_module_describe(const struct shell *sh, size_t, char **) {
-  char buf[DESCRIBE_BUF_SIZE];
-  mod::JsonWriter w(buf, sizeof(buf));
-  w.raw("MODULE-DESCRIBE ");
-  g_module.describe(w);
-  if (w.truncated()) {
-    // Descriptor outgrew the buffer: emit a minimal valid descriptor rather than
-    // truncated (invalid) JSON, so the machine-readable contract still holds.
-    shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"error\":\"too_long\"}");
+int cmd_module(const struct shell *sh, size_t argc, char **argv) {
+  if (argc >= 2 && !strcmp(argv[1], "list")) {
+    char buf[RESULT_BUF_SIZE];
+    mod::JsonWriter w(buf, sizeof(buf));
+    w.raw("MODULE-LIST ");
+    g_registry.list(w);
+    shell_print(sh, "%s", w.c_str());
     return 0;
   }
-  shell_print(sh, "%s", w.c_str());
-  return 0;
-}
-
-int cmd_module_set(const struct shell *sh, size_t argc, char **argv) {
   if (argc < 3) {
-    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", Op::Set);
+    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", "", Op::Get);
     return 0;
   }
-  emit_result(sh, g_module.execute(Op::Set, argv[1], argv[2]), argv[1], Op::Set);
-  return 0;
-}
 
-int cmd_module_get(const struct shell *sh, size_t argc, char **argv) {
-  if (argc < 2) {
-    emit_result(sh, Result::err("usage"), "", Op::Get);
-    return 0;
-  }
-  emit_result(sh, g_module.execute(Op::Get, argv[1], ""), argv[1], Op::Get);
-  return 0;
-}
+  const char *id = argv[1];
+  const char *op = argv[2];
+  Module *m = g_registry.find(id);
 
-int cmd_module_do(const struct shell *sh, size_t argc, char **argv) {
-  if (argc < 3) {
-    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", Op::Do);
+  if (!strcmp(op, "describe")) {
+    if (m == nullptr) {
+      emit_result(sh, Result::err("unknown_module"), id, "", Op::Get);
+      return 0;
+    }
+    char buf[DESCRIBE_BUF_SIZE];
+    mod::JsonWriter w(buf, sizeof(buf));
+    w.raw("MODULE-DESCRIBE ");
+    m->describe(w);
+    if (w.truncated()) {
+      // Descriptor outgrew the buffer: emit a minimal valid descriptor rather than
+      // truncated (invalid) JSON, so the machine-readable contract still holds.
+      shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"error\":\"too_long\"}");
+      return 0;
+    }
+    shell_print(sh, "%s", w.c_str());
     return 0;
   }
-  emit_result(sh, g_module.execute(Op::Do, argv[1], argv[2]), argv[1], Op::Do);
+
+  if (!strcmp(op, "set")) {
+    if (argc < 5) {
+      emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", Op::Set);
+      return 0;
+    }
+    const char *cap = argv[3];
+    const char *value = argv[4];
+    Result r = (m != nullptr) ? m->execute(Op::Set, cap, value) : Result::err("unknown_module");
+    emit_result(sh, r, id, cap, Op::Set);
+    return 0;
+  }
+
+  if (!strcmp(op, "get")) {
+    if (argc < 4) {
+      emit_result(sh, Result::err("usage"), id, "", Op::Get);
+      return 0;
+    }
+    const char *cap = argv[3];
+    Result r = (m != nullptr) ? m->execute(Op::Get, cap, "") : Result::err("unknown_module");
+    emit_result(sh, r, id, cap, Op::Get);
+    return 0;
+  }
+
+  if (!strcmp(op, "do")) {
+    if (argc < 5) {
+      emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", Op::Do);
+      return 0;
+    }
+    const char *cap = argv[3];
+    const char *value = argv[4];
+    Result r = (m != nullptr) ? m->execute(Op::Do, cap, value) : Result::err("unknown_module");
+    emit_result(sh, r, id, cap, Op::Do);
+    return 0;
+  }
+
+  emit_result(sh, Result::err("usage"), id, "", Op::Get);
   return 0;
 }
 
 } // namespace
 
-// clang-format off
-SHELL_STATIC_SUBCMD_SET_CREATE(
-    module_cmds,
-    SHELL_CMD_ARG(describe, NULL, "Emit machine-readable module descriptor", cmd_module_describe, 1, 0),
-    SHELL_CMD_ARG(set, NULL, "set <capability> <value>", cmd_module_set, 3, 0),
-    SHELL_CMD_ARG(get, NULL, "get <capability>", cmd_module_get, 2, 0),
-    SHELL_CMD_ARG(do, NULL, "do <capability> <value>", cmd_module_do, 3, 0),
-    SHELL_SUBCMD_SET_END);
-// clang-format on
-
-SHELL_CMD_REGISTER(module, &module_cmds, "Generic module interface (describe/set/get/do)", NULL);
+SHELL_CMD_REGISTER(module, NULL, "module list | module <id> describe|set|get|do <cap> [value]", cmd_module);
 
 #endif /* CONFIG_MODULE_SA818 */

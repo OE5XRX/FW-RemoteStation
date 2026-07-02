@@ -23,10 +23,11 @@ def _payload(out, token):
 
 
 def test_module_describe_valid_json(shell):
-    out = shell.exec_command("module describe")
+    out = shell.exec_command("module fm describe")
     d = _payload(out, "MODULE-DESCRIBE")
 
     assert d["schema"] == 1
+    assert d["module"] == "fm"
     assert d["identity"] == {"type": "fm_transceiver", "model": "SA818-V", "version": "2m"}
 
     caps = {c["name"]: c for c in d["capabilities"]}
@@ -59,7 +60,7 @@ def test_module_describe_valid_json(shell):
 def test_module_set_frequency_e2e(sa818_sim, shell):
     """The §8 datapoint: typed set flows through the real driver to the module."""
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set frequency 145.500")
+    out = shell.exec_command("module fm set frequency 145.500")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is True
     assert r["cap"] == "frequency"
@@ -72,8 +73,8 @@ def test_module_set_frequency_e2e(sa818_sim, shell):
 
 def test_module_set_frequency_out_of_range(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    shell.exec_command("module set frequency 145.500")
-    out = shell.exec_command("module set frequency 200.0")
+    shell.exec_command("module fm set frequency 145.500")
+    out = shell.exec_command("module fm set frequency 200.0")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False
     assert r["error"] == "out_of_range"
@@ -83,7 +84,7 @@ def test_module_set_frequency_out_of_range(sa818_sim, shell):
 
 def test_module_set_frequency_bad_value(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set frequency abc")
+    out = shell.exec_command("module fm set frequency abc")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False
     assert r["error"] == "bad_value"
@@ -100,12 +101,12 @@ def _status(shell):
 
 def test_module_do_ptt(shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module do ptt on")
+    out = shell.exec_command("module fm do ptt on")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is True and r["value"] is True
     assert _status(shell)["ptt"] == 1
 
-    out = shell.exec_command("module do ptt off")
+    out = shell.exec_command("module fm do ptt off")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is True and r["value"] is False
     assert _status(shell)["ptt"] == 0
@@ -113,55 +114,55 @@ def test_module_do_ptt(shell):
 
 def test_module_do_ptt_bad_value(shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module do ptt maybe")
+    out = shell.exec_command("module fm do ptt maybe")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "bad_value"
 
 
 def test_module_set_power_level(shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set power_level high")
+    out = shell.exec_command("module fm set power_level high")
     assert _payload(out, "MODULE-RESULT")["ok"] is True
     assert _status(shell)["high_power"] == 1
-    out = shell.exec_command("module set power_level low")
+    out = shell.exec_command("module fm set power_level low")
     assert _payload(out, "MODULE-RESULT")["ok"] is True
     assert _status(shell)["high_power"] == 0
 
 
 def test_module_set_power_level_bad_value(shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set power_level medium")
+    out = shell.exec_command("module fm set power_level medium")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "bad_value"
 
 
 def test_module_set_volume(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set volume 7")
+    out = shell.exec_command("module fm set volume 7")
     assert _payload(out, "MODULE-RESULT")["ok"] is True
     assert sa818_sim.get_state().volume == 7
 
 
 def test_module_set_volume_out_of_range(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set volume 9")
+    out = shell.exec_command("module fm set volume 9")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "out_of_range"
 
 
 def test_module_set_bandwidth(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set bandwidth 25")
+    out = shell.exec_command("module fm set bandwidth 25")
     assert _payload(out, "MODULE-RESULT")["ok"] is True
     assert sa818_sim.get_state().bandwidth == 1
-    out = shell.exec_command("module set bandwidth 12.5")
+    out = shell.exec_command("module fm set bandwidth 12.5")
     assert _payload(out, "MODULE-RESULT")["ok"] is True
     assert sa818_sim.get_state().bandwidth == 0
 
 
 def test_module_get_rssi(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module get rssi")
+    out = shell.exec_command("module fm get rssi")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is True
     assert r["cap"] == "rssi" and r["op"] == "get"
@@ -170,56 +171,80 @@ def test_module_get_rssi(sa818_sim, shell):
 
 def test_module_get_frequency_reads_shadow(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    shell.exec_command("module set frequency 146.000")
-    out = shell.exec_command("module get frequency")
+    shell.exec_command("module fm set frequency 146.000")
+    out = shell.exec_command("module fm get frequency")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is True and r["value"] == 146.0
 
 
 def test_module_set_rssi_read_only(shell):
-    out = shell.exec_command("module set rssi 5")
+    out = shell.exec_command("module fm set rssi 5")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "read_only"
 
 
 def test_module_unknown_capability(shell):
-    out = shell.exec_command("module set banana 1")
+    out = shell.exec_command("module fm set banana 1")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "unknown_capability"
 
 
 def test_module_get_unknown_capability(shell):
-    out = shell.exec_command("module get banana")
+    out = shell.exec_command("module fm get banana")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "unknown_capability"
 
 
 def test_module_set_frequency_nan(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set frequency nan")
+    out = shell.exec_command("module fm set frequency nan")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "bad_value"
 
 
 def test_module_set_action_is_wrong_op(shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set ptt on")
+    out = shell.exec_command("module fm set ptt on")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "wrong_op"
 
 
 def test_module_do_setting_is_wrong_op(shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module do frequency 145.5")
+    out = shell.exec_command("module fm do frequency 145.5")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "wrong_op"
 
 
 def test_module_frequency_serializes_as_float(sa818_sim, shell):
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("module set frequency 146.000")
+    out = shell.exec_command("module fm set frequency 146.000")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is True and r["value"] == 146.0
-    out = shell.exec_command("module get frequency")
+    out = shell.exec_command("module fm get frequency")
     r = _payload(out, "MODULE-RESULT")
     assert r["value"] == 146.0
+
+
+def test_module_list(shell):
+    out = shell.exec_command("module list")
+    for l in _lines(out):
+        i = l.find("MODULE-LIST ")
+        if i != -1:
+            d = json.loads(l[i + len("MODULE-LIST "):])
+            assert d == {"modules": ["fm"]}
+            return
+    raise AssertionError(f"no MODULE-LIST line: {_lines(out)}")
+
+
+def test_module_unknown_module(shell):
+    out = shell.exec_command("module nope describe")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "unknown_module"
+
+
+def test_module_result_carries_module_id(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module fm set frequency 145.500")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["module"] == "fm" and r["cap"] == "frequency"

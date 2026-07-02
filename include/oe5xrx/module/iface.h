@@ -221,10 +221,12 @@ public:
     return r;
   }
 
-  /** Render `{"ok":..,"cap":..,"op":..,"value"|"error":..}` into @p w. */
-  void render(JsonWriter &w, const char *cap, const char *op) const {
+  /** Render `{"ok":..,"module":..,"cap":..,"op":..,"value"|"error":..}` into @p w. */
+  void render(JsonWriter &w, const char *module, const char *cap, const char *op) const {
     w.ch('{');
     w.kvRaw("ok", ok_ ? "true" : "false");
+    w.ch(',');
+    w.kvStr("module", module);
     w.ch(',');
     w.kvStr("cap", cap);
     w.ch(',');
@@ -451,7 +453,9 @@ struct Identity {
 /** @brief A module: identity + a fixed registry of capabilities, rendered as JSON. */
 class Module {
 public:
-  Module(const Identity &id, std::span<Capability *const> caps) : id_(id), caps_(caps) {}
+  Module(const Identity &id, const char *moduleId, std::span<Capability *const> caps) : id_(id), moduleId_(moduleId), caps_(caps) {}
+
+  const char *moduleId() const { return moduleId_; }
 
   Capability *find(const char *name) const {
     for (Capability *c : caps_) {
@@ -465,6 +469,8 @@ public:
   void describe(JsonWriter &w) const {
     w.ch('{');
     w.kvRaw("schema", "1");
+    w.ch(',');
+    w.kvStr("module", moduleId_);
     w.ch(',');
     w.key("identity");
     w.ch('{');
@@ -497,7 +503,42 @@ public:
 
 private:
   Identity id_;
+  const char *moduleId_;
   std::span<Capability *const> caps_;
+};
+
+/** @brief A fixed set of modules addressable by id. */
+class ModuleRegistry {
+public:
+  explicit ModuleRegistry(std::span<Module *const> modules) : modules_(modules) {}
+
+  Module *find(const char *id) const {
+    for (Module *m : modules_) {
+      if (strcmp(m->moduleId(), id) == 0) {
+        return m;
+      }
+    }
+    return nullptr;
+  }
+
+  void list(JsonWriter &w) const {
+    w.ch('{');
+    w.key("modules");
+    w.ch('[');
+    bool first = true;
+    for (Module *m : modules_) {
+      if (!first) {
+        w.ch(',');
+      }
+      first = false;
+      w.quoted(m->moduleId());
+    }
+    w.ch(']');
+    w.ch('}');
+  }
+
+private:
+  std::span<Module *const> modules_;
 };
 
 } // namespace mod
