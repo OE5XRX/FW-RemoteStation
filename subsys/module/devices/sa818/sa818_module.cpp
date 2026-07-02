@@ -425,6 +425,13 @@ private:
   Sa818Context &ctx_;
 };
 
+/* "none"/"off" are the only strings that legitimately mean "no tone". Any other string
+ * that parses to SA818_TONE_NONE is unrecognized (garbage / out-of-range code) and must be
+ * rejected as bad_value rather than silently clearing the tone. */
+bool tone_is_clear(const char *s) {
+  return strcmp(s, "none") == 0 || strcmp(s, "off") == 0;
+}
+
 class TxToneCap : public Setting {
 public:
   explicit TxToneCap(Sa818Context &ctx) : ctx_(ctx) {}
@@ -436,6 +443,9 @@ protected:
       return Result::err("driver_error");
     }
     sa818_tone_code t = sa818_at_parse_tone(value);
+    if (t == SA818_TONE_NONE && !tone_is_clear(value)) {
+      return Result::err("bad_value");
+    }
     if (sa818_at_set_group(ctx_.dev, ctx_.bw, ctx_.freq_tx, ctx_.freq_rx, t, ctx_.squelch, ctx_.tone_rx) != SA818_OK) {
       return Result::err("driver_error");
     }
@@ -468,6 +478,9 @@ protected:
       return Result::err("driver_error");
     }
     sa818_tone_code t = sa818_at_parse_tone(value);
+    if (t == SA818_TONE_NONE && !tone_is_clear(value)) {
+      return Result::err("bad_value");
+    }
     if (sa818_at_set_group(ctx_.dev, ctx_.bw, ctx_.freq_tx, ctx_.freq_rx, ctx_.tone_tx, ctx_.squelch, t) != SA818_OK) {
       return Result::err("driver_error");
     }

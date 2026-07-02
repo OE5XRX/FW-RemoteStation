@@ -305,6 +305,20 @@ def test_module_tone_dcs(sa818_sim, shell):
     assert _payload(shell.exec_command("module fm get tx_tone"), "MODULE-RESULT")["value"] == "023"
 
 
+def test_module_tone_invalid_is_bad_value(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    # garbage / out-of-range codes must be rejected, not silently cleared to "none"
+    r = _payload(shell.exec_command("module fm set tx_tone garbage"), "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "bad_value"
+    r = _payload(shell.exec_command("module fm set rx_tone 999"), "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "bad_value"
+    # "none" and "off" remain valid clear requests
+    assert _payload(shell.exec_command("module fm set tx_tone none"), "MODULE-RESULT")["ok"] is True
+    assert _payload(shell.exec_command("module fm set rx_tone off"), "MODULE-RESULT")["ok"] is True
+    assert sa818_sim.get_state().ctcss_tx == 0
+    assert sa818_sim.get_state().ctcss_rx == 0
+
+
 def test_module_band_telemetry(sa818_sim, shell):
     shell.exec_command("sa818 power on")
     shell.exec_command("module fm set rx_frequency 145.500")
