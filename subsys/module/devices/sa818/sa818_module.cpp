@@ -32,6 +32,7 @@ using mod::FieldSpec;
 using mod::Identity;
 using mod::Module;
 using mod::Op;
+using mod::Range;
 using mod::Result;
 using mod::Setting;
 using mod::Telemetry;
@@ -88,10 +89,8 @@ std::optional<long> parse_int(const char *s) {
 
 /* SA818-V capability constraints (single source of truth for both the descriptor and
  * the runtime validation). */
-constexpr float FREQ_MIN_MHZ = 144.0f;
-constexpr float FREQ_MAX_MHZ = 148.0f;
-constexpr int VOLUME_MIN = 1;
-constexpr int VOLUME_MAX = 8;
+const Range FREQ_RANGES[] = {{"vhf", 134.0, 174.0}};
+const Range VOLUME_RANGES[] = {{nullptr, 1.0, 8.0}};
 
 /* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side). */
 constexpr size_t RESULT_BUF_SIZE = 768;
@@ -108,12 +107,12 @@ constexpr const char *BW_WIDE = "25";
 const char *const POWER_LEVELS[] = {POWER_LOW, POWER_HIGH};
 const char *const BANDWIDTHS[] = {BW_NARROW, BW_WIDE};
 
-const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", true, FREQ_MIN_MHZ, FREQ_MAX_MHZ};
+const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", FREQ_RANGES, 1};
 const FieldSpec PTT_SPEC{"ptt", ValueType::Bool};
-const FieldSpec POWER_SPEC{"power_level", ValueType::Enum, nullptr, false, 0.0, 0.0, POWER_LEVELS, 2};
-const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "dBm", false, 0.0, 0.0, nullptr, 0, /*readonly=*/true};
-const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, true, VOLUME_MIN, VOLUME_MAX};
-const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", false, 0.0, 0.0, BANDWIDTHS, 2};
+const FieldSpec POWER_SPEC{"power_level", ValueType::Enum, nullptr, nullptr, 0, POWER_LEVELS, 2};
+const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "raw", nullptr, 0, nullptr, 0, /*readonly=*/true};
+const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, VOLUME_RANGES, 1};
+const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", nullptr, 0, BANDWIDTHS, 2};
 
 class FrequencyCap : public Setting {
 public:
@@ -129,7 +128,7 @@ protected:
     if (!f) {
       return Result::err("bad_value");
     }
-    if (*f < FREQ_MIN_MHZ || *f > FREQ_MAX_MHZ) {
+    if (!FREQ_SPEC.inAnyRange(static_cast<double>(*f))) {
       return Result::err("out_of_range");
     }
     if (sa818_at_set_group(ctx_.dev, ctx_.bw, *f, *f, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
@@ -236,7 +235,7 @@ protected:
     if (!v) {
       return Result::err("bad_value");
     }
-    if (*v < VOLUME_MIN || *v > VOLUME_MAX) {
+    if (!VOLUME_SPEC.inAnyRange(static_cast<double>(*v))) {
       return Result::err("out_of_range");
     }
     if (sa818_at_set_volume(ctx_.dev, static_cast<sa818_volume_level>(*v)) != SA818_OK) {

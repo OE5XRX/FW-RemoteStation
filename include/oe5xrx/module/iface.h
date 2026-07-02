@@ -77,6 +77,13 @@ inline const char *opStr(Op o) {
   return "";
 }
 
+/** A numeric constraint range; a named range is a band (e.g. "vhf", "20m"). */
+struct Range {
+  const char *name; // optional band label; nullptr for a plain scalar range
+  double min;
+  double max;
+};
+
 /**
  * @brief Static, typed descriptor of one capability.
  *
@@ -87,13 +94,21 @@ struct FieldSpec {
   const char *name;
   ValueType type;
   const char *unit = nullptr;
-  bool hasRange = false;
-  double min = 0.0;
-  double max = 0.0;
+  const Range *ranges = nullptr;
+  size_t rangeCount = 0;
   const char *const *enumValues = nullptr;
   size_t enumCount = 0;
   bool readonly = false;
   const char *access = "operator";
+
+  bool inAnyRange(double v) const {
+    for (size_t i = 0; i < rangeCount; ++i) {
+      if (v >= ranges[i].min && v <= ranges[i].max) {
+        return true;
+      }
+    }
+    return false;
+  }
 };
 
 /** @brief Bounded, truncation-safe JSON string builder with string escaping. */
@@ -295,14 +310,28 @@ public:
       w.ch(',');
       w.kvStr("unit", s.unit);
     }
-    if (s.hasRange) {
+    if (s.ranges != nullptr && s.rangeCount > 0) {
+      w.ch(',');
+      w.key("ranges");
+      w.ch('[');
       char b[24];
-      w.ch(',');
-      numStr(b, sizeof(b), s.min, s.type);
-      w.kvRaw("min", b);
-      w.ch(',');
-      numStr(b, sizeof(b), s.max, s.type);
-      w.kvRaw("max", b);
+      for (size_t i = 0; i < s.rangeCount; ++i) {
+        if (i != 0) {
+          w.ch(',');
+        }
+        w.ch('{');
+        if (s.ranges[i].name != nullptr) {
+          w.kvStr("name", s.ranges[i].name);
+          w.ch(',');
+        }
+        numStr(b, sizeof(b), s.ranges[i].min, s.type);
+        w.kvRaw("min", b);
+        w.ch(',');
+        numStr(b, sizeof(b), s.ranges[i].max, s.type);
+        w.kvRaw("max", b);
+        w.ch('}');
+      }
+      w.ch(']');
     }
     if (s.enumValues != nullptr && s.enumCount > 0) {
       w.ch(',');

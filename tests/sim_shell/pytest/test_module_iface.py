@@ -35,8 +35,7 @@ def test_module_describe_valid_json(shell):
     assert caps["frequency"]["kind"] == "setting"
     assert caps["frequency"]["type"] == "float"
     assert caps["frequency"]["unit"] == "MHz"
-    assert caps["frequency"]["min"] == 144.0
-    assert caps["frequency"]["max"] == 148.0
+    assert caps["frequency"]["ranges"] == [{"name": "vhf", "min": 134.0, "max": 174.0}]
 
     assert caps["ptt"]["kind"] == "action"
     assert caps["ptt"]["type"] == "bool"
@@ -47,11 +46,11 @@ def test_module_describe_valid_json(shell):
 
     assert caps["rssi"]["kind"] == "telemetry"
     assert caps["rssi"]["type"] == "int"
+    assert caps["rssi"]["unit"] == "raw"
     assert caps["rssi"]["readonly"] is True
 
     assert caps["volume"]["type"] == "int"
-    assert caps["volume"]["min"] == 1
-    assert caps["volume"]["max"] == 8
+    assert caps["volume"]["ranges"] == [{"min": 1, "max": 8}]
 
     assert caps["bandwidth"]["type"] == "enum"
     assert caps["bandwidth"]["values"] == ["12.5", "25"]
@@ -74,7 +73,7 @@ def test_module_set_frequency_e2e(sa818_sim, shell):
 def test_module_set_frequency_out_of_range(sa818_sim, shell):
     shell.exec_command("sa818 power on")
     shell.exec_command("module set frequency 145.500")
-    out = shell.exec_command("module set frequency 150.0")
+    out = shell.exec_command("module set frequency 200.0")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False
     assert r["error"] == "out_of_range"
