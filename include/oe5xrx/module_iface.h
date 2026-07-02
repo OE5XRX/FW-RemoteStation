@@ -25,6 +25,7 @@
 #error "oe5xrx/module_iface.h is a C++ header (namespaces/classes); include it only from C++."
 #endif
 
+#include <span>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -415,12 +416,12 @@ struct Identity {
 /** @brief A module: identity + a fixed registry of capabilities, rendered as JSON. */
 class Module {
 public:
-  Module(const Identity &id, Capability *const *caps, size_t count) : id_(id), caps_(caps), count_(count) {}
+  Module(const Identity &id, std::span<Capability *const> caps) : id_(id), caps_(caps) {}
 
   Capability *find(const char *name) const {
-    for (size_t i = 0; i < count_; ++i) {
-      if (strcmp(caps_[i]->name(), name) == 0) {
-        return caps_[i];
+    for (Capability *c : caps_) {
+      if (strcmp(c->name(), name) == 0) {
+        return c;
       }
     }
     return nullptr;
@@ -441,11 +442,13 @@ public:
     w.ch(',');
     w.key("capabilities");
     w.ch('[');
-    for (size_t i = 0; i < count_; ++i) {
-      if (i != 0) {
+    bool first = true;
+    for (Capability *c : caps_) {
+      if (!first) {
         w.ch(',');
       }
-      caps_[i]->describe(w);
+      first = false;
+      c->describe(w);
     }
     w.ch(']');
     w.ch('}');
@@ -459,8 +462,7 @@ public:
 
 private:
   Identity id_;
-  Capability *const *caps_;
-  size_t count_;
+  std::span<Capability *const> caps_;
 };
 
 } // namespace mod

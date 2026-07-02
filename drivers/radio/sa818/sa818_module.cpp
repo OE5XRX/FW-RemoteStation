@@ -86,15 +86,26 @@ std::optional<long> parse_int(const char *s) {
   return v;
 }
 
+/* SA818-V capability constraints (single source of truth for both the descriptor and
+ * the runtime validation). */
+constexpr float FREQ_MIN_MHZ = 144.0f;
+constexpr float FREQ_MAX_MHZ = 148.0f;
+constexpr int VOLUME_MIN = 1;
+constexpr int VOLUME_MAX = 8;
+
+/* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side). */
+constexpr size_t RESULT_BUF_SIZE = 768;
+constexpr size_t DESCRIBE_BUF_SIZE = 1024;
+
 /* Enum value tables + typed field specs (namespace-scope constants -> constant init). */
 const char *const POWER_LEVELS[] = {"low", "high"};
 const char *const BANDWIDTHS[] = {"12.5", "25"};
 
-const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", true, 144.0, 148.0};
+const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", true, FREQ_MIN_MHZ, FREQ_MAX_MHZ};
 const FieldSpec PTT_SPEC{"ptt", ValueType::Bool};
 const FieldSpec POWER_SPEC{"power_level", ValueType::Enum, nullptr, false, 0.0, 0.0, POWER_LEVELS, 2};
 const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "dBm", false, 0.0, 0.0, nullptr, 0, /*readonly=*/true};
-const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, true, 1.0, 8.0};
+const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, true, VOLUME_MIN, VOLUME_MAX};
 const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", false, 0.0, 0.0, BANDWIDTHS, 2};
 
 class FrequencyCap : public Setting {
@@ -111,7 +122,7 @@ protected:
     if (!f) {
       return Result::err("bad_value");
     }
-    if (*f < 144.0f || *f > 148.0f) {
+    if (*f < FREQ_MIN_MHZ || *f > FREQ_MAX_MHZ) {
       return Result::err("out_of_range");
     }
     if (sa818_at_set_group(ctx_.dev, ctx_.bw, *f, *f, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
@@ -218,7 +229,7 @@ protected:
     if (!v) {
       return Result::err("bad_value");
     }
-    if (*v < 1 || *v > 8) {
+    if (*v < VOLUME_MIN || *v > VOLUME_MAX) {
       return Result::err("out_of_range");
     }
     if (sa818_at_set_volume(ctx_.dev, static_cast<sa818_volume_level>(*v)) != SA818_OK) {
@@ -304,10 +315,10 @@ BandwidthCap g_bandwidth{g_ctx};
 
 Capability *const g_caps[] = {&g_freq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
 const Identity g_identity{"fm_transceiver", "SA818-V", "2m"};
-Module g_module{g_identity, g_caps, ARRAY_SIZE(g_caps)};
+Module g_module{g_identity, g_caps};
 
 void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op) {
-  char buf[768];
+  char buf[RESULT_BUF_SIZE];
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-RESULT ");
   r.render(w, cap, mod::opStr(op));
@@ -321,7 +332,7 @@ void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op
 }
 
 int cmd_module_describe(const struct shell *sh, size_t, char **) {
-  char buf[1024];
+  char buf[DESCRIBE_BUF_SIZE];
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-DESCRIBE ");
   g_module.describe(w);
