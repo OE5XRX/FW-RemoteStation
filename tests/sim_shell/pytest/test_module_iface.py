@@ -33,7 +33,7 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["version"] == "vhf"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch"}
 
     assert caps["frequency"]["kind"] == "setting"
     assert caps["frequency"]["type"] == "float"
@@ -270,3 +270,16 @@ def test_module_get_tx_rx_frequency(sa818_sim, shell):
     shell.exec_command("module fm set rx_frequency 145.600")
     assert _payload(shell.exec_command("module fm get tx_frequency"), "MODULE-RESULT")["value"] == 145.0
     assert _payload(shell.exec_command("module fm get rx_frequency"), "MODULE-RESULT")["value"] == 145.6
+
+
+def test_module_squelch(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    assert _payload(shell.exec_command("module fm set squelch 3"), "MODULE-RESULT")["ok"]
+    assert sa818_sim.get_state().squelch == 3
+    assert _payload(shell.exec_command("module fm get squelch"), "MODULE-RESULT")["value"] == 3
+
+
+def test_module_squelch_out_of_range(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    r = _payload(shell.exec_command("module fm set squelch 9"), "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "out_of_range"

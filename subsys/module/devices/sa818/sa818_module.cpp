@@ -106,6 +106,7 @@ const Range FREQ_RANGES[] = {{"vhf", 134.0, 174.0}};
 /* SA818 capability constraints (single source of truth for both the descriptor and
  * the runtime validation). */
 const Range VOLUME_RANGES[] = {{nullptr, 1.0, 8.0}};
+const Range SQUELCH_RANGES[] = {{nullptr, 0.0, 8.0}};
 
 /* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side). */
 constexpr size_t RESULT_BUF_SIZE = 768;
@@ -130,6 +131,7 @@ const FieldSpec POWER_SPEC{"power_level", ValueType::Enum, nullptr, nullptr, 0, 
 const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "raw", nullptr, 0, nullptr, 0, /*readonly=*/true};
 const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, VOLUME_RANGES, 1};
 const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", nullptr, 0, BANDWIDTHS, 2};
+const FieldSpec SQUELCH_SPEC{"squelch", ValueType::Int, nullptr, SQUELCH_RANGES, 1};
 
 class FrequencyCap : public Setting {
 public:
@@ -397,6 +399,42 @@ private:
   Sa818Context &ctx_;
 };
 
+class SquelchCap : public Setting {
+public:
+  explicit SquelchCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return SQUELCH_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    std::optional<long> v = parse_int(value);
+    if (!v) {
+      return Result::err("bad_value");
+    }
+    if (!SQUELCH_SPEC.inAnyRange(static_cast<double>(*v))) {
+      return Result::err("out_of_range");
+    }
+    sa818_squelch_level sq = static_cast<sa818_squelch_level>(*v);
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, ctx_.freq_tx, ctx_.freq_rx, ctx_.tone_tx, sq, ctx_.tone_rx) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.squelch = sq;
+    return Result::okInt(static_cast<int>(*v));
+  }
+
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okInt(static_cast<int>(ctx_.squelch));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
 /* Registry: one shared context + one instance per capability, all statically allocated. */
 Sa818Context g_ctx{DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, 145.500f, 145.500f, SA818_TONE_NONE, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
 
@@ -408,8 +446,9 @@ PowerLevelCap g_power{g_ctx};
 RssiCap g_rssi{g_ctx};
 VolumeCap g_volume{g_ctx};
 BandwidthCap g_bandwidth{g_ctx};
+SquelchCap g_squelch{g_ctx};
 
-Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
+Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch};
 const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};
