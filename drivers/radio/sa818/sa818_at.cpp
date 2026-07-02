@@ -470,9 +470,11 @@ sa818_tone_code sa818_at_parse_tone(const char *s) {
     return SA818_TONE_NONE;
   }
 
-  /* Try to parse as CTCSS frequency (e.g. "67.0") */
-  float freq = atof(s);
-  if (freq > 60.0f && freq < 260.0f) {
+  /* Try to parse as CTCSS frequency (e.g. "67.0") -- require the WHOLE string to be a
+   * float, so partial garbage like "67.0junk" is NOT accepted as a tone. */
+  char *end = nullptr;
+  float freq = strtof(s, &end);
+  if (end != s && *end == '\0' && freq > 60.0f && freq < 260.0f) {
     for (size_t i = 0; i < CTCSS_TABLE_LEN; ++i) {
       if (freq >= CTCSS_TABLE[i].min_freq && freq <= CTCSS_TABLE[i].max_freq) {
         return CTCSS_TABLE[i].code;

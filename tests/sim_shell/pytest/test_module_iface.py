@@ -312,6 +312,9 @@ def test_module_tone_invalid_is_bad_value(sa818_sim, shell):
     assert r["ok"] is False and r["error"] == "bad_value"
     r = _payload(shell.exec_command("module fm set rx_tone 999"), "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "bad_value"
+    # partial float parse must be rejected too (not accepted as CTCSS 67.0)
+    r = _payload(shell.exec_command("module fm set tx_tone 67.0junk"), "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "bad_value"
     # "none" and "off" remain valid clear requests
     assert _payload(shell.exec_command("module fm set tx_tone none"), "MODULE-RESULT")["ok"] is True
     assert _payload(shell.exec_command("module fm set rx_tone off"), "MODULE-RESULT")["ok"] is True
