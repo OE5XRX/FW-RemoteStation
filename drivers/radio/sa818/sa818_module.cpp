@@ -1,11 +1,12 @@
 /**
  * @file sa818_module.cpp
- * @brief Generic machine-readable module interface for the SA818.
+ * @brief SA818 concrete implementation of the generic module capability framework.
  *
- * Registers a `module` shell command group (describe / set / get / do) that maps
- * the generic {capability, op, value} contract onto the SA818 driver. This is the
- * firmware half of the Firmware<->Agent contract (module-platform meta-spec §8).
- * The human `sa818` command tree stays separate and untouched.
+ * Defines the SA818-specific capabilities (frequency, ptt, power_level, rssi, volume,
+ * bandwidth) as subclasses of the kind mixins in module_iface.h, wires them into a
+ * @ref mod::Module registry, and registers the `module` Zephyr shell group. This is the
+ * firmware half of the Firmware<->Agent contract (module-platform meta-spec §8); the
+ * human `sa818` command tree stays separate and untouched.
  *
  * @copyright Copyright (c) 2025 OE5XRX
  * @spdx-license-identifier LGPL-3.0-or-later
@@ -13,130 +14,45 @@
 
 #ifdef CONFIG_SA818_MODULE_IFACE
 
+#include "module_iface.h"
+
 #include <math.h>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/sys/util.h>
 
 namespace {
 
-const struct device *sa818_dev(void) {
-  return DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818));
-}
+using mod::Action;
+using mod::Capability;
+using mod::FieldSpec;
+using mod::Identity;
+using mod::Module;
+using mod::Op;
+using mod::Result;
+using mod::Setting;
+using mod::Telemetry;
+using mod::ValueType;
 
-/* RAM shadow of the group config so `set frequency` / `set bandwidth` can rebuild the
- * full sa818_at_set_group() call. Seeded to the module's power-on defaults (matching the
- * SA818Simulator defaults). Working state only -- NOT capability persistence. */
-struct group_shadow {
+/**
+ * @brief Shared SA818 context: the device handle plus the RAM group shadow.
+ *
+ * The shadow lets `set frequency` / `set bandwidth` rebuild the full sa818_at_set_group()
+ * call (the driver has no frequency-only entry point). Working state only -- NOT capability
+ * persistence. Seeded to the module's power-on defaults (matching the SA818Simulator).
+ */
+struct Sa818Context {
+  const struct device *dev;
   sa818_bandwidth bw;
   float freq;
   sa818_tone_code tone;
   sa818_squelch_level squelch;
+
+  bool ready() const { return dev != nullptr && device_is_ready(dev); }
 };
-group_shadow g_shadow = {SA818_BW_12_5_KHZ, 145.500f, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
-
-/* Descriptor fragments -- single source of truth for `module describe`. */
-struct capability {
-  const char *name;
-  const char *json;
-};
-const capability CAPS[] = {
-    {"frequency", "{\"name\":\"frequency\",\"kind\":\"setting\",\"type\":\"float\",\"unit\":\"MHz\",\"min\":144.0,\"max\":148.0,\"access\":\"operator\"}"},
-    {"ptt", "{\"name\":\"ptt\",\"kind\":\"action\",\"type\":\"bool\",\"access\":\"operator\"}"},
-    {"power_level", "{\"name\":\"power_level\",\"kind\":\"setting\",\"type\":\"enum\",\"values\":[\"low\",\"high\"],\"access\":\"operator\"}"},
-    {"rssi", "{\"name\":\"rssi\",\"kind\":\"telemetry\",\"type\":\"int\",\"unit\":\"dBm\",\"readonly\":true,\"access\":\"operator\"}"},
-    {"volume", "{\"name\":\"volume\",\"kind\":\"setting\",\"type\":\"int\",\"min\":1,\"max\":8,\"access\":\"operator\"}"},
-    {"bandwidth", "{\"name\":\"bandwidth\",\"kind\":\"setting\",\"type\":\"enum\",\"values\":[\"12.5\",\"25\"],\"unit\":\"kHz\",\"access\":\"operator\"}"},
-};
-
-/* Escape a string for use inside a JSON string literal. Escapes ", \ and control
- * chars (< 0x20); always NUL-terminates. `cap` is user-supplied (an unknown/malformed
- * capability token can reach the result), so it must be escaped to keep MODULE-RESULT
- * valid JSON. */
-void json_escape(const char *in, char *out, size_t cap) {
-  size_t o = 0;
-  for (size_t i = 0; in != nullptr && in[i] != '\0'; ++i) {
-    unsigned char c = static_cast<unsigned char>(in[i]);
-    if (c == '"' || c == '\\') {
-      if (o + 2 >= cap) {
-        break;
-      }
-      out[o++] = '\\';
-      out[o++] = static_cast<char>(c);
-    } else if (c < 0x20) {
-      if (o + 6 >= cap) {
-        break;
-      }
-      o += snprintf(out + o, cap - o, "\\u%04x", c);
-    } else {
-      if (o + 1 >= cap) {
-        break;
-      }
-      out[o++] = static_cast<char>(c);
-    }
-  }
-  out[o] = '\0';
-}
-
-void result_err(const struct shell *sh, const char *cap, const char *op, const char *err) {
-  char ecap[96];
-  json_escape(cap, ecap, sizeof(ecap));
-  shell_print(sh, "MODULE-RESULT {\"ok\":false,\"cap\":\"%s\",\"op\":\"%s\",\"error\":\"%s\"}", ecap, op, err);
-}
-
-void result_ok_int(const struct shell *sh, const char *cap, const char *op, int value) {
-  char ecap[96];
-  json_escape(cap, ecap, sizeof(ecap));
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%d}", ecap, op, value);
-}
-
-void result_ok_float(const struct shell *sh, const char *cap, const char *op, double value) {
-  char ecap[96];
-  json_escape(cap, ecap, sizeof(ecap));
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%.4f}", ecap, op, value);
-}
-
-void result_ok_bool(const struct shell *sh, const char *cap, const char *op, bool value) {
-  char ecap[96];
-  json_escape(cap, ecap, sizeof(ecap));
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%s}", ecap, op, value ? "true" : "false");
-}
-
-void result_ok_str(const struct shell *sh, const char *cap, const char *op, const char *value) {
-  char ecap[96];
-  char eval[96];
-  json_escape(cap, ecap, sizeof(ecap));
-  json_escape(value, eval, sizeof(eval));
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":\"%s\"}", ecap, op, eval);
-}
-
-void emit_describe(const struct shell *sh) {
-  static char buf[1024];
-  const char *const closing = "]}";
-  const size_t reserve = strlen(closing) + 1; // room for "]}" + NUL
-  int n = snprintf(buf, sizeof(buf),
-                   "MODULE-DESCRIBE {\"schema\":1,\"identity\":{\"type\":\"fm_transceiver\","
-                   "\"model\":\"SA818-V\",\"version\":\"2m\"},\"capabilities\":[");
-  if (n < 0 || static_cast<size_t>(n) >= sizeof(buf)) {
-    return;
-  }
-  for (size_t i = 0; i < ARRAY_SIZE(CAPS); ++i) {
-    // Only append a WHOLE fragment (+ optional comma) if it plus the closing "]}"
-    // still fits -- never truncate mid-fragment, so the JSON always stays valid.
-    size_t need = strlen(CAPS[i].json) + (i ? 1 : 0);
-    if (static_cast<size_t>(n) + need + reserve > sizeof(buf)) {
-      break;
-    }
-    n += snprintf(buf + n, sizeof(buf) - n, "%s%s", i ? "," : "", CAPS[i].json);
-  }
-  snprintf(buf + n, sizeof(buf) - n, "%s", closing);
-  shell_print(sh, "%s", buf);
-}
 
 /* Parse on/off/1/0/true/false. Returns true on success and writes *out. */
 bool parse_bool(const char *s, bool *out) {
@@ -151,234 +67,281 @@ bool parse_bool(const char *s, bool *out) {
   return false;
 }
 
-enum cap_kind { KIND_UNKNOWN, KIND_SETTING, KIND_ACTION, KIND_TELEMETRY };
+/* Enum value tables + typed field specs (namespace-scope constants -> constant init). */
+const char *const POWER_LEVELS[] = {"low", "high"};
+const char *const BANDWIDTHS[] = {"12.5", "25"};
 
-cap_kind kind_of(const char *cap) {
-  if (!strcmp(cap, "frequency") || !strcmp(cap, "power_level") || !strcmp(cap, "volume") || !strcmp(cap, "bandwidth")) {
-    return KIND_SETTING;
-  }
-  if (!strcmp(cap, "ptt")) {
-    return KIND_ACTION;
-  }
-  if (!strcmp(cap, "rssi")) {
-    return KIND_TELEMETRY;
-  }
-  return KIND_UNKNOWN;
-}
+const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", true, 144.0, 148.0};
+const FieldSpec PTT_SPEC{"ptt", ValueType::Bool};
+const FieldSpec POWER_SPEC{"power_level", ValueType::Enum, nullptr, false, 0.0, 0.0, POWER_LEVELS, 2};
+const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "dBm", false, 0.0, 0.0, nullptr, 0, /*readonly=*/true};
+const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, true, 1.0, 8.0};
+const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", false, 0.0, 0.0, BANDWIDTHS, 2};
 
-/* Dispatchers -- fleshed out in later tasks. */
-int do_set(const struct shell *sh, const char *cap, const char *valstr) {
-  const struct device *dev = sa818_dev();
-  if (!dev || !device_is_ready(dev)) {
-    result_err(sh, cap, "set", "driver_error");
-    return 0;
-  }
+class FrequencyCap : public Setting {
+public:
+  explicit FrequencyCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return FREQ_SPEC; }
 
-  switch (kind_of(cap)) {
-  case KIND_UNKNOWN:
-    result_err(sh, cap, "set", "unknown_capability");
-    return 0;
-  case KIND_TELEMETRY:
-    result_err(sh, cap, "set", "read_only");
-    return 0;
-  case KIND_ACTION:
-    result_err(sh, cap, "set", "wrong_op");
-    return 0;
-  case KIND_SETTING:
-    break;
-  }
-
-  if (!strcmp(cap, "frequency")) {
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
     char *end = nullptr;
-    float f = strtof(valstr, &end);
-    if (end == valstr || *end != '\0') {
-      result_err(sh, cap, "set", "bad_value");
-      return 0;
+    float f = strtof(value, &end);
+    if (end == value || *end != '\0') {
+      return Result::err("bad_value");
     }
     if (!isfinite(f)) {
-      result_err(sh, cap, "set", "bad_value");
-      return 0;
+      return Result::err("bad_value");
     }
     if (f < 144.0f || f > 148.0f) {
-      result_err(sh, cap, "set", "out_of_range");
-      return 0;
+      return Result::err("out_of_range");
     }
-    sa818_result r = sa818_at_set_group(dev, g_shadow.bw, f, f, g_shadow.tone, g_shadow.squelch, g_shadow.tone);
-    if (r != SA818_OK) {
-      result_err(sh, cap, "set", "driver_error");
-      return 0;
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, f, f, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
+      return Result::err("driver_error");
     }
-    g_shadow.freq = f; // commit shadow only after the driver call succeeds
-    result_ok_float(sh, cap, "set", (double)f);
-    return 0;
+    ctx_.freq = f; // commit shadow only after the driver call succeeds
+    return Result::okFloat(static_cast<double>(f));
   }
 
-  if (!strcmp(cap, "power_level")) {
-    if (!strcmp(valstr, "high")) {
-      if (sa818_set_power_level(dev, SA818_POWER_HIGH) != SA818_OK) {
-        result_err(sh, cap, "set", "driver_error");
-        return 0;
-      }
-    } else if (!strcmp(valstr, "low")) {
-      if (sa818_set_power_level(dev, SA818_POWER_LOW) != SA818_OK) {
-        result_err(sh, cap, "set", "driver_error");
-        return 0;
-      }
-    } else {
-      result_err(sh, cap, "set", "bad_value");
-      return 0;
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
     }
-    result_ok_str(sh, cap, "set", valstr);
-    return 0;
+    return Result::okFloat(static_cast<double>(ctx_.freq));
   }
 
-  if (!strcmp(cap, "volume")) {
-    char *end = nullptr;
-    long v = strtol(valstr, &end, 10);
-    if (end == valstr || *end != '\0') {
-      result_err(sh, cap, "set", "bad_value");
-      return 0;
-    }
-    if (v < 1 || v > 8) {
-      result_err(sh, cap, "set", "out_of_range");
-      return 0;
-    }
-    if (sa818_at_set_volume(dev, static_cast<sa818_volume_level>(v)) != SA818_OK) {
-      result_err(sh, cap, "set", "driver_error");
-      return 0;
-    }
-    result_ok_int(sh, cap, "set", (int)v);
-    return 0;
-  }
+private:
+  Sa818Context &ctx_;
+};
 
-  if (!strcmp(cap, "bandwidth")) {
+class BandwidthCap : public Setting {
+public:
+  explicit BandwidthCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return BW_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
     sa818_bandwidth bw;
-    if (!strcmp(valstr, "12.5")) {
+    if (!strcmp(value, "12.5")) {
       bw = SA818_BW_12_5_KHZ;
-    } else if (!strcmp(valstr, "25")) {
+    } else if (!strcmp(value, "25")) {
       bw = SA818_BW_25_KHZ;
     } else {
-      result_err(sh, cap, "set", "bad_value");
-      return 0;
+      return Result::err("bad_value");
     }
-    if (sa818_at_set_group(dev, bw, g_shadow.freq, g_shadow.freq, g_shadow.tone, g_shadow.squelch, g_shadow.tone) != SA818_OK) {
-      result_err(sh, cap, "set", "driver_error");
-      return 0;
+    if (sa818_at_set_group(ctx_.dev, bw, ctx_.freq, ctx_.freq, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
+      return Result::err("driver_error");
     }
-    g_shadow.bw = bw; // commit shadow only after the driver call succeeds
-    result_ok_str(sh, cap, "set", valstr);
-    return 0;
+    ctx_.bw = bw; // commit shadow only after the driver call succeeds
+    return Result::okStr(value);
   }
 
-  result_err(sh, cap, "set", "unknown_capability");
-  return 0;
-}
-
-int do_get(const struct shell *sh, const char *cap) {
-  const struct device *dev = sa818_dev();
-  if (!dev || !device_is_ready(dev)) {
-    result_err(sh, cap, "get", "driver_error");
-    return 0;
-  }
-
-  if (!strcmp(cap, "rssi")) {
-    uint8_t rssi = 0;
-    if (sa818_at_read_rssi(dev, &rssi) != SA818_OK) {
-      result_err(sh, cap, "get", "driver_error");
-      return 0;
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
     }
-    result_ok_int(sh, cap, "get", (int)rssi);
-    return 0;
-  }
-  if (!strcmp(cap, "frequency")) {
-    result_ok_float(sh, cap, "get", (double)g_shadow.freq);
-    return 0;
-  }
-  if (!strcmp(cap, "bandwidth")) {
-    result_ok_str(sh, cap, "get", g_shadow.bw == SA818_BW_25_KHZ ? "25" : "12.5");
-    return 0;
+    return Result::okStr(ctx_.bw == SA818_BW_25_KHZ ? "25" : "12.5");
   }
 
-  sa818_status st = sa818_get_status(dev);
-  if (!strcmp(cap, "volume")) {
-    result_ok_int(sh, cap, "get", (int)st.volume);
-    return 0;
-  }
-  if (!strcmp(cap, "power_level")) {
-    result_ok_str(sh, cap, "get", st.power_level == SA818_POWER_HIGH ? "high" : "low");
-    return 0;
-  }
-  if (!strcmp(cap, "ptt")) {
-    result_ok_bool(sh, cap, "get", st.ptt_state == SA818_PTT_ON);
-    return 0;
+private:
+  Sa818Context &ctx_;
+};
+
+class PowerLevelCap : public Setting {
+public:
+  explicit PowerLevelCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return POWER_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    sa818_power_level level;
+    if (!strcmp(value, "high")) {
+      level = SA818_POWER_HIGH;
+    } else if (!strcmp(value, "low")) {
+      level = SA818_POWER_LOW;
+    } else {
+      return Result::err("bad_value");
+    }
+    if (sa818_set_power_level(ctx_.dev, level) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    return Result::okStr(value);
   }
 
-  result_err(sh, cap, "get", "unknown_capability");
-  return 0;
-}
-int do_do(const struct shell *sh, const char *cap, const char *valstr) {
-  const struct device *dev = sa818_dev();
-  if (!dev || !device_is_ready(dev)) {
-    result_err(sh, cap, "do", "driver_error");
-    return 0;
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    sa818_status st = sa818_get_status(ctx_.dev);
+    return Result::okStr(st.power_level == SA818_POWER_HIGH ? "high" : "low");
   }
 
-  cap_kind kind = kind_of(cap);
-  if (kind == KIND_UNKNOWN) {
-    result_err(sh, cap, "do", "unknown_capability");
-    return 0;
-  }
-  if (kind != KIND_ACTION) {
-    result_err(sh, cap, "do", "wrong_op");
-    return 0;
+private:
+  Sa818Context &ctx_;
+};
+
+class VolumeCap : public Setting {
+public:
+  explicit VolumeCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return VOLUME_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    char *end = nullptr;
+    long v = strtol(value, &end, 10);
+    if (end == value || *end != '\0') {
+      return Result::err("bad_value");
+    }
+    if (v < 1 || v > 8) {
+      return Result::err("out_of_range");
+    }
+    if (sa818_at_set_volume(ctx_.dev, static_cast<sa818_volume_level>(v)) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    return Result::okInt(static_cast<int>(v));
   }
 
-  if (!strcmp(cap, "ptt")) {
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    sa818_status st = sa818_get_status(ctx_.dev);
+    return Result::okInt(static_cast<int>(st.volume));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class PttCap : public Action {
+public:
+  explicit PttCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return PTT_SPEC; }
+
+protected:
+  Result onDo(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
     bool on;
-    if (!parse_bool(valstr, &on)) {
-      result_err(sh, cap, "do", "bad_value");
-      return 0;
+    if (!parse_bool(value, &on)) {
+      return Result::err("bad_value");
     }
-    if (sa818_set_ptt(dev, on ? SA818_PTT_ON : SA818_PTT_OFF) != SA818_OK) {
-      result_err(sh, cap, "do", "driver_error");
-      return 0;
+    if (sa818_set_ptt(ctx_.dev, on ? SA818_PTT_ON : SA818_PTT_OFF) != SA818_OK) {
+      return Result::err("driver_error");
     }
-    result_ok_bool(sh, cap, "do", on);
-    return 0;
+    return Result::okBool(on);
   }
 
-  /* Should not be reached: kind_of guards above handle unknown/non-action. */
-  result_err(sh, cap, "do", "unknown_capability");
-  return 0;
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    sa818_status st = sa818_get_status(ctx_.dev);
+    return Result::okBool(st.ptt_state == SA818_PTT_ON);
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class RssiCap : public Telemetry {
+public:
+  explicit RssiCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return RSSI_SPEC; }
+
+protected:
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    uint8_t rssi = 0;
+    if (sa818_at_read_rssi(ctx_.dev, &rssi) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    return Result::okInt(static_cast<int>(rssi));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+/* Registry: one shared context + one instance per capability, all statically allocated. */
+Sa818Context g_ctx{DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, 145.500f, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
+
+FrequencyCap g_freq{g_ctx};
+PttCap g_ptt{g_ctx};
+PowerLevelCap g_power{g_ctx};
+RssiCap g_rssi{g_ctx};
+VolumeCap g_volume{g_ctx};
+BandwidthCap g_bandwidth{g_ctx};
+
+Capability *const g_caps[] = {&g_freq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
+const Identity g_identity{"fm_transceiver", "SA818-V", "2m"};
+Module g_module{g_identity, g_caps, ARRAY_SIZE(g_caps)};
+
+void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op) {
+  char buf[768];
+  mod::JsonWriter w(buf, sizeof(buf));
+  w.raw("MODULE-RESULT ");
+  r.render(w, cap, mod::opStr(op));
+  shell_print(sh, "%s", w.c_str());
+}
+
+void emit_exec(const struct shell *sh, Op op, const char *cap, const char *value) {
+  char buf[768];
+  mod::JsonWriter w(buf, sizeof(buf));
+  w.raw("MODULE-RESULT ");
+  g_module.execute(w, op, cap, value);
+  shell_print(sh, "%s", w.c_str());
 }
 
 int cmd_module_describe(const struct shell *sh, size_t, char **) {
-  emit_describe(sh);
+  char buf[1024];
+  mod::JsonWriter w(buf, sizeof(buf));
+  w.raw("MODULE-DESCRIBE ");
+  g_module.describe(w);
+  shell_print(sh, "%s", w.c_str());
   return 0;
 }
 
 int cmd_module_set(const struct shell *sh, size_t argc, char **argv) {
   if (argc < 3) {
-    result_err(sh, argc >= 2 ? argv[1] : "", "set", "usage");
+    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", Op::Set);
     return 0;
   }
-  return do_set(sh, argv[1], argv[2]);
+  emit_exec(sh, Op::Set, argv[1], argv[2]);
+  return 0;
 }
 
 int cmd_module_get(const struct shell *sh, size_t argc, char **argv) {
   if (argc < 2) {
-    result_err(sh, "", "get", "usage");
+    emit_result(sh, Result::err("usage"), "", Op::Get);
     return 0;
   }
-  return do_get(sh, argv[1]);
+  emit_exec(sh, Op::Get, argv[1], "");
+  return 0;
 }
 
 int cmd_module_do(const struct shell *sh, size_t argc, char **argv) {
   if (argc < 3) {
-    result_err(sh, argc >= 2 ? argv[1] : "", "do", "usage");
+    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", Op::Do);
     return 0;
   }
-  return do_do(sh, argv[1], argv[2]);
+  emit_exec(sh, Op::Do, argv[1], argv[2]);
+  return 0;
 }
 
 } // namespace

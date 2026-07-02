@@ -55,26 +55,47 @@ unrelated audio test — see §7).
 
 ## 3. Architecture
 
-New translation unit `drivers/radio/sa818/sa818_module.cpp`, compiled when
-`CONFIG_SA818_MODULE_IFACE=y`. It registers a `module` Zephyr shell command group and owns:
+A small **object model** split into a generic framework and an SA818-specific layer,
+compiled when `CONFIG_SA818_MODULE_IFACE=y`:
 
-- a **static capability table** (single source of truth) describing each capability's
-  name/kind/type/constraints/access — used both to emit `describe` and to validate + dispatch
-  commands;
-- a small **RAM shadow** of the SA818 group config (bandwidth, tx/rx frequency, tones, squelch),
-  seeded to the module's power-on defaults, so `set frequency` / `set bandwidth` can reconstruct the
-  full `sa818_at_set_group(...)` call (the driver has no "frequency-only" entry point). This is
-  working state, **not** capability persistence.
+**`drivers/radio/sa818/module_iface.h` — generic framework (no device / RTOS deps):**
+- `Capability` — abstract base owning a typed `FieldSpec` (name/type/unit/constraints/access)
+  plus `onSet`/`onGet`/`onDo` hooks. `describe()` renders the descriptor JSON **generically from
+  the `FieldSpec`** (one renderer, no per-capability strings), and `handle(op)` enforces the
+  op⇄kind contract before delegating (e.g. `set` on telemetry → `read_only`, wrong op → `wrong_op`).
+- Kind mixins `Setting` / `Action` / `Telemetry` fix the capability kind and which hooks apply.
+- `JsonWriter` — bounded, truncation-safe JSON builder with string escaping (used by both
+  `describe` and result rendering, so malformed input can never break the contract).
+- `Result` — a success-with-typed-value | error-code outcome that renders `MODULE-RESULT` JSON.
+- `Module` — identity + a fixed registry of `Capability*`; renders `describe` and dispatches
+  `execute`. Fully device-agnostic and unit-testable on the host.
+
+**`drivers/radio/sa818/sa818_module.cpp` — SA818 concrete layer:**
+- One subclass per capability (`FrequencyCap`, `BandwidthCap`, `PowerLevelCap`, `VolumeCap`
+  `: Setting`; `PttCap : Action`; `RssiCap : Telemetry`), each encapsulating its own `FieldSpec`,
+  value parsing/validation, and SA818 driver mapping.
+- A shared `Sa818Context` holds the device handle plus the **RAM group shadow** (bandwidth,
+  tx/rx frequency, tones, squelch), seeded to the module's power-on defaults, so
+  `set frequency` / `set bandwidth` can rebuild the full `sa818_at_set_group(...)` call (the
+  driver has no "frequency-only" entry point). Working state, **not** capability persistence.
+- Statically-allocated registry (`Module` + one instance per capability) and the `module`
+  Zephyr shell group (`describe`/`set`/`get`/`do`) forwarding to `Module::execute`.
+
+**Extensibility:** adding a capability = one new `Capability` subclass + one registry entry;
+a whole new module type reuses `module_iface.h` unchanged with its own capability classes and
+`Module` instance. This is the OOP realisation of the meta-spec's "generic shape, device
+specifics as low as possible".
 
 ```
 module describe / set / get / do   (Zephyr shell, one module = implicit "module")
         │
         ▼
-sa818_module.cpp   ── capability table ── validate {cap, op, value}
-        │                                   │
-        │ dispatch                          └─ emit MODULE-DESCRIBE / MODULE-RESULT JSON line
-        ▼
-existing SA818 driver API (sa818.h / sa818_at.h) + GPIO   ← UNCHANGED
+Module (registry)  ──►  Capability::handle(op)  ── op⇄kind gating ──►  onSet/onGet/onDo
+        │                        │                                          │
+        │ describe()             └─ Result / describe rendered via JsonWriter (MODULE-* JSON)
+        ▼                                                                    ▼
+generic framework (module_iface.h)                         SA818 driver API (sa818.h / sa818_at.h)
+                                                            + GPIO   ← UNCHANGED
 ```
 
 New Kconfig symbol (in `drivers/radio/sa818/Kconfig`, under `if SA818`):
