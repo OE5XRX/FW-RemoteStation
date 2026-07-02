@@ -14,9 +14,8 @@
 
 #ifdef CONFIG_SA818_MODULE_IFACE
 
-#include "module_iface.h"
-
 #include <math.h>
+#include <oe5xrx/module_iface.h>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
 #include <stdlib.h>

@@ -58,7 +58,7 @@ unrelated audio test — see §7).
 A small **object model** split into a generic framework and an SA818-specific layer,
 compiled when `CONFIG_SA818_MODULE_IFACE=y`:
 
-**`drivers/radio/sa818/module_iface.h` — generic framework (no device / RTOS deps):**
+**`include/oe5xrx/module_iface.h` — generic framework (no device / RTOS deps, reusable across modules):**
 - `Capability` — abstract base owning a typed `FieldSpec` (name/type/unit/constraints/access)
   plus `onSet`/`onGet`/`onDo` hooks. `describe()` renders the descriptor JSON **generically from
   the `FieldSpec`** (one renderer, no per-capability strings), and `handle(op)` enforces the

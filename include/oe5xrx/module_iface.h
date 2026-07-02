@@ -18,8 +18,8 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
-#ifndef OE5XRX_DRIVERS_SA818_MODULE_IFACE_H_
-#define OE5XRX_DRIVERS_SA818_MODULE_IFACE_H_
+#ifndef OE5XRX_MODULE_IFACE_H_
+#define OE5XRX_MODULE_IFACE_H_
 
 #include <stddef.h>
 #include <stdio.h>
@@ -461,4 +461,4 @@ private:
 
 } // namespace mod
 
-#endif // OE5XRX_DRIVERS_SA818_MODULE_IFACE_H_
+#endif // OE5XRX_MODULE_IFACE_H_
