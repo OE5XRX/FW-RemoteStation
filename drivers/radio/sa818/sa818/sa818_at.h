@@ -298,7 +298,7 @@ enum sa818_filter_flags : uint8_t {
  * @brief Format a tone code to its string. 0 -> "none"; 1..38 -> CTCSS Hz; 39..121 -> DCS code.
  * @return bytes written (excl. NUL), or negative on truncation.
  */
-int sa818_at_tone_to_str(enum sa818_tone_code code, char *buf, size_t len);
+[[nodiscard]] int sa818_at_tone_to_str(enum sa818_tone_code code, char *buf, size_t len);
 
 #ifdef __cplusplus
 }

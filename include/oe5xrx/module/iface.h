@@ -102,6 +102,9 @@ struct FieldSpec {
   const char *access = "operator";
 
   bool inAnyRange(double v) const {
+    if (ranges == nullptr) {
+      return false;
+    }
     for (size_t i = 0; i < rangeCount; ++i) {
       if (v >= ranges[i].min && v <= ranges[i].max) {
         return true;
@@ -238,6 +241,9 @@ public:
   }
   Result(const Result &o) { *this = o; }
   Result &operator=(const Result &o) {
+    if (this == &o) {
+      return *this;
+    }
     ok_ = o.ok_;
     vk_ = o.vk_;
     i_ = o.i_;

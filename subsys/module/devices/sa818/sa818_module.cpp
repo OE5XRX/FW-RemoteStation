@@ -440,16 +440,16 @@ protected:
       return Result::err("driver_error");
     }
     ctx_.tone_tx = t;
-    char b[16];
-    sa818_at_tone_to_str(t, b, sizeof(b));
+    char b[16] = {0};
+    (void)sa818_at_tone_to_str(t, b, sizeof(b));
     return Result::okStrCopy(b);
   }
   Result onGet() override {
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    char b[16];
-    sa818_at_tone_to_str(ctx_.tone_tx, b, sizeof(b));
+    char b[16] = {0};
+    (void)sa818_at_tone_to_str(ctx_.tone_tx, b, sizeof(b));
     return Result::okStrCopy(b);
   }
 
@@ -472,16 +472,16 @@ protected:
       return Result::err("driver_error");
     }
     ctx_.tone_rx = t;
-    char b[16];
-    sa818_at_tone_to_str(t, b, sizeof(b));
+    char b[16] = {0};
+    (void)sa818_at_tone_to_str(t, b, sizeof(b));
     return Result::okStrCopy(b);
   }
   Result onGet() override {
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    char b[16];
-    sa818_at_tone_to_str(ctx_.tone_rx, b, sizeof(b));
+    char b[16] = {0};
+    (void)sa818_at_tone_to_str(ctx_.tone_rx, b, sizeof(b));
     return Result::okStrCopy(b);
   }
 
@@ -570,6 +570,10 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     mod::JsonWriter w(buf, sizeof(buf));
     w.raw("MODULE-LIST ");
     g_registry.list(w);
+    if (w.truncated()) {
+      shell_print(sh, "MODULE-LIST {\"modules\":[]}");
+      return 0;
+    }
     shell_print(sh, "%s", w.c_str());
     return 0;
   }
