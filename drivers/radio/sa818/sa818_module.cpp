@@ -157,12 +157,12 @@ int do_set(const struct shell *sh, const char *cap, const char *valstr) {
       result_err(sh, cap, "set", "out_of_range");
       return 0;
     }
-    g_shadow.freq = f;
     sa818_result r = sa818_at_set_group(dev, g_shadow.bw, f, f, g_shadow.tone, g_shadow.squelch, g_shadow.tone);
     if (r != SA818_OK) {
       result_err(sh, cap, "set", "driver_error");
       return 0;
     }
+    g_shadow.freq = f; // commit shadow only after the driver call succeeds
     result_ok_float(sh, cap, "set", (double)f);
     return 0;
   }
@@ -215,11 +215,11 @@ int do_set(const struct shell *sh, const char *cap, const char *valstr) {
       result_err(sh, cap, "set", "bad_value");
       return 0;
     }
-    g_shadow.bw = bw;
-    if (sa818_at_set_group(dev, g_shadow.bw, g_shadow.freq, g_shadow.freq, g_shadow.tone, g_shadow.squelch, g_shadow.tone) != SA818_OK) {
+    if (sa818_at_set_group(dev, bw, g_shadow.freq, g_shadow.freq, g_shadow.tone, g_shadow.squelch, g_shadow.tone) != SA818_OK) {
       result_err(sh, cap, "set", "driver_error");
       return 0;
     }
+    g_shadow.bw = bw; // commit shadow only after the driver call succeeds
     result_ok_str(sh, cap, "set", valstr);
     return 0;
   }
