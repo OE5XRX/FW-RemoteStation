@@ -299,7 +299,7 @@ void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op
   if (w.truncated()) {
     // Pathologically long cap/value: fall back to a guaranteed-valid short result
     // rather than emit truncated (invalid) JSON. op is a short internal literal.
-    shell_print(sh, "MODULE-RESULT {\"ok\":false,\"op\":\"%s\",\"error\":\"too_long\"}", mod::opStr(op));
+    shell_print(sh, "MODULE-RESULT {\"ok\":false,\"cap\":\"\",\"op\":\"%s\",\"error\":\"too_long\"}", mod::opStr(op));
     return;
   }
   shell_print(sh, "%s", w.c_str());

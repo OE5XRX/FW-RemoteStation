@@ -154,11 +154,15 @@ MODULE-RESULT {"ok":false,"cap":"frequency","op":"set","error":"out_of_range"}
 ```
 
 Error codes (string enum): `unknown_capability`, `bad_value`, `out_of_range`, `read_only`,
-`wrong_op`, `driver_error`, `usage`.
+`wrong_op`, `driver_error`, `usage`, `too_long`. `too_long` is emitted only on the truncation
+fallback path when a pathologically long capability/value would otherwise overflow the output
+buffer; the fallback still emits valid JSON in the stable shape (`cap` present, possibly empty).
 
 Notes:
-- JSON is hand-built with `snprintf` from the static table; the C locale is dot-decimal, so floats
-  round-trip correctly (`%.4f`/trimmed). A pytest `json.loads` on the output guarantees validity.
+- JSON is produced by the framework's `mod::JsonWriter` (bounded, truncation-safe, with string
+  escaping), not hand-built strings. The C locale is dot-decimal, so floats round-trip correctly;
+  result floats (`frequency`) are emitted with fixed `%.4f` precision (e.g. `145.5000`, `146.0000`)
+  and always render as a JSON float. A pytest `json.loads` on the output guarantees validity.
 - `rssi` follows the meta-spec §5.1 example (`int`, unit `dBm`, readonly); the value is the driver's
   reading. Precise dBm calibration is a driver concern, out of scope for D1.
 
