@@ -16,6 +16,7 @@
 
 #include <math.h>
 #include <oe5xrx/module_iface.h>
+#include <optional>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
 #include <stdlib.h>
@@ -53,17 +54,36 @@ struct Sa818Context {
   bool ready() const { return dev != nullptr && device_is_ready(dev); }
 };
 
-/* Parse on/off/1/0/true/false. Returns true on success and writes *out. */
-bool parse_bool(const char *s, bool *out) {
+/* Value parsers: return the parsed value, or nullopt on malformed input. Callers apply
+ * any capability-specific range/enum check on the parsed value. (Exceptions are disabled,
+ * so callers dereference with * / value_or after checking, never with .value().) */
+
+std::optional<bool> parse_bool(const char *s) {
   if (!strcmp(s, "on") || !strcmp(s, "1") || !strcmp(s, "true")) {
-    *out = true;
     return true;
   }
   if (!strcmp(s, "off") || !strcmp(s, "0") || !strcmp(s, "false")) {
-    *out = false;
-    return true;
+    return false;
   }
-  return false;
+  return std::nullopt;
+}
+
+std::optional<float> parse_float(const char *s) {
+  char *end = nullptr;
+  float f = strtof(s, &end);
+  if (end == s || *end != '\0' || !isfinite(f)) {
+    return std::nullopt;
+  }
+  return f;
+}
+
+std::optional<long> parse_int(const char *s) {
+  char *end = nullptr;
+  long v = strtol(s, &end, 10);
+  if (end == s || *end != '\0') {
+    return std::nullopt;
+  }
+  return v;
 }
 
 /* Enum value tables + typed field specs (namespace-scope constants -> constant init). */
@@ -87,22 +107,18 @@ protected:
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    char *end = nullptr;
-    float f = strtof(value, &end);
-    if (end == value || *end != '\0') {
+    std::optional<float> f = parse_float(value);
+    if (!f) {
       return Result::err("bad_value");
     }
-    if (!isfinite(f)) {
-      return Result::err("bad_value");
-    }
-    if (f < 144.0f || f > 148.0f) {
+    if (*f < 144.0f || *f > 148.0f) {
       return Result::err("out_of_range");
     }
-    if (sa818_at_set_group(ctx_.dev, ctx_.bw, f, f, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, *f, *f, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
       return Result::err("driver_error");
     }
-    ctx_.freq = f; // commit shadow only after the driver call succeeds
-    return Result::okFloat(static_cast<double>(f));
+    ctx_.freq = *f; // commit shadow only after the driver call succeeds
+    return Result::okFloat(static_cast<double>(*f));
   }
 
   Result onGet() override {
@@ -198,18 +214,17 @@ protected:
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    char *end = nullptr;
-    long v = strtol(value, &end, 10);
-    if (end == value || *end != '\0') {
+    std::optional<long> v = parse_int(value);
+    if (!v) {
       return Result::err("bad_value");
     }
-    if (v < 1 || v > 8) {
+    if (*v < 1 || *v > 8) {
       return Result::err("out_of_range");
     }
-    if (sa818_at_set_volume(ctx_.dev, static_cast<sa818_volume_level>(v)) != SA818_OK) {
+    if (sa818_at_set_volume(ctx_.dev, static_cast<sa818_volume_level>(*v)) != SA818_OK) {
       return Result::err("driver_error");
     }
-    return Result::okInt(static_cast<int>(v));
+    return Result::okInt(static_cast<int>(*v));
   }
 
   Result onGet() override {
@@ -234,14 +249,14 @@ protected:
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    bool on;
-    if (!parse_bool(value, &on)) {
+    std::optional<bool> on = parse_bool(value);
+    if (!on) {
       return Result::err("bad_value");
     }
-    if (sa818_set_ptt(ctx_.dev, on ? SA818_PTT_ON : SA818_PTT_OFF) != SA818_OK) {
+    if (sa818_set_ptt(ctx_.dev, *on ? SA818_PTT_ON : SA818_PTT_OFF) != SA818_OK) {
       return Result::err("driver_error");
     }
-    return Result::okBool(on);
+    return Result::okBool(*on);
   }
 
   Result onGet() override {
