@@ -12,10 +12,10 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
-#ifdef CONFIG_SA818_MODULE_IFACE
+#ifdef CONFIG_MODULE_SA818
 
 #include <math.h>
-#include <oe5xrx/module_iface.h>
+#include <oe5xrx/module/iface.h>
 #include <optional>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
@@ -394,4 +394,4 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 
 SHELL_CMD_REGISTER(module, &module_cmds, "Generic module interface (describe/set/get/do)", NULL);
 
-#endif /* CONFIG_SA818_MODULE_IFACE */
+#endif /* CONFIG_MODULE_SA818 */
