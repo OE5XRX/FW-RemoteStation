@@ -4,11 +4,12 @@ Zephyr-RTOS-Firmware für den STM32-Teil der OE5XRX Remote-Station: FM-Transceiv
 
 ## Sprache & Coding-Standard
 
-**Primär C++ im Zephyr-Kontext** (siehe auch `CONTRIBUTING.md`). Regel für Agenten:
+**Primär C++ im Zephyr-Kontext.** Verbindliche Details in `CONTRIBUTING.md` — diese Datei fasst das Wichtigste für Agenten zusammen:
 
-- **Modernes C++ (C++17/20) für App- und Modul-Abstraktions-Logik.** OOP, RAII, Typsicherheit, `constexpr`, Namespaces, `std::` (vector/string/array/span/optional …), Vererbung **wo sie ein echtes Abstraktions-Interface trägt** (z.B. der generische `module`-Layer der Modul-Plattform). Kein plain-C-Stil in neuem Logik-Code.
-- **Zephyr-C-Idiom an der HW-/Driver-Grenze respektieren.** Device-Model (`struct device`, API-Structs), Devicetree und Zephyr-APIs sind C-first. Dort **keine** vtables/Vererbung in die Driver-ABI zwingen — modernes C++ *innerhalb* der Implementierung ist ok, die Zephyr-Schnittstelle bleibt idiomatisch. „Modernes C++ wo es die Logik trägt, Zephyr-C wo das Framework es verlangt."
-- **Bestehende Treiber NICHT refactoren.** Der aktuelle SA818-Treiber (`drivers/radio/sa818/`) ist bewusst im C-Style gehalten und funktioniert — nur wo nötig erweitern, nicht anfassen. Modernisierung nur opportunistisch, nie als Stil-Sweep unter Deadline. **Neuer Code = modern; alter, laufender Code = in Ruhe.**
+- **Modernes C++ (C++17/20) für App- und Modul-Abstraktions-Logik.** OOP, RAII, Typsicherheit, `constexpr`, Namespaces, Value-Types, Vererbung **wo sie ein echtes Abstraktions-Interface trägt** (z.B. der generische `module`-Layer der Modul-Plattform). Kein plain-C-Stil in neuem Logik-Code.
+- **Keine dynamische Speicherallokation** (harte Repo-Regel). Verboten: `new`/`delete`, `malloc`/`free`, `std::vector`, `std::string` — und alles Heap-basierte (`std::list`, `std::map`, `std::function` …). Stattdessen statisch/stack: `std::array`, `std::span`, `std::string_view`, `std::optional`, `constexpr`, feste Puffer, Value-Types.
+- **Keine Exceptions, kein RTTI** (Repo-Regel). Fehlerbehandlung über Rückgabe-/Status-Typen; kein `dynamic_cast`. Code muss ohne diese Features korrekt sein.
+- **Zephyr-C-Idiom an der HW-/Driver-Grenze respektieren.** Device-Model (`struct device`, API-Structs), Devicetree und Zephyr-APIs sind C-first — dort keine vtables/Vererbung in die Driver-ABI zwingen; modernes C++ *innerhalb* der Implementierung ist ok, die Zephyr-Schnittstelle bleibt idiomatisch. Leitsatz: modernes C++ wo es die Logik trägt, Zephyr-C wo das Framework es verlangt.
 
 ## Struktur (Orientierung)
 
