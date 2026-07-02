@@ -606,9 +606,10 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     w.raw("MODULE-DESCRIBE ");
     m->describe(w);
     if (w.truncated()) {
-      // Descriptor outgrew the buffer: emit a minimal valid descriptor rather than
-      // truncated (invalid) JSON, so the machine-readable contract still holds.
-      shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"error\":\"too_long\"}");
+      // Descriptor outgrew the buffer: emit a minimal valid descriptor (keeping the
+      // module field so the schema is stable vs the success path) rather than truncated
+      // (invalid) JSON. moduleId is a registered literal, so no escaping is needed.
+      shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", m->moduleId());
       return 0;
     }
     shell_print(sh, "%s", w.c_str());

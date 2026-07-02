@@ -81,7 +81,7 @@ config MODULE_SA818
   bool "SA818 FM transceiver module"
   default n
   depends on SHELL
-  select SA818
+  depends on SA818
   select CBPRINTF_FP_SUPPORT
   help
     Registers the generic `module` shell interface for the SA818 FM transceiver,
