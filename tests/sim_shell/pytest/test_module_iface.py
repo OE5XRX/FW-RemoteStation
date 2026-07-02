@@ -246,6 +246,7 @@ def test_module_unknown_module(shell):
     out = shell.exec_command("module nope describe")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "unknown_module"
+    assert r["op"] == "describe"  # the attempted op, not a placeholder "get"
 
 
 def test_module_result_carries_module_id(sa818_sim, shell):

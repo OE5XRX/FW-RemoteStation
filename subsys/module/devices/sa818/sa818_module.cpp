@@ -2,9 +2,9 @@
  * @file sa818_module.cpp
  * @brief SA818 concrete implementation of the generic module capability framework.
  *
- * Defines the SA818-specific capabilities (frequency, ptt, power_level, rssi, volume,
- * bandwidth) as subclasses of the kind mixins in oe5xrx/module/iface.h, wires them into a
- * @ref mod::Module registry, and registers the `module` Zephyr shell group. This is the
+ * Defines the SA818 capabilities as subclasses of the kind mixins in oe5xrx/module/iface.h,
+ * wires them into a @ref mod::Module registry, and registers the `module` Zephyr shell group.
+ * (See the `g_caps` registry below for the full, authoritative capability list.) This is the
  * firmware half of the Firmware<->Agent contract (module-platform meta-spec §8); the
  * human `sa818` command tree stays separate and untouched.
  *
@@ -560,18 +560,15 @@ Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};
 ModuleRegistry g_registry{g_modules};
 
-void emit_result(const struct shell *sh, const Result &r, const char *module, const char *cap, Op op) {
+void emit_result(const struct shell *sh, const Result &r, const char *module, const char *cap, const char *op) {
   char buf[RESULT_BUF_SIZE];
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-RESULT ");
-  r.render(w, module, cap, mod::opStr(op));
+  r.render(w, module, cap, op);
   if (w.truncated()) {
-    // Pathologically long cap/value: fall back to a guaranteed-valid short result
-    // rather than emit truncated (invalid) JSON. op is a short internal literal.
-    shell_print(sh,
-                "MODULE-RESULT {\"ok\":false,\"module\":\"\",\"cap\":\"\",\"op\":\"%s\","
-                "\"error\":\"too_long\"}",
-                mod::opStr(op));
+    // Pathologically long input: fall back to a guaranteed-valid short result rather than
+    // emit truncated (invalid) JSON.
+    shell_print(sh, "MODULE-RESULT {\"ok\":false,\"module\":\"\",\"cap\":\"\",\"op\":\"\",\"error\":\"too_long\"}");
     return;
   }
   shell_print(sh, "%s", w.c_str());
@@ -591,7 +588,7 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     return 0;
   }
   if (argc < 3) {
-    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", "", Op::Get);
+    emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", "", "");
     return 0;
   }
 
@@ -601,7 +598,7 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
 
   if (!strcmp(op, "describe")) {
     if (m == nullptr) {
-      emit_result(sh, Result::err("unknown_module"), id, "", Op::Get);
+      emit_result(sh, Result::err("unknown_module"), id, "", "describe");
       return 0;
     }
     char buf[DESCRIBE_BUF_SIZE];
@@ -620,40 +617,41 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
 
   if (!strcmp(op, "set")) {
     if (argc < 5) {
-      emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", Op::Set);
+      emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", "set");
       return 0;
     }
     const char *cap = argv[3];
     const char *value = argv[4];
     Result r = (m != nullptr) ? m->execute(Op::Set, cap, value) : Result::err("unknown_module");
-    emit_result(sh, r, id, cap, Op::Set);
+    emit_result(sh, r, id, cap, "set");
     return 0;
   }
 
   if (!strcmp(op, "get")) {
     if (argc < 4) {
-      emit_result(sh, Result::err("usage"), id, "", Op::Get);
+      emit_result(sh, Result::err("usage"), id, "", "get");
       return 0;
     }
     const char *cap = argv[3];
     Result r = (m != nullptr) ? m->execute(Op::Get, cap, "") : Result::err("unknown_module");
-    emit_result(sh, r, id, cap, Op::Get);
+    emit_result(sh, r, id, cap, "get");
     return 0;
   }
 
   if (!strcmp(op, "do")) {
     if (argc < 5) {
-      emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", Op::Do);
+      emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", "do");
       return 0;
     }
     const char *cap = argv[3];
     const char *value = argv[4];
     Result r = (m != nullptr) ? m->execute(Op::Do, cap, value) : Result::err("unknown_module");
-    emit_result(sh, r, id, cap, Op::Do);
+    emit_result(sh, r, id, cap, "do");
     return 0;
   }
 
-  emit_result(sh, Result::err("usage"), id, "", Op::Get);
+  // Unrecognized op: report the attempted op string (render() escapes it).
+  emit_result(sh, Result::err("usage"), id, "", op);
   return 0;
 }
 

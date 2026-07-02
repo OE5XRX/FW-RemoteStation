@@ -1,5 +1,5 @@
 /**
- * @file module_iface.h
+ * @file iface.h
  * @brief Generic, device-agnostic module capability framework.
  *
  * A small object model for the Firmware<->Agent contract (module-platform meta-spec
