@@ -1,7 +1,11 @@
 # Design: Generic `module describe` + Typed Command Mapping (SA818)
 
 **Date:** 2026-07-01
-**Status:** Design (approved, pre-implementation)
+**Status:** Implemented, then **superseded** — the shipped Firmware↔Agent contract is defined by
+`2026-07-02-sa818-full-capability-and-module-platform-design.md` (+ PR #38). This document records
+the original **D1** design; several details below (the `MODULE-DESCRIBE` example, the `rssi` unit
+`dBm`, the `144–148` frequency range, the flat `min`/`max` constraints, and the "6 capabilities"
+count) were revised during implementation. Read the later spec for the authoritative contract.
 **Repo:** `FW-RemoteStation`
 **Deliverable:** D1 of the module-platform initiative (FW-RemoteStation #36)
 **Parent contract:** `station-manager` meta-spec

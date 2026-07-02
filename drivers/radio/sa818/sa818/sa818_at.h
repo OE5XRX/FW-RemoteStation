@@ -290,7 +290,8 @@ enum sa818_filter_flags : uint8_t {
 
 /**
  * @brief Parse a tone string to a code. "none"/"off" -> SA818_TONE_NONE; CTCSS Hz
- * ("67.0".."250.3") -> 1..38; DCS ("023"..) -> 39..121; invalid -> SA818_TONE_NONE.
+ * ("67.0".."250.3") -> 1..38; DCS ("023"..) -> 39..121; a bare numeric code ("0".."121")
+ * -> that code (shell convenience); anything else -> SA818_TONE_NONE.
  */
 [[nodiscard]] enum sa818_tone_code sa818_at_parse_tone(const char *s);
 

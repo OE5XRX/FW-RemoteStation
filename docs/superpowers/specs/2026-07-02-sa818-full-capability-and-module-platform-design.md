@@ -1,7 +1,7 @@
 # Design: SA818 Full Capability + Module-Platform Restructure
 
 **Date:** 2026-07-02
-**Status:** Design (approved, pre-implementation)
+**Status:** Implemented on PR #38 (this is the authoritative shipped contract)
 **Repo:** `FW-RemoteStation`
 **Builds on:** D1 (`docs/superpowers/specs/2026-07-01-module-describe-and-typed-command-mapping-design.md`)
 **Delivered on:** PR #38 (extends the D1 branch `feature/d1-module-describe`)

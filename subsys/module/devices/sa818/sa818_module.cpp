@@ -97,10 +97,12 @@ std::optional<long> parse_int(const char *s) {
 constexpr const char *BAND_NAME = "uhf";
 constexpr const char *BAND_MODEL = "SA818-U";
 const Range FREQ_RANGES[] = {{"uhf", 400.0, 480.0}};
+constexpr float BAND_DEFAULT_FREQ = 435.000f; // within 400-480 MHz (70cm)
 #else
 constexpr const char *BAND_NAME = "vhf";
 constexpr const char *BAND_MODEL = "SA818-V";
 const Range FREQ_RANGES[] = {{"vhf", 134.0, 174.0}};
+constexpr float BAND_DEFAULT_FREQ = 145.500f; // within 134-174 MHz (2m)
 #endif
 
 /* SA818 capability constraints (single source of truth for both the descriptor and
@@ -539,7 +541,8 @@ private:
 };
 
 /* Registry: one shared context + one instance per capability, all statically allocated. */
-Sa818Context g_ctx{DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, 145.500f, 145.500f, SA818_TONE_NONE, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
+Sa818Context g_ctx{
+    DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, BAND_DEFAULT_FREQ, BAND_DEFAULT_FREQ, SA818_TONE_NONE, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
 
 FrequencyCap g_freq{g_ctx};
 TxFrequencyCap g_txfreq{g_ctx};
