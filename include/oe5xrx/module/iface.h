@@ -22,7 +22,7 @@
 #define OE5XRX_MODULE_IFACE_H_
 
 #ifndef __cplusplus
-#error "oe5xrx/module_iface.h is a C++ header (namespaces/classes); include it only from C++."
+#error "oe5xrx/module/iface.h is a C++ header (namespaces/classes); include it only from C++."
 #endif
 
 #include <math.h>

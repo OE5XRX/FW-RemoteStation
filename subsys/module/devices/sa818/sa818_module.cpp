@@ -3,7 +3,7 @@
  * @brief SA818 concrete implementation of the generic module capability framework.
  *
  * Defines the SA818-specific capabilities (frequency, ptt, power_level, rssi, volume,
- * bandwidth) as subclasses of the kind mixins in module_iface.h, wires them into a
+ * bandwidth) as subclasses of the kind mixins in oe5xrx/module/iface.h, wires them into a
  * @ref mod::Module registry, and registers the `module` Zephyr shell group. This is the
  * firmware half of the Firmware<->Agent contract (module-platform meta-spec §8); the
  * human `sa818` command tree stays separate and untouched.
