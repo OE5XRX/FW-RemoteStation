@@ -58,7 +58,7 @@ Three layers, cleanly separated:
   config MODULE_SA818
     bool "SA818 FM transceiver module"
     depends on SHELL
-    select SA818
+    depends on SA818
     select CBPRINTF_FP_SUPPORT
     help
       Registers the generic `module` shell interface for the SA818 FM transceiver.
@@ -203,7 +203,8 @@ to the driver AT API so it is the single source of truth for both the human shel
 
 - `sa818_tone_code sa818_at_parse_tone(const char *s);`
   — `"none"`/`"off"` → `SA818_TONE_NONE`; CTCSS Hz (`"67.0"`…`"250.3"`) → 1–38; DCS (`"023"`…) → 39–121;
-  invalid → `SA818_TONE_NONE`. (Moved verbatim from the shell's `parse_tone`.)
+  invalid → `SA818_TONE_NONE`. (Logic lifted from the shell's `parse_tone`, extended to accept
+  3-digit DCS code strings so `tx_tone`/`rx_tone` can set DCS — the shell path is unaffected.)
 - `int sa818_at_tone_to_str(sa818_tone_code code, char *buf, size_t len);`
   — reverse: `0` → `"none"`, 1–38 → CTCSS Hz string, 39–121 → DCS code string (e.g. `"023"`).
   Returns bytes written or negative on truncation.
