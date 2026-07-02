@@ -49,8 +49,10 @@ using mod::ValueType;
 struct Sa818Context {
   const struct device *dev;
   sa818_bandwidth bw;
-  float freq;
-  sa818_tone_code tone;
+  float freq_tx;
+  float freq_rx;
+  sa818_tone_code tone_tx;
+  sa818_tone_code tone_rx;
   sa818_squelch_level squelch;
 
   bool ready() const { return dev != nullptr && device_is_ready(dev); }
@@ -121,6 +123,8 @@ const char *const POWER_LEVELS[] = {POWER_LOW, POWER_HIGH};
 const char *const BANDWIDTHS[] = {BW_NARROW, BW_WIDE};
 
 const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", FREQ_RANGES, 1};
+const FieldSpec TXFREQ_SPEC{"tx_frequency", ValueType::Float, "MHz", FREQ_RANGES, 1};
+const FieldSpec RXFREQ_SPEC{"rx_frequency", ValueType::Float, "MHz", FREQ_RANGES, 1};
 const FieldSpec PTT_SPEC{"ptt", ValueType::Bool};
 const FieldSpec POWER_SPEC{"power_level", ValueType::Enum, nullptr, nullptr, 0, POWER_LEVELS, 2};
 const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "raw", nullptr, 0, nullptr, 0, /*readonly=*/true};
@@ -144,10 +148,11 @@ protected:
     if (!FREQ_SPEC.inAnyRange(static_cast<double>(*f))) {
       return Result::err("out_of_range");
     }
-    if (sa818_at_set_group(ctx_.dev, ctx_.bw, *f, *f, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, *f, *f, ctx_.tone_tx, ctx_.squelch, ctx_.tone_rx) != SA818_OK) {
       return Result::err("driver_error");
     }
-    ctx_.freq = *f; // commit shadow only after the driver call succeeds
+    ctx_.freq_tx = *f; // commit shadow only after the driver call succeeds
+    ctx_.freq_rx = *f;
     return Result::okFloat(static_cast<double>(*f));
   }
 
@@ -155,7 +160,77 @@ protected:
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    return Result::okFloat(static_cast<double>(ctx_.freq));
+    return Result::okFloat(static_cast<double>(ctx_.freq_rx));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class TxFrequencyCap : public Setting {
+public:
+  explicit TxFrequencyCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return TXFREQ_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    std::optional<float> f = parse_float(value);
+    if (!f) {
+      return Result::err("bad_value");
+    }
+    if (!TXFREQ_SPEC.inAnyRange(static_cast<double>(*f))) {
+      return Result::err("out_of_range");
+    }
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, *f, ctx_.freq_rx, ctx_.tone_tx, ctx_.squelch, ctx_.tone_rx) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.freq_tx = *f;
+    return Result::okFloat(static_cast<double>(*f));
+  }
+
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okFloat(static_cast<double>(ctx_.freq_tx));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class RxFrequencyCap : public Setting {
+public:
+  explicit RxFrequencyCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return RXFREQ_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    std::optional<float> f = parse_float(value);
+    if (!f) {
+      return Result::err("bad_value");
+    }
+    if (!RXFREQ_SPEC.inAnyRange(static_cast<double>(*f))) {
+      return Result::err("out_of_range");
+    }
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, ctx_.freq_tx, *f, ctx_.tone_tx, ctx_.squelch, ctx_.tone_rx) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.freq_rx = *f;
+    return Result::okFloat(static_cast<double>(*f));
+  }
+
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okFloat(static_cast<double>(ctx_.freq_rx));
   }
 
 private:
@@ -180,7 +255,7 @@ protected:
     } else {
       return Result::err("bad_value");
     }
-    if (sa818_at_set_group(ctx_.dev, bw, ctx_.freq, ctx_.freq, ctx_.tone, ctx_.squelch, ctx_.tone) != SA818_OK) {
+    if (sa818_at_set_group(ctx_.dev, bw, ctx_.freq_tx, ctx_.freq_rx, ctx_.tone_tx, ctx_.squelch, ctx_.tone_rx) != SA818_OK) {
       return Result::err("driver_error");
     }
     ctx_.bw = bw; // commit shadow only after the driver call succeeds
@@ -323,16 +398,18 @@ private:
 };
 
 /* Registry: one shared context + one instance per capability, all statically allocated. */
-Sa818Context g_ctx{DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, 145.500f, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
+Sa818Context g_ctx{DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, 145.500f, 145.500f, SA818_TONE_NONE, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
 
 FrequencyCap g_freq{g_ctx};
+TxFrequencyCap g_txfreq{g_ctx};
+RxFrequencyCap g_rxfreq{g_ctx};
 PttCap g_ptt{g_ctx};
 PowerLevelCap g_power{g_ctx};
 RssiCap g_rssi{g_ctx};
 VolumeCap g_volume{g_ctx};
 BandwidthCap g_bandwidth{g_ctx};
 
-Capability *const g_caps[] = {&g_freq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
+Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
 const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};

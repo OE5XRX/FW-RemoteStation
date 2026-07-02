@@ -33,7 +33,7 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["version"] == "vhf"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "ptt", "power_level", "rssi", "volume", "bandwidth"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth"}
 
     assert caps["frequency"]["kind"] == "setting"
     assert caps["frequency"]["type"] == "float"
@@ -250,3 +250,23 @@ def test_module_result_carries_module_id(sa818_sim, shell):
     out = shell.exec_command("module fm set frequency 145.500")
     r = _payload(out, "MODULE-RESULT")
     assert r["module"] == "fm" and r["cap"] == "frequency"
+
+
+def test_module_repeater_split(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    assert _payload(shell.exec_command("module fm set rx_frequency 145.600"), "MODULE-RESULT")["ok"]
+    assert _payload(shell.exec_command("module fm set tx_frequency 145.000"), "MODULE-RESULT")["ok"]
+    assert sa818_sim.get_state().freq_rx == 145.6
+    assert sa818_sim.get_state().freq_tx == 145.0
+    # frequency (simplex) sets both equal
+    assert _payload(shell.exec_command("module fm set frequency 144.800"), "MODULE-RESULT")["ok"]
+    assert sa818_sim.get_state().freq_tx == 144.8
+    assert sa818_sim.get_state().freq_rx == 144.8
+
+
+def test_module_get_tx_rx_frequency(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    shell.exec_command("module fm set tx_frequency 145.000")
+    shell.exec_command("module fm set rx_frequency 145.600")
+    assert _payload(shell.exec_command("module fm get tx_frequency"), "MODULE-RESULT")["value"] == 145.0
+    assert _payload(shell.exec_command("module fm get rx_frequency"), "MODULE-RESULT")["value"] == 145.6
