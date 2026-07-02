@@ -7,6 +7,7 @@ Simulation Shell Tests
 Pytest-based tests for audio pipeline and WAV file handling
 in the native_sim environment.
 """
+import os
 import re
 import time
 import struct
@@ -124,17 +125,26 @@ def test_wav_load_start_adc(shell, tmp_path):
         for i in range(n)
     ]
 
-    wav_path = tmp_path / "test.wav"
-    _write_pcm16_mono_wav(str(wav_path), sr, samples)
+    # Use a short but unique path: a long tmp_path line-wraps in the shell echo and
+    # breaks the harness's command match (test-harness robustness, not audio logic).
+    # The pid keeps it unique across concurrent/leftover runs while staying short.
+    wav_path = f"/tmp/w{os.getpid()}.wav"
+    try:
+        _write_pcm16_mono_wav(wav_path, sr, samples)
 
-    out = shell.exec_command(f"wav load {wav_path}")
-    assert "loaded:" in _as_text(out)
+        out = shell.exec_command(f"wav load {wav_path}")
+        assert "loaded:" in _as_text(out)
 
-    out = shell.exec_command("wav start")
-    assert "started wav" in _as_text(out)
+        out = shell.exec_command("wav start")
+        assert "started wav" in _as_text(out)
 
-    out = shell.exec_command("adc_read")
-    assert "adc raw=" in _as_text(out)
+        out = shell.exec_command("adc_read")
+        assert "adc raw=" in _as_text(out)
 
-    out = shell.exec_command("wav stop")
-    assert "stopped" in _as_text(out)
+        out = shell.exec_command("wav stop")
+        assert "stopped" in _as_text(out)
+    finally:
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass

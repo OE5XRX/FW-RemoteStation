@@ -7,7 +7,7 @@
 config SA818
   bool "SA818 FM transceiver driver"
   default n
-  depends on UART
+  depends on SERIAL
   depends on GPIO
   depends on ADC
   depends on DAC
