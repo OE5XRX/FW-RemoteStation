@@ -132,6 +132,8 @@ const FieldSpec RSSI_SPEC{"rssi", ValueType::Int, "raw", nullptr, 0, nullptr, 0,
 const FieldSpec VOLUME_SPEC{"volume", ValueType::Int, nullptr, VOLUME_RANGES, 1};
 const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", nullptr, 0, BANDWIDTHS, 2};
 const FieldSpec SQUELCH_SPEC{"squelch", ValueType::Int, nullptr, SQUELCH_RANGES, 1};
+const FieldSpec TXTONE_SPEC{"tx_tone", ValueType::String};
+const FieldSpec RXTONE_SPEC{"rx_tone", ValueType::String};
 
 class FrequencyCap : public Setting {
 public:
@@ -399,6 +401,70 @@ private:
   Sa818Context &ctx_;
 };
 
+class TxToneCap : public Setting {
+public:
+  explicit TxToneCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return TXTONE_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    sa818_tone_code t = sa818_at_parse_tone(value);
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, ctx_.freq_tx, ctx_.freq_rx, t, ctx_.squelch, ctx_.tone_rx) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.tone_tx = t;
+    char b[16];
+    sa818_at_tone_to_str(t, b, sizeof(b));
+    return Result::okStrCopy(b);
+  }
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    char b[16];
+    sa818_at_tone_to_str(ctx_.tone_tx, b, sizeof(b));
+    return Result::okStrCopy(b);
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class RxToneCap : public Setting {
+public:
+  explicit RxToneCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return RXTONE_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    sa818_tone_code t = sa818_at_parse_tone(value);
+    if (sa818_at_set_group(ctx_.dev, ctx_.bw, ctx_.freq_tx, ctx_.freq_rx, ctx_.tone_tx, ctx_.squelch, t) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.tone_rx = t;
+    char b[16];
+    sa818_at_tone_to_str(t, b, sizeof(b));
+    return Result::okStrCopy(b);
+  }
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    char b[16];
+    sa818_at_tone_to_str(ctx_.tone_rx, b, sizeof(b));
+    return Result::okStrCopy(b);
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
 class SquelchCap : public Setting {
 public:
   explicit SquelchCap(Sa818Context &ctx) : ctx_(ctx) {}
@@ -447,8 +513,10 @@ RssiCap g_rssi{g_ctx};
 VolumeCap g_volume{g_ctx};
 BandwidthCap g_bandwidth{g_ctx};
 SquelchCap g_squelch{g_ctx};
+TxToneCap g_txtone{g_ctx};
+RxToneCap g_rxtone{g_ctx};
 
-Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch};
+Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone};
 const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};

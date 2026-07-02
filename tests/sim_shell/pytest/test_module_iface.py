@@ -33,7 +33,7 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["version"] == "vhf"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone"}
 
     assert caps["frequency"]["kind"] == "setting"
     assert caps["frequency"]["type"] == "float"
@@ -283,3 +283,20 @@ def test_module_squelch_out_of_range(sa818_sim, shell):
     shell.exec_command("sa818 power on")
     r = _payload(shell.exec_command("module fm set squelch 9"), "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "out_of_range"
+
+
+def test_module_tones(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    assert _payload(shell.exec_command("module fm set tx_tone 67.0"), "MODULE-RESULT")["ok"]
+    assert sa818_sim.get_state().ctcss_tx == 1       # CTCSS 67.0 Hz -> code 1
+    assert _payload(shell.exec_command("module fm get tx_tone"), "MODULE-RESULT")["value"] == "67.0"
+    assert _payload(shell.exec_command("module fm set rx_tone none"), "MODULE-RESULT")["ok"]
+    assert sa818_sim.get_state().ctcss_rx == 0
+    assert _payload(shell.exec_command("module fm get rx_tone"), "MODULE-RESULT")["value"] == "none"
+
+
+def test_module_tone_dcs(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    assert _payload(shell.exec_command("module fm set tx_tone 023"), "MODULE-RESULT")["ok"]
+    assert sa818_sim.get_state().ctcss_tx == 39      # DCS 023 -> code 39
+    assert _payload(shell.exec_command("module fm get tx_tone"), "MODULE-RESULT")["value"] == "023"

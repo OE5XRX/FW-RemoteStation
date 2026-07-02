@@ -215,10 +215,34 @@ public:
     r.s_ = v;
     return r;
   }
+  static Result okStrCopy(const char *v) {
+    Result r(true);
+    r.vk_ = VK::Str;
+    size_t i = 0;
+    for (; v != nullptr && v[i] != '\0' && i + 1 < sizeof(r.sbuf_); ++i) {
+      r.sbuf_[i] = v[i];
+    }
+    r.sbuf_[i] = '\0';
+    r.s_ = r.sbuf_;
+    return r;
+  }
   static Result err(const char *code) {
     Result r(false);
     r.err_ = code;
     return r;
+  }
+  Result(const Result &o) { *this = o; }
+  Result &operator=(const Result &o) {
+    ok_ = o.ok_;
+    vk_ = o.vk_;
+    i_ = o.i_;
+    f_ = o.f_;
+    b_ = o.b_;
+    err_ = o.err_;
+    for (size_t k = 0; k < sizeof(sbuf_); ++k)
+      sbuf_[k] = o.sbuf_[k];
+    s_ = (o.s_ == o.sbuf_) ? sbuf_ : o.s_;
+    return *this;
   }
 
   /** Render `{"ok":..,"module":..,"cap":..,"op":..,"value"|"error":..}` into @p w. */
@@ -282,6 +306,7 @@ private:
   bool b_ = false;
   const char *s_ = nullptr;
   const char *err_ = nullptr;
+  char sbuf_[16] = {0};
 };
 
 /**

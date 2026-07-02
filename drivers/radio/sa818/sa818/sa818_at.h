@@ -288,6 +288,18 @@ enum sa818_filter_flags : uint8_t {
  */
 [[nodiscard]] enum sa818_result sa818_at_read_version(const struct device *dev, char *version, size_t version_len);
 
+/**
+ * @brief Parse a tone string to a code. "none"/"off" -> SA818_TONE_NONE; CTCSS Hz
+ * ("67.0".."250.3") -> 1..38; DCS ("023"..) -> 39..121; invalid -> SA818_TONE_NONE.
+ */
+[[nodiscard]] enum sa818_tone_code sa818_at_parse_tone(const char *s);
+
+/**
+ * @brief Format a tone code to its string. 0 -> "none"; 1..38 -> CTCSS Hz; 39..121 -> DCS code.
+ * @return bytes written (excl. NUL), or negative on truncation.
+ */
+int sa818_at_tone_to_str(enum sa818_tone_code code, char *buf, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -254,110 +254,6 @@ static sa818_bandwidth parse_bandwidth(const char *str) {
   return SA818_BW_12_5_KHZ; // Out of range, default to narrow
 }
 
-/**
- * @brief Parse CTCSS/DCS tone string to enum
- * Accepts: "none", "off", CTCSS frequency (e.g. "67.0"), or numeric code (0-121)
- */
-static sa818_tone_code parse_tone(const char *str) {
-  if (!strcmp(str, "none") || !strcmp(str, "off")) {
-    return SA818_TONE_NONE;
-  }
-
-  // Try to parse as CTCSS frequency (e.g. "67.0")
-  float freq = atof(str);
-  if (freq > 60.0f && freq < 260.0f) {
-    // Lookup table for CTCSS frequency mapping
-    static const struct {
-      float min_freq;
-      float max_freq;
-      sa818_tone_code code;
-    } ctcss_map[] = {
-        // clang-format off
-        {67.0f, 67.1f, SA818_CTCSS_67_0},
-        {71.8f, 72.0f, SA818_CTCSS_71_9},
-        {74.3f, 74.5f, SA818_CTCSS_74_4},
-        {76.9f, 77.1f, SA818_CTCSS_77_0},
-        {79.6f, 79.8f, SA818_CTCSS_79_7},
-        {82.4f, 82.6f, SA818_CTCSS_82_5},
-        {85.3f, 85.5f, SA818_CTCSS_85_4},
-        {88.4f, 88.6f, SA818_CTCSS_88_5},
-        {91.4f, 91.6f, SA818_CTCSS_91_5},
-        {94.7f, 94.9f, SA818_CTCSS_94_8},
-        {97.3f, 97.5f, SA818_CTCSS_97_4},
-        {99.9f, 100.1f, SA818_CTCSS_100_0},
-        {103.4f, 103.6f, SA818_CTCSS_103_5},
-        {107.1f, 107.3f, SA818_CTCSS_107_2},
-        {110.8f, 111.0f, SA818_CTCSS_110_9},
-        {114.7f, 114.9f, SA818_CTCSS_114_8},
-        {118.7f, 118.9f, SA818_CTCSS_118_8},
-        {122.9f, 123.1f, SA818_CTCSS_123_0},
-        {127.2f, 127.4f, SA818_CTCSS_127_3},
-        {131.7f, 131.9f, SA818_CTCSS_131_8},
-        {136.4f, 136.6f, SA818_CTCSS_136_5},
-        {141.2f, 141.4f, SA818_CTCSS_141_3},
-        {146.1f, 146.3f, SA818_CTCSS_146_2},
-        {151.3f, 151.5f, SA818_CTCSS_151_4},
-        {156.6f, 156.8f, SA818_CTCSS_156_7},
-        {162.1f, 162.3f, SA818_CTCSS_162_2},
-        {167.8f, 168.0f, SA818_CTCSS_167_9},
-        {173.7f, 173.9f, SA818_CTCSS_173_8},
-        {179.8f, 180.0f, SA818_CTCSS_179_9},
-        {186.1f, 186.3f, SA818_CTCSS_186_2},
-        {192.7f, 192.9f, SA818_CTCSS_192_8},
-        {203.4f, 203.6f, SA818_CTCSS_203_5},
-        {210.6f, 210.8f, SA818_CTCSS_210_7},
-        {218.0f, 218.2f, SA818_CTCSS_218_1},
-        {225.6f, 225.8f, SA818_CTCSS_225_7},
-        {233.5f, 233.7f, SA818_CTCSS_233_6},
-        {241.7f, 241.9f, SA818_CTCSS_241_8},
-        {250.2f, 250.4f, SA818_CTCSS_250_3},
-        // clang-format on
-    };
-
-    for (size_t i = 0; i < (sizeof(ctcss_map) / sizeof(ctcss_map[0])); ++i) {
-      if (freq >= ctcss_map[i].min_freq && freq <= ctcss_map[i].max_freq) {
-        return ctcss_map[i].code;
-      }
-    }
-  }
-
-  // Validate numeric input before parsing
-  if (str == nullptr || *str == '\0') {
-    return SA818_TONE_NONE; // Default to no tone
-  }
-
-  // Check if string is numeric
-  const char *p = str;
-  if (*p == '+' || *p == '-') {
-    ++p;
-  }
-
-  if (*p == '\0') {
-    return SA818_TONE_NONE; // Only a sign, default to no tone
-  }
-
-  bool is_numeric = true;
-  while (*p != '\0') {
-    if (*p < '0' || *p > '9') {
-      is_numeric = false;
-      break;
-    }
-    ++p;
-  }
-
-  if (!is_numeric) {
-    return SA818_TONE_NONE; // Non-numeric, default to no tone
-  }
-
-  // Valid numeric string - parse and validate range
-  int value = atoi(str);
-  if (value >= 0 && value <= 121) {
-    return static_cast<sa818_tone_code>(value);
-  }
-
-  return SA818_TONE_NONE; // Out of range, default to no tone
-}
-
 static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 7) {
     shell_error(shell, "usage: sa818 at group <bw> <tx_freq> <rx_freq> <tx_tone> <squelch> <rx_tone>");
@@ -377,9 +273,9 @@ static int cmd_sa818_at_group(const struct shell *shell, size_t argc, char **arg
   sa818_bandwidth bw = parse_bandwidth(argv[1]);
   float tx_freq = atof(argv[2]);
   float rx_freq = atof(argv[3]);
-  sa818_tone_code tx_tone = parse_tone(argv[4]);
+  sa818_tone_code tx_tone = sa818_at_parse_tone(argv[4]);
   int squelch = atoi(argv[5]);
-  sa818_tone_code rx_tone = parse_tone(argv[6]);
+  sa818_tone_code rx_tone = sa818_at_parse_tone(argv[6]);
 
   if (squelch < 0 || squelch > 8) {
     shell_error(shell, "invalid squelch level: %d (valid range: 0-8)", squelch);
