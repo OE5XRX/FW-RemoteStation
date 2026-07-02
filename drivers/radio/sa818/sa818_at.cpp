@@ -524,7 +524,8 @@ int sa818_at_tone_to_str(sa818_tone_code code, char *buf, size_t len) {
 
   /* None */
   if (code == SA818_TONE_NONE) {
-    return snprintf(buf, len, "none");
+    int n = snprintf(buf, len, "none");
+    return (n >= 0 && (size_t)n < len) ? n : -1;
   }
 
   /* CTCSS range 1..38 */
