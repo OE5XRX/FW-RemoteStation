@@ -193,3 +193,34 @@ def test_module_get_unknown_capability(shell):
     out = shell.exec_command("module get banana")
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "unknown_capability"
+
+
+def test_module_set_frequency_nan(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set frequency nan")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "bad_value"
+
+
+def test_module_set_action_is_wrong_op(shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set ptt on")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "wrong_op"
+
+
+def test_module_do_setting_is_wrong_op(shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module do frequency 145.5")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "wrong_op"
+
+
+def test_module_frequency_serializes_as_float(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module set frequency 146.000")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] == 146.0
+    out = shell.exec_command("module get frequency")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["value"] == 146.0

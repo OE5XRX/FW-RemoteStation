@@ -13,6 +13,7 @@
 
 #ifdef CONFIG_SA818_MODULE_IFACE
 
+#include <math.h>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
 #include <stdio.h>
@@ -63,7 +64,7 @@ void result_ok_int(const struct shell *sh, const char *cap, const char *op, int 
 }
 
 void result_ok_float(const struct shell *sh, const char *cap, const char *op, double value) {
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%g}", cap, op, value);
+  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%.4f}", cap, op, value);
 }
 
 void result_ok_bool(const struct shell *sh, const char *cap, const char *op, bool value) {
@@ -104,6 +105,21 @@ bool parse_bool(const char *s, bool *out) {
   return false;
 }
 
+enum cap_kind { KIND_UNKNOWN, KIND_SETTING, KIND_ACTION, KIND_TELEMETRY };
+
+cap_kind kind_of(const char *cap) {
+  if (!strcmp(cap, "frequency") || !strcmp(cap, "power_level") || !strcmp(cap, "volume") || !strcmp(cap, "bandwidth")) {
+    return KIND_SETTING;
+  }
+  if (!strcmp(cap, "ptt")) {
+    return KIND_ACTION;
+  }
+  if (!strcmp(cap, "rssi")) {
+    return KIND_TELEMETRY;
+  }
+  return KIND_UNKNOWN;
+}
+
 /* Dispatchers -- fleshed out in later tasks. */
 int do_set(const struct shell *sh, const char *cap, const char *valstr) {
   const struct device *dev = sa818_dev();
@@ -112,10 +128,28 @@ int do_set(const struct shell *sh, const char *cap, const char *valstr) {
     return 0;
   }
 
+  switch (kind_of(cap)) {
+  case KIND_UNKNOWN:
+    result_err(sh, cap, "set", "unknown_capability");
+    return 0;
+  case KIND_TELEMETRY:
+    result_err(sh, cap, "set", "read_only");
+    return 0;
+  case KIND_ACTION:
+    result_err(sh, cap, "set", "wrong_op");
+    return 0;
+  case KIND_SETTING:
+    break;
+  }
+
   if (!strcmp(cap, "frequency")) {
     char *end = nullptr;
     float f = strtof(valstr, &end);
     if (end == valstr || *end != '\0') {
+      result_err(sh, cap, "set", "bad_value");
+      return 0;
+    }
+    if (!isfinite(f)) {
       result_err(sh, cap, "set", "bad_value");
       return 0;
     }
@@ -190,11 +224,6 @@ int do_set(const struct shell *sh, const char *cap, const char *valstr) {
     return 0;
   }
 
-  if (!strcmp(cap, "rssi")) {
-    result_err(sh, cap, "set", "read_only");
-    return 0;
-  }
-
   result_err(sh, cap, "set", "unknown_capability");
   return 0;
 }
@@ -248,6 +277,16 @@ int do_do(const struct shell *sh, const char *cap, const char *valstr) {
     return 0;
   }
 
+  cap_kind kind = kind_of(cap);
+  if (kind == KIND_UNKNOWN) {
+    result_err(sh, cap, "do", "unknown_capability");
+    return 0;
+  }
+  if (kind != KIND_ACTION) {
+    result_err(sh, cap, "do", "wrong_op");
+    return 0;
+  }
+
   if (!strcmp(cap, "ptt")) {
     bool on;
     if (!parse_bool(valstr, &on)) {
@@ -262,6 +301,7 @@ int do_do(const struct shell *sh, const char *cap, const char *valstr) {
     return 0;
   }
 
+  /* Should not be reached: kind_of guards above handle unknown/non-action. */
   result_err(sh, cap, "do", "unknown_capability");
   return 0;
 }
