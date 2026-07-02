@@ -55,40 +55,87 @@ const capability CAPS[] = {
     {"bandwidth", "{\"name\":\"bandwidth\",\"kind\":\"setting\",\"type\":\"enum\",\"values\":[\"12.5\",\"25\"],\"unit\":\"kHz\",\"access\":\"operator\"}"},
 };
 
+/* Escape a string for use inside a JSON string literal. Escapes ", \ and control
+ * chars (< 0x20); always NUL-terminates. `cap` is user-supplied (an unknown/malformed
+ * capability token can reach the result), so it must be escaped to keep MODULE-RESULT
+ * valid JSON. */
+void json_escape(const char *in, char *out, size_t cap) {
+  size_t o = 0;
+  for (size_t i = 0; in != nullptr && in[i] != '\0'; ++i) {
+    unsigned char c = static_cast<unsigned char>(in[i]);
+    if (c == '"' || c == '\\') {
+      if (o + 2 >= cap) {
+        break;
+      }
+      out[o++] = '\\';
+      out[o++] = static_cast<char>(c);
+    } else if (c < 0x20) {
+      if (o + 6 >= cap) {
+        break;
+      }
+      o += snprintf(out + o, cap - o, "\\u%04x", c);
+    } else {
+      if (o + 1 >= cap) {
+        break;
+      }
+      out[o++] = static_cast<char>(c);
+    }
+  }
+  out[o] = '\0';
+}
+
 void result_err(const struct shell *sh, const char *cap, const char *op, const char *err) {
-  shell_print(sh, "MODULE-RESULT {\"ok\":false,\"cap\":\"%s\",\"op\":\"%s\",\"error\":\"%s\"}", cap, op, err);
+  char ecap[96];
+  json_escape(cap, ecap, sizeof(ecap));
+  shell_print(sh, "MODULE-RESULT {\"ok\":false,\"cap\":\"%s\",\"op\":\"%s\",\"error\":\"%s\"}", ecap, op, err);
 }
 
 void result_ok_int(const struct shell *sh, const char *cap, const char *op, int value) {
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%d}", cap, op, value);
+  char ecap[96];
+  json_escape(cap, ecap, sizeof(ecap));
+  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%d}", ecap, op, value);
 }
 
 void result_ok_float(const struct shell *sh, const char *cap, const char *op, double value) {
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%.4f}", cap, op, value);
+  char ecap[96];
+  json_escape(cap, ecap, sizeof(ecap));
+  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%.4f}", ecap, op, value);
 }
 
 void result_ok_bool(const struct shell *sh, const char *cap, const char *op, bool value) {
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%s}", cap, op, value ? "true" : "false");
+  char ecap[96];
+  json_escape(cap, ecap, sizeof(ecap));
+  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":%s}", ecap, op, value ? "true" : "false");
 }
 
 void result_ok_str(const struct shell *sh, const char *cap, const char *op, const char *value) {
-  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":\"%s\"}", cap, op, value);
+  char ecap[96];
+  char eval[96];
+  json_escape(cap, ecap, sizeof(ecap));
+  json_escape(value, eval, sizeof(eval));
+  shell_print(sh, "MODULE-RESULT {\"ok\":true,\"cap\":\"%s\",\"op\":\"%s\",\"value\":\"%s\"}", ecap, op, eval);
 }
 
 void emit_describe(const struct shell *sh) {
   static char buf[1024];
+  const char *const closing = "]}";
+  const size_t reserve = strlen(closing) + 1; // room for "]}" + NUL
   int n = snprintf(buf, sizeof(buf),
                    "MODULE-DESCRIBE {\"schema\":1,\"identity\":{\"type\":\"fm_transceiver\","
                    "\"model\":\"SA818-V\",\"version\":\"2m\"},\"capabilities\":[");
+  if (n < 0 || static_cast<size_t>(n) >= sizeof(buf)) {
+    return;
+  }
   for (size_t i = 0; i < ARRAY_SIZE(CAPS); ++i) {
-    if (n < 0 || (size_t)n >= sizeof(buf)) {
-      break; // truncation guard
+    // Only append a WHOLE fragment (+ optional comma) if it plus the closing "]}"
+    // still fits -- never truncate mid-fragment, so the JSON always stays valid.
+    size_t need = strlen(CAPS[i].json) + (i ? 1 : 0);
+    if (static_cast<size_t>(n) + need + reserve > sizeof(buf)) {
+      break;
     }
     n += snprintf(buf + n, sizeof(buf) - n, "%s%s", i ? "," : "", CAPS[i].json);
   }
-  if (n >= 0 && (size_t)n < sizeof(buf)) {
-    snprintf(buf + n, sizeof(buf) - n, "]}");
-  }
+  snprintf(buf + n, sizeof(buf) - n, "%s", closing);
   shell_print(sh, "%s", buf);
 }
 
