@@ -97,9 +97,16 @@ constexpr int VOLUME_MAX = 8;
 constexpr size_t RESULT_BUF_SIZE = 768;
 constexpr size_t DESCRIBE_BUF_SIZE = 1024;
 
-/* Enum value tables + typed field specs (namespace-scope constants -> constant init). */
-const char *const POWER_LEVELS[] = {"low", "high"};
-const char *const BANDWIDTHS[] = {"12.5", "25"};
+/* Enum value strings: defined once, used for BOTH the descriptor tables below and the
+ * parse/serialize logic in the capabilities, so the advertised enum and the accepted
+ * input can never drift apart. */
+constexpr const char *POWER_LOW = "low";
+constexpr const char *POWER_HIGH = "high";
+constexpr const char *BW_NARROW = "12.5";
+constexpr const char *BW_WIDE = "25";
+
+const char *const POWER_LEVELS[] = {POWER_LOW, POWER_HIGH};
+const char *const BANDWIDTHS[] = {BW_NARROW, BW_WIDE};
 
 const FieldSpec FREQ_SPEC{"frequency", ValueType::Float, "MHz", true, FREQ_MIN_MHZ, FREQ_MAX_MHZ};
 const FieldSpec PTT_SPEC{"ptt", ValueType::Bool};
@@ -154,9 +161,9 @@ protected:
       return Result::err("driver_error");
     }
     sa818_bandwidth bw;
-    if (!strcmp(value, "12.5")) {
+    if (!strcmp(value, BW_NARROW)) {
       bw = SA818_BW_12_5_KHZ;
-    } else if (!strcmp(value, "25")) {
+    } else if (!strcmp(value, BW_WIDE)) {
       bw = SA818_BW_25_KHZ;
     } else {
       return Result::err("bad_value");
@@ -172,7 +179,7 @@ protected:
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    return Result::okStr(ctx_.bw == SA818_BW_25_KHZ ? "25" : "12.5");
+    return Result::okStr(ctx_.bw == SA818_BW_25_KHZ ? BW_WIDE : BW_NARROW);
   }
 
 private:
@@ -190,9 +197,9 @@ protected:
       return Result::err("driver_error");
     }
     sa818_power_level level;
-    if (!strcmp(value, "high")) {
+    if (!strcmp(value, POWER_HIGH)) {
       level = SA818_POWER_HIGH;
-    } else if (!strcmp(value, "low")) {
+    } else if (!strcmp(value, POWER_LOW)) {
       level = SA818_POWER_LOW;
     } else {
       return Result::err("bad_value");
@@ -208,7 +215,7 @@ protected:
       return Result::err("driver_error");
     }
     sa818_status st = sa818_get_status(ctx_.dev);
-    return Result::okStr(st.power_level == SA818_POWER_HIGH ? "high" : "low");
+    return Result::okStr(st.power_level == SA818_POWER_HIGH ? POWER_HIGH : POWER_LOW);
   }
 
 private:

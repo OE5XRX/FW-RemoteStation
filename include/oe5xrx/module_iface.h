@@ -25,6 +25,7 @@
 #error "oe5xrx/module_iface.h is a C++ header (namespaces/classes); include it only from C++."
 #endif
 
+#include <math.h>
 #include <span>
 #include <stddef.h>
 #include <stdio.h>
@@ -236,6 +237,11 @@ private:
       w.raw(b);
       break;
     case VK::Float:
+      if (!isfinite(f_)) {
+        // NaN/Inf are not valid JSON numbers; keep the contract valid.
+        w.raw("null");
+        break;
+      }
       snprintf(b, sizeof(b), "%.4f", f_);
       w.raw(b);
       break;
