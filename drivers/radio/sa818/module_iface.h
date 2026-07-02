@@ -122,6 +122,10 @@ public:
         ch('\\');
         ch(static_cast<char>(c));
       } else if (c < 0x20) {
+        if (len_ + 6 >= cap_) { // reserve room for a whole \uXXXX escape
+          truncated_ = true;
+          return;
+        }
         char b[8];
         snprintf(b, sizeof(b), "\\u%04x", c);
         raw(b);
@@ -289,7 +293,7 @@ public:
       numStr(b, sizeof(b), s.max, s.type);
       w.kvRaw("max", b);
     }
-    if (s.enumValues != nullptr) {
+    if (s.enumValues != nullptr && s.enumCount > 0) {
       w.ch(',');
       w.key("values");
       w.ch('[');
@@ -310,29 +314,20 @@ public:
     w.ch('}');
   }
 
-  /** Dispatch an op, enforcing the op<->kind contract. */
-  Result handle(Op op, const char *value) {
-    switch (op) {
-    case Op::Set:
-      if (kind() == Kind::Telemetry) {
-        return Result::err("read_only");
-      }
-      if (kind() != Kind::Setting) {
-        return Result::err("wrong_op");
-      }
-      return onSet(value);
-    case Op::Do:
-      if (kind() != Kind::Action) {
-        return Result::err("wrong_op");
-      }
-      return onDo(value);
-    case Op::Get:
-    default:
-      return onGet();
-    }
-  }
+  /**
+   * @brief Dispatch an op, enforcing the op<->kind contract.
+   *
+   * Implemented by the kind mixins (@ref Setting / @ref Action / @ref Telemetry): each
+   * routes the ops valid for its kind to the hooks and rejects the rest (`wrong_op`,
+   * or `read_only` for a write to telemetry). A concrete capability never sees an op
+   * that does not apply to its kind.
+   */
+  virtual Result handle(Op op, const char *value) = 0;
 
 protected:
+  /* Hooks a concrete capability overrides. A Setting overrides onSet + onGet; an Action
+   * overrides onDo (+ onGet for read-back); a Telemetry overrides onGet. Unoverridden
+   * hooks are never reached for a valid op (the mixin gates them). */
   virtual Result onSet(const char *) { return Result::err("wrong_op"); }
   virtual Result onDo(const char *) { return Result::err("wrong_op"); }
   virtual Result onGet() { return Result::err("wrong_op"); }
@@ -356,22 +351,55 @@ private:
   }
 };
 
-/** @brief Kind mixin: a writable setting (supports set + get). */
+/** @brief Kind mixin: a writable setting. `set`->onSet, `get`->onGet, `do`->wrong_op. */
 class Setting : public Capability {
 public:
   Kind kind() const override { return Kind::Setting; }
+  Result handle(Op op, const char *value) override {
+    switch (op) {
+    case Op::Set:
+      return onSet(value);
+    case Op::Get:
+      return onGet();
+    case Op::Do:
+    default:
+      return Result::err("wrong_op");
+    }
+  }
 };
 
-/** @brief Kind mixin: an action (supports do + get of current state). */
+/** @brief Kind mixin: an action. `do`->onDo, `get`->onGet (current state), `set`->wrong_op. */
 class Action : public Capability {
 public:
   Kind kind() const override { return Kind::Action; }
+  Result handle(Op op, const char *value) override {
+    switch (op) {
+    case Op::Do:
+      return onDo(value);
+    case Op::Get:
+      return onGet();
+    case Op::Set:
+    default:
+      return Result::err("wrong_op");
+    }
+  }
 };
 
-/** @brief Kind mixin: read-only telemetry (get only; set -> read_only). */
+/** @brief Kind mixin: read-only telemetry. `get`->onGet, `set`->read_only, `do`->wrong_op. */
 class Telemetry : public Capability {
 public:
   Kind kind() const override { return Kind::Telemetry; }
+  Result handle(Op op, const char *) override {
+    switch (op) {
+    case Op::Get:
+      return onGet();
+    case Op::Set:
+      return Result::err("read_only");
+    case Op::Do:
+    default:
+      return Result::err("wrong_op");
+    }
+  }
 };
 
 struct Identity {
@@ -419,10 +447,10 @@ public:
     w.ch('}');
   }
 
-  void execute(JsonWriter &w, Op op, const char *cap, const char *value) const {
+  /** Look up @p cap and dispatch @p op; unknown capability -> `unknown_capability`. */
+  Result execute(Op op, const char *cap, const char *value) const {
     Capability *c = find(cap);
-    Result r = (c != nullptr) ? c->handle(op, value) : Result::err("unknown_capability");
-    r.render(w, cap, opStr(op));
+    return (c != nullptr) ? c->handle(op, value) : Result::err("unknown_capability");
   }
 
 private:

@@ -300,14 +300,6 @@ void emit_result(const struct shell *sh, const Result &r, const char *cap, Op op
   shell_print(sh, "%s", w.c_str());
 }
 
-void emit_exec(const struct shell *sh, Op op, const char *cap, const char *value) {
-  char buf[768];
-  mod::JsonWriter w(buf, sizeof(buf));
-  w.raw("MODULE-RESULT ");
-  g_module.execute(w, op, cap, value);
-  shell_print(sh, "%s", w.c_str());
-}
-
 int cmd_module_describe(const struct shell *sh, size_t, char **) {
   char buf[1024];
   mod::JsonWriter w(buf, sizeof(buf));
@@ -322,7 +314,7 @@ int cmd_module_set(const struct shell *sh, size_t argc, char **argv) {
     emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", Op::Set);
     return 0;
   }
-  emit_exec(sh, Op::Set, argv[1], argv[2]);
+  emit_result(sh, g_module.execute(Op::Set, argv[1], argv[2]), argv[1], Op::Set);
   return 0;
 }
 
@@ -331,7 +323,7 @@ int cmd_module_get(const struct shell *sh, size_t argc, char **argv) {
     emit_result(sh, Result::err("usage"), "", Op::Get);
     return 0;
   }
-  emit_exec(sh, Op::Get, argv[1], "");
+  emit_result(sh, g_module.execute(Op::Get, argv[1], ""), argv[1], Op::Get);
   return 0;
 }
 
@@ -340,7 +332,7 @@ int cmd_module_do(const struct shell *sh, size_t argc, char **argv) {
     emit_result(sh, Result::err("usage"), argc >= 2 ? argv[1] : "", Op::Do);
     return 0;
   }
-  emit_exec(sh, Op::Do, argv[1], argv[2]);
+  emit_result(sh, g_module.execute(Op::Do, argv[1], argv[2]), argv[1], Op::Do);
   return 0;
 }
 
