@@ -88,9 +88,21 @@ std::optional<long> parse_int(const char *s) {
   return v;
 }
 
-/* SA818-V capability constraints (single source of truth for both the descriptor and
- * the runtime validation). */
+/* Band selected from devicetree (sa818 node `band` property). */
+#define SA818_BAND_IDX DT_ENUM_IDX(DT_NODELABEL(sa818), band) // 0 = vhf, 1 = uhf
+
+#if SA818_BAND_IDX == 1
+constexpr const char *BAND_NAME = "uhf";
+constexpr const char *BAND_MODEL = "SA818-U";
+const Range FREQ_RANGES[] = {{"uhf", 400.0, 480.0}};
+#else
+constexpr const char *BAND_NAME = "vhf";
+constexpr const char *BAND_MODEL = "SA818-V";
 const Range FREQ_RANGES[] = {{"vhf", 134.0, 174.0}};
+#endif
+
+/* SA818 capability constraints (single source of truth for both the descriptor and
+ * the runtime validation). */
 const Range VOLUME_RANGES[] = {{nullptr, 1.0, 8.0}};
 
 /* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side). */
@@ -321,7 +333,7 @@ VolumeCap g_volume{g_ctx};
 BandwidthCap g_bandwidth{g_ctx};
 
 Capability *const g_caps[] = {&g_freq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth};
-const Identity g_identity{"fm_transceiver", "SA818-V", "2m"};
+const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};
 ModuleRegistry g_registry{g_modules};

@@ -28,7 +28,9 @@ def test_module_describe_valid_json(shell):
 
     assert d["schema"] == 1
     assert d["module"] == "fm"
-    assert d["identity"] == {"type": "fm_transceiver", "model": "SA818-V", "version": "2m"}
+    assert d["identity"]["type"] == "fm_transceiver"
+    assert d["identity"]["model"] == "SA818-V"
+    assert d["identity"]["version"] == "vhf"
 
     caps = {c["name"]: c for c in d["capabilities"]}
     assert set(caps) == {"frequency", "ptt", "power_level", "rssi", "volume", "bandwidth"}
