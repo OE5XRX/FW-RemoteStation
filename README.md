@@ -22,8 +22,9 @@ Protokollen auf dem Entwicklungsrechner — noch bevor echte Hardware erforderli
 - Klare Trennung von Hardware-abhängigem Treiber-Code und anwendungsnaher Logik
 - High-Level-Tests via Simulation (`native_sim`) ohne physische Hardware
 - Reproduzierbare Builds und Tests mit Twister
-- Zweistufige Sprachpolitik: Zephyr-C-Treiber in `drivers/`; modernes C++20 ohne Heap-Allokation
-  für Nicht-Treiber-Code (App, Modul-Layer, USB, Simulation)
+- Zweistufige Sprachpolitik: Treiber in `drivers/` folgen dem C-first-Zephyr-Idiom (C-ABI —
+  die Implementierung darf `.cpp` sein, erzwungen wird kein Sprachwechsel); modernes C++20 ohne
+  Heap-Allokation für Nicht-Treiber-Code (App, Modul-Layer, USB, Simulation)
 - Fokus auf Offenheit, Wartbarkeit und Langzeitbetrieb
 
 ---
@@ -52,7 +53,7 @@ Protokollen auf dem Entwicklungsrechner — noch bevor echte Hardware erforderli
 │
 ├── drivers/
 │   └── radio/
-│       └── sa818/             SA818-Treiber (Core, AT, Audio, Shell) — C-ABI
+│       └── sa818/             SA818-Treiber (Core, AT, Audio, Audio-Stream, Shell) — C-ABI
 │
 ├── subsys/
 │   └── module/                Generischer Modul-Layer (Capability-Framework)

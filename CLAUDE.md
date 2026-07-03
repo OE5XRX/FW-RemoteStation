@@ -75,7 +75,7 @@ The `Sa818Context` struct in `sa818_module.cpp` is the RAM shadow of the current
 
 ### SA818 driver (`drivers/radio/sa818/`)
 
-Organized as core / AT / audio / shell. Public headers live under `drivers/radio/sa818/sa818/` (e.g. `sa818/sa818.h`). The public interface exposes:
+Organized as core / AT / audio / audio-stream / shell. Public headers live under `drivers/radio/sa818/sa818/` (e.g. `sa818/sa818.h`). The public interface exposes:
 - Zephyr device model (`struct device`, API structs), Devicetree, `extern "C"` headers.
 - Result enum `enum sa818_result` with `[[nodiscard]]` on all functions returning it.
 - DT `band` property on the `sa818` node selects VHF (`SA818-V`, 134–174 MHz) or UHF (`SA818-U`, 400–480 MHz) at build time; this also sets the default frequency and frequency ranges for the capability descriptors.

@@ -197,7 +197,7 @@ capability state across resets; that is the agent's responsibility.
 
 ### SA818 driver (`drivers/radio/sa818/`)
 
-The SA818 driver (core / AT / audio / shell) exposes a pure C ABI via headers
+The SA818 driver (core / AT / audio / audio-stream / shell) exposes a pure C ABI via headers
 under `drivers/radio/sa818/sa818/`. The public interface uses the Zephyr device
 model (`struct device`, API structs), Devicetree, `extern "C"` headers, a
 result enum (`enum sa818_result`), and `[[nodiscard]]` on functions that
