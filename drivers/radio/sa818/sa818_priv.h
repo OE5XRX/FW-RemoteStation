@@ -34,7 +34,11 @@ extern "C" {
 
 /* Initialization delays */
 #define SA818_INIT_DELAY_MS 10
-#define SA818_POWER_ON_DELAY_MS 1500
+/* SA818 needs a few hundred ms after PD is released before it accepts AT
+ * commands; 500 ms is a safe margin. (The earlier 1500 ms was a red herring
+ * from debugging the swapped PD GPIO, which is the real reason the module
+ * used to stay silent.) */
+#define SA818_POWER_ON_DELAY_MS 500
 
 /**
  * @brief SA818 device configuration (from devicetree)
