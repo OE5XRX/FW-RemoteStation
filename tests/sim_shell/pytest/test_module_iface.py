@@ -328,3 +328,16 @@ def test_module_band_telemetry(sa818_sim, shell):
     shell.exec_command("module fm set rx_frequency 145.500")
     r = _payload(shell.exec_command("module fm get band"), "MODULE-RESULT")
     assert r["ok"] is True and r["value"] == "vhf"
+
+
+def test_module_band_string_arm(sa818_sim, shell):
+    """`band` returns the named-range string via Result::okStr (the okStr arm C1 changes)."""
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module fm get band")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is True
+    assert r["cap"] == "band"
+    assert r["op"] == "get"
+    # Default power-on freq (145.5 VHF / 435.0 UHF) is inside the named band range,
+    # so okStr returns the band name; this pins the okStr -> etl::string arm exactly.
+    assert r["value"] == "vhf"
