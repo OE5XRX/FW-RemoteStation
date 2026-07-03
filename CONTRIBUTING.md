@@ -37,68 +37,9 @@ Contributions without clear license compatibility cannot be accepted.
 
 ---
 
-## 3. Architecture Overview
+## 3. Coding Standard
 
-Understanding the architecture helps you place new code in the right layer.
-
-### Module layer (`subsys/module/`, `include/oe5xrx/module/`)
-
-`include/oe5xrx/module/iface.h` defines a generic, device-agnostic capability
-framework with **no** device or RTOS dependencies in the header itself:
-
-- **`mod::Capability`** — abstract base; owns both its typed descriptor
-  (`FieldSpec`) and its set/get/do behaviour.
-- **Kind mixins** — `mod::Setting` (set + get), `mod::Action` (do + get),
-  `mod::Telemetry` (get-only): each enforces the op-to-kind contract before
-  delegating to concrete hooks, so a wrong op can never reach a hook.
-- **`mod::FieldSpec`** — static, typed descriptor rendered generically into the
-  `describe` JSON; the single source of truth for both the advertised field
-  metadata and the runtime input validation.
-- **`mod::JsonWriter`** — bounded, truncation-safe JSON builder.
-- **`mod::Result`** — outcome of a command: success carrying a typed value, or
-  an error code.
-- **`mod::Module`** — identity + a fixed registry of `Capability*`; renders
-  `describe` JSON and dispatches `execute`.
-
-Concrete capabilities live in `subsys/module/devices/` (e.g.
-`sa818_module.cpp`). Adding a capability is one new subclass plus one registry
-entry; a whole new module type reuses the framework unchanged.
-
-The `Sa818Context` struct in `sa818_module.cpp` is the RAM shadow of the
-current working state (used to rebuild full `sa818_at_set_group()` calls).
-It is **working state only, not persistence** — the firmware does not persist
-capability state across resets; that is the agent's responsibility.
-
-### SA818 driver (`drivers/radio/sa818/`)
-
-The SA818 driver (core / AT / audio / shell) exposes a pure C ABI via headers
-under `drivers/radio/sa818/sa818/`. The public interface uses the Zephyr device
-model (`struct device`, API structs), Devicetree, `extern "C"` headers, a
-result enum (`enum sa818_result`), and `[[nodiscard]]` on every function that
-returns a status. See `sa818/sa818.h` for the canonical example.
-
-### USB composite
-
-The board-level defconfig enables a three-class USB composite on
-`USB_DEVICE_STACK_NEXT`:
-
-- `USBD_AUDIO2_CLASS` — UAC2 audio streaming (SA818 audio bridge)
-- `USBD_CDC_ACM_CLASS` — CDC-ACM serial (shell / console)
-- `USBD_DFU` — DFU (firmware update)
-
-### Firmware role: thin and self-describing
-
-The firmware intentionally stays thin. It **describes itself** (identity +
-capabilities as machine-readable JSON) and **executes commands** — nothing
-more. Platform knowledge, capability persistence, and access/permission models
-belong outside the firmware (in the agent / server). New firmware code must
-preserve this boundary.
-
----
-
-## 4. Coding Standard
-
-### 4.1 Two-Tier Language Split
+### 3.1 Two-Tier Language Split
 
 The codebase applies a deliberate two-tier language policy. The tier is
 determined by which **layer** the code belongs to, not by file extension.
@@ -129,11 +70,11 @@ Use **modern C++20 with ETL**:
   `mod::Setting` / `mod::Action` / `mod::Telemetry` mixins in `iface.h` are
   the canonical exemplar.
 - `std::string_view` for non-owning string references.
-- `std::optional` and `std::variant` where they clarify intent (see §4.3).
+- `std::optional` and `std::variant` where they clarify intent (see §3.3).
 - ETL fixed-capacity containers as replacements for heap-backed `std::`
-  equivalents (see §4.3).
+  equivalents (see §3.3).
 
-### 4.2 Hard Rules (Apply Everywhere)
+### 3.2 Hard Rules (Apply Everywhere)
 
 These three rules are absolute and apply to every layer:
 
@@ -143,7 +84,7 @@ These three rules are absolute and apply to every layer:
    internally at runtime.
 
    Allowed: `std::array`, `std::span`, `std::string_view`, `std::optional`,
-   `constexpr`, fixed-size buffers, value-types, and ETL containers (see §4.3).
+   `constexpr`, fixed-size buffers, value-types, and ETL containers (see §3.3).
 
 2. **No exceptions.** The project is built with exceptions disabled.
    Error handling is done via return/status types. Code must be correct without
@@ -152,7 +93,7 @@ These three rules are absolute and apply to every layer:
 3. **No RTTI.** No `dynamic_cast`; no `typeid`. If you need runtime
    polymorphism, use virtual dispatch through an explicit interface.
 
-### 4.3 ETL Usage Guide
+### 3.3 ETL Usage Guide
 
 [ETL (Embedded Template Library)](https://github.com/ETLCPP/etl) is pinned at
 `20.48.0` (see `west.yml`, path `modules/lib/etl`). It is enabled via
@@ -198,7 +139,7 @@ logging subsystem is up.
 **An ETL capacity overflow is a hard fault, not a silent truncation. Size
 capacities correctly at design time.**
 
-### 4.4 Formatting
+### 3.4 Formatting
 
 Code formatting is mandatory and CI-enforced.
 
@@ -212,7 +153,7 @@ Code formatting is mandatory and CI-enforced.
 The `clang_format` CI job fails the build if any formatting difference is
 detected. Do not skip it.
 
-### 4.5 General Code Quality
+### 3.5 General Code Quality
 
 - **No magic numbers.** Use `constexpr` named constants.
 - **Speaking identifiers.** Names should reveal intent without requiring a
@@ -222,7 +163,65 @@ detected. Do not skip it.
 
 ---
 
-## 5. Build Targets
+## 4. Architecture Overview
+
+Understanding the architecture helps you place new code in the right layer.
+
+### Module layer (`subsys/module/`, `include/oe5xrx/module/`)
+
+`include/oe5xrx/module/iface.h` defines a generic, device-agnostic capability
+framework with **no** device or RTOS dependencies in the header itself:
+
+- **`mod::Capability`** — abstract base; owns both its typed descriptor
+  (`FieldSpec`) and its set/get/do behaviour.
+- **Kind mixins** — `mod::Setting` (set + get), `mod::Action` (do + get),
+  `mod::Telemetry` (get-only): each enforces the op-to-kind contract before
+  delegating to concrete hooks, so a wrong op can never reach a hook.
+- **`mod::FieldSpec`** — static, typed descriptor rendered generically into the
+  `describe` JSON; the single source of truth for both the advertised field
+  metadata and the runtime input validation.
+- **`mod::JsonWriter`** — bounded, truncation-safe JSON builder.
+- **`mod::Result`** — outcome of a command: success carrying a typed value, or
+  an error code.
+- **`mod::Module`** — identity + a fixed registry of `Capability*`; renders
+  `describe` JSON and dispatches `execute`.
+
+Concrete capabilities live in `subsys/module/devices/` (e.g.
+`sa818_module.cpp`). Adding a capability is one new subclass plus one registry
+entry; a whole new module type reuses the framework unchanged.
+
+The `Sa818Context` struct in `sa818_module.cpp` is the RAM shadow of the
+current working state (used to rebuild full `sa818_at_set_group()` calls).
+It is **working state only, not persistence** — the firmware does not persist
+capability state across resets; that is the agent's responsibility.
+
+### SA818 driver (`drivers/radio/sa818/`)
+
+The SA818 driver (core / AT / audio / shell) exposes a pure C ABI via headers
+under `drivers/radio/sa818/sa818/`. The public interface uses the Zephyr device
+model (`struct device`, API structs), Devicetree, `extern "C"` headers, a
+result enum (`enum sa818_result`), and `[[nodiscard]]` on functions that
+return a result code (`enum sa818_result`). See `sa818/sa818.h` for the
+canonical example.
+
+### USB composite
+
+The board-level defconfig enables a three-class USB composite on
+`USB_DEVICE_STACK_NEXT`:
+
+- `USBD_AUDIO2_CLASS` — UAC2 audio streaming (SA818 audio bridge)
+- `USBD_CDC_ACM_CLASS` — CDC-ACM serial (shell / console)
+- `USBD_DFU` — DFU (firmware update)
+
+### Firmware role: thin and self-describing
+
+The firmware intentionally stays thin. It **describes itself** (identity +
+capabilities as machine-readable JSON) and **executes commands** — nothing
+more. Platform knowledge, capability persistence, and access/permission models
+belong outside the firmware (in the agent / server). New firmware code must
+preserve this boundary.
+
+### Build targets
 
 | Target                  | Purpose                                     |
 |-------------------------|---------------------------------------------|
@@ -231,7 +230,7 @@ detected. Do not skip it.
 
 ---
 
-## 6. Simulation vs. Hardware
+## 5. Simulation vs. Hardware
 
 Implement and test new functionality on `native_sim` first. Hardware-specific
 code must be cleanly encapsulated so that the logic layer remains testable
@@ -248,11 +247,11 @@ A pytest harness under `tests/sim_shell/pytest/` drives the shell via
 stdin/stdout and includes a Python `SA818Simulator` that speaks the AT
 protocol, enabling full system tests without any physical hardware.
 
-Code that is only testable on real hardware is a non-goal (see §9).
+Code that is only testable on real hardware is a non-goal (see §8).
 
 ---
 
-## 7. Build and Test Workflow
+## 6. Build and Test Workflow
 
 ### Build
 
@@ -295,7 +294,7 @@ west zephyr-export
 
 ---
 
-## 8. Commits and Pull Requests
+## 7. Commits and Pull Requests
 
 - Keep commits small and logically separate.
 - Write commit messages that explain what changed and, more importantly, why.
@@ -306,7 +305,7 @@ west zephyr-export
 
 ---
 
-## 9. Non-Goals
+## 8. Non-Goals
 
 The following are generally not accepted:
 
@@ -318,7 +317,7 @@ The following are generally not accepted:
 
 ---
 
-## 10. Questions and Discussion
+## 9. Questions and Discussion
 
 For questions or before embarking on a large refactor, please open an issue to
 discuss the approach first. This avoids duplicate work and keeps changes
