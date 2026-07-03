@@ -201,8 +201,7 @@ The SA818 driver (core / AT / audio / shell) exposes a pure C ABI via headers
 under `drivers/radio/sa818/sa818/`. The public interface uses the Zephyr device
 model (`struct device`, API structs), Devicetree, `extern "C"` headers, a
 result enum (`enum sa818_result`), and `[[nodiscard]]` on functions that
-return a result code (`enum sa818_result`). See `sa818/sa818.h` for the
-canonical example.
+return a result code. See `sa818/sa818.h` for the canonical example.
 
 ### USB composite
 
