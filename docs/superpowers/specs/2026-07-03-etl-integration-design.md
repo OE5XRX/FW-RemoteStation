@@ -50,7 +50,7 @@ Latest stable release: **20.48.0** (2026-06-30).
 | Decision | Choice |
 |----------|--------|
 | Pin style | Release **tag `20.48.0`** in `west.yml` (readable, immutable for ETL releases; matches repo "newest stable" rule). |
-| Error routing | `CONFIG_ETL_LOG_ERRORS=y` + a registered `etl::error_handler` callback → `LOG_ERR` then `k_panic()` (fail-fast, no silent continue). |
+| Error routing | `CONFIG_ETL_LOG_ERRORS=y` + a registered `etl::error_handler` callback → `printk` then `k_panic()` (fail-fast, no silent continue; `printk` is early-boot-safe). |
 | Profile header | **None.** Rely on ETL compiler auto-detection (GCC/Clang, C++20, no-exceptions, no-RTTI) + Kconfig. Add `etl_profile.h` only if a concrete need surfaces. |
 | Proof test | Dedicated `tests/etl/` **Ztest** suite on `native_sim` + one new CI twister step. |
 
@@ -96,9 +96,11 @@ emits no `throw`; instead it routes errors through the error handler (because
 
 New `app/src/etl_error_handler.cpp`:
 
-- Registers an `etl::error_handler` callback via `SYS_INIT` (automatic, no `main()` edit).
-- Callback logs `LOG_ERR("ETL error: %s @ %s:%d", e.what(), e.file_name(), e.line_number())`
-  then calls `k_panic()` — fail-fast.
+- Registers an `etl::error_handler` callback via `SYS_INIT` at `PRE_KERNEL_1` (priority 0),
+  so the callback is armed before essentially all other init (automatic, no `main()` edit).
+- Callback reports via `printk("ETL error: %s @ %s:%d\n", e.what(), e.file_name(), e.line_number())`
+  then calls `k_panic()` — fail-fast. `printk` (not `LOG_ERR`) so an early-boot ETL failure is
+  reported synchronously even before the logging subsystem is up.
 - References ETL symbols, so it also proves the link in the app build.
 
 Compiled into: `app/CMakeLists.txt` (app + fm_board + native_sim app), the
@@ -157,7 +159,7 @@ restores it:
 
 - `west.yml`: ETL pinned to `20.48.0`; `west update` pulls it.
 - CMake/Kconfig: ETL include + target linked in app **and** tests.
-- ETL configured: no exceptions (error handler → `LOG_ERR`/`k_panic`), no RTTI, C++20,
+- ETL configured: no exceptions (error handler → `printk`/`k_panic`), no RTTI, C++20,
   no-alloc.
 - Proof: `tests/etl` uses `etl::string<32>` and runs green on `native_sim`; `fm_board`
   build compiles.

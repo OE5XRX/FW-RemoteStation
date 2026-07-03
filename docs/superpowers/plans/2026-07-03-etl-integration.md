@@ -4,7 +4,7 @@
 
 **Goal:** Make the Embedded Template Library (ETL) available and correctly configured in the FW-RemoteStation Zephyr build (app + tests + `fm_board`), without rewriting any existing code.
 
-**Architecture:** ETL ships its own Zephyr module (`etl/zephyr/{module.yml,CMakeLists.txt,Kconfig}`). We pin it as a west project, enable it via `CONFIG_ETL=y`, route its runtime errors to a fail-fast Zephyr handler (`LOG_ERR` + `k_panic`) registered through `SYS_INIT`, and prove usability with a dedicated `native_sim` Ztest.
+**Architecture:** ETL ships its own Zephyr module (`etl/zephyr/{module.yml,CMakeLists.txt,Kconfig}`). We pin it as a west project, enable it via `CONFIG_ETL=y`, route its runtime errors to a fail-fast Zephyr handler (`printk` + `k_panic`) registered through `SYS_INIT` at `PRE_KERNEL_1`, and prove usability with a dedicated `native_sim` Ztest.
 
 **Tech Stack:** Zephyr (west manifest, Kconfig, CMake), C++20, ETL 20.48.0, Ztest, twister, clang-format-18.
 
@@ -114,8 +114,9 @@ git commit -m "build(etl): pin ETL 20.48.0 as west project (#43)"
 **Interfaces:**
 - Consumes: `CONFIG_ETL` / `etl::etl` from Task 1.
 - Produces: a translation unit compiled into every ETL-enabled build that registers, via
-  `SYS_INIT`, an `etl::error_handler` callback `void etl_error(const etl::exception&)` which
-  logs (`LOG_ERR`) and halts (`k_panic`). No public header — registration is automatic.
+  `SYS_INIT` at `PRE_KERNEL_1`, an `etl::error_handler` callback
+  `void etl_error(const etl::exception&)` which reports (`printk`) and halts (`k_panic`).
+  No public header — registration is automatic.
 
 - [ ] **Step 1: Add Kconfig to `app/prj.conf`** — append under a new section:
 
@@ -139,25 +140,29 @@ CONFIG_ETL_LOG_ERRORS=y
  *
  * Routes ETL runtime errors to Zephyr. ETL is built with exceptions disabled
  * and CONFIG_ETL_LOG_ERRORS=y, so on a failed check ETL invokes the registered
- * error handler instead of throwing. We fail fast: log the error, then panic.
- * Registered automatically via SYS_INIT; no caller action required.
+ * error handler instead of throwing. We fail fast: report the error, then panic.
+ * Registered automatically via SYS_INIT at PRE_KERNEL_1 (priority 0) so the
+ * fail-fast callback is armed before essentially all other init - an ETL check
+ * failing during early boot must panic, not silently continue. set_callback only
+ * writes a static pointer and touches no kernel services, so it is safe this early.
+ *
+ * The callback uses printk rather than LOG_ERR: it can run at any boot stage
+ * (including before the logging subsystem is up), and printk is synchronous and
+ * early-boot-safe, so the diagnostic is emitted before k_panic() halts.
  */
 
 #include <etl/error_handler.h>
 #include <etl/exception.h>
-
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-
-LOG_MODULE_REGISTER(etl, CONFIG_LOG_DEFAULT_LEVEL);
+#include <zephyr/sys/printk.h>
 
 namespace
 {
 
 void etl_error(const etl::exception &e)
 {
-	LOG_ERR("ETL error: %s @ %s:%d", e.what(), e.file_name(), e.line_number());
+	printk("ETL error: %s @ %s:%d\n", e.what(), e.file_name(), e.line_number());
 	k_panic();
 }
 
@@ -169,7 +174,7 @@ int etl_register_error_handler(void)
 
 } // namespace
 
-SYS_INIT(etl_register_error_handler, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+SYS_INIT(etl_register_error_handler, PRE_KERNEL_1, 0);
 ```
 
 - [ ] **Step 3: Compile the TU — edit `app/CMakeLists.txt`.** Change the top `target_sources` block to:

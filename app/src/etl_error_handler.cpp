@@ -19,6 +19,7 @@
 #include <etl/exception.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
 
 namespace {
 
