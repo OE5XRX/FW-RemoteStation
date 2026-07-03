@@ -16,7 +16,7 @@ public:
   const SampleSource *source() const { return src_; }
 
 private:
-  static void on_tick(void *user);
+  void on_tick();
 
   AdcSink sink_;
   SampleClock clock_;

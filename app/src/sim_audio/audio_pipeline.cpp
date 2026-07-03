@@ -2,6 +2,8 @@
 
 #include "constants.h"
 
+#include <etl/delegate.h>
+
 AudioPipeline::AudioPipeline(AdcSink sink) : sink_(sink) {}
 
 int AudioPipeline::start(SampleSource &src) {
@@ -11,7 +13,7 @@ int AudioPipeline::start(SampleSource &src) {
   src_ = &src;
   running_ = true;
 
-  clock_.start(src.sample_rate_hz(), &AudioPipeline::on_tick, this);
+  clock_.start(src.sample_rate_hz(), etl::delegate<void()>::create<AudioPipeline, &AudioPipeline::on_tick>(*this));
   return 0;
 }
 
@@ -22,11 +24,10 @@ void AudioPipeline::stop() {
   sink_.write_norm(0.0f);
 }
 
-void AudioPipeline::on_tick(void *user) {
-  auto *self = static_cast<AudioPipeline *>(user);
-  if (!self || !self->running_ || !self->src_)
+void AudioPipeline::on_tick() {
+  if (!running_ || src_ == nullptr)
     return;
 
-  const float s_norm = self->src_->next_sample_norm();
-  self->sink_.write_norm(s_norm);
+  const float s_norm = src_->next_sample_norm();
+  sink_.write_norm(s_norm);
 }

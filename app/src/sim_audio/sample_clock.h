@@ -2,15 +2,14 @@
 #define SIM_AUDIO_SAMPLE_CLOCK_H_
 
 #include <cstdint>
+#include <etl/delegate.h>
 #include <zephyr/kernel.h>
 
 class SampleClock {
 public:
-  using tick_fn_t = void (*)(void *user);
-
   SampleClock();
 
-  void start(uint32_t rate_hz, tick_fn_t fn, void *user);
+  void start(uint32_t rate_hz, etl::delegate<void()> fn);
   void stop();
 
   bool running() const { return running_; }
@@ -23,8 +22,7 @@ private:
   bool running_{false};
   uint32_t rate_hz_{0};
 
-  tick_fn_t fn_{nullptr};
-  void *user_{nullptr};
+  etl::delegate<void()> fn_{};
 };
 
 #endif // SIM_AUDIO_SAMPLE_CLOCK_H_
