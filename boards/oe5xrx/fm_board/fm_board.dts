@@ -143,6 +143,7 @@
 		compatible = "sa,sa818";
 		status = "okay";
 
+		band = "vhf";
 		uart = <&usart1>;
 
 		io-channels = <&adc1 5>, <&dac1 1>;

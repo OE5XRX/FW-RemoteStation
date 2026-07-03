@@ -11,6 +11,16 @@ compatible: "sa,sa818"
 include: base.yaml
 
 properties:
+  band:
+    type: string
+    required: true
+    enum:
+      - "vhf"
+      - "uhf"
+    description: >
+      RF band of the fitted SA818 part. SA818-V = vhf (134-174 MHz),
+      SA818-U = uhf (400-480 MHz).
+
   uart:
     type: phandle
     required: true

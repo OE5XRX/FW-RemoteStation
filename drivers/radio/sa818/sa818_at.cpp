@@ -352,3 +352,203 @@ sa818_result sa818_at_read_version(const struct device *dev, char *version, size
 
   return SA818_OK;
 }
+
+/* Bidirectional CTCSS table: code (1..38) <-> Hz string */
+struct ctcss_entry {
+  sa818_tone_code code;
+  float min_freq;
+  float max_freq;
+  const char *str;
+};
+
+static const ctcss_entry CTCSS_TABLE[] = {
+    // clang-format off
+    {SA818_CTCSS_67_0,  67.0f,  67.1f,  "67.0"},
+    {SA818_CTCSS_71_9,  71.8f,  72.0f,  "71.9"},
+    {SA818_CTCSS_74_4,  74.3f,  74.5f,  "74.4"},
+    {SA818_CTCSS_77_0,  76.9f,  77.1f,  "77.0"},
+    {SA818_CTCSS_79_7,  79.6f,  79.8f,  "79.7"},
+    {SA818_CTCSS_82_5,  82.4f,  82.6f,  "82.5"},
+    {SA818_CTCSS_85_4,  85.3f,  85.5f,  "85.4"},
+    {SA818_CTCSS_88_5,  88.4f,  88.6f,  "88.5"},
+    {SA818_CTCSS_91_5,  91.4f,  91.6f,  "91.5"},
+    {SA818_CTCSS_94_8,  94.7f,  94.9f,  "94.8"},
+    {SA818_CTCSS_97_4,  97.3f,  97.5f,  "97.4"},
+    {SA818_CTCSS_100_0, 99.9f,  100.1f, "100.0"},
+    {SA818_CTCSS_103_5, 103.4f, 103.6f, "103.5"},
+    {SA818_CTCSS_107_2, 107.1f, 107.3f, "107.2"},
+    {SA818_CTCSS_110_9, 110.8f, 111.0f, "110.9"},
+    {SA818_CTCSS_114_8, 114.7f, 114.9f, "114.8"},
+    {SA818_CTCSS_118_8, 118.7f, 118.9f, "118.8"},
+    {SA818_CTCSS_123_0, 122.9f, 123.1f, "123.0"},
+    {SA818_CTCSS_127_3, 127.2f, 127.4f, "127.3"},
+    {SA818_CTCSS_131_8, 131.7f, 131.9f, "131.8"},
+    {SA818_CTCSS_136_5, 136.4f, 136.6f, "136.5"},
+    {SA818_CTCSS_141_3, 141.2f, 141.4f, "141.3"},
+    {SA818_CTCSS_146_2, 146.1f, 146.3f, "146.2"},
+    {SA818_CTCSS_151_4, 151.3f, 151.5f, "151.4"},
+    {SA818_CTCSS_156_7, 156.6f, 156.8f, "156.7"},
+    {SA818_CTCSS_162_2, 162.1f, 162.3f, "162.2"},
+    {SA818_CTCSS_167_9, 167.8f, 168.0f, "167.9"},
+    {SA818_CTCSS_173_8, 173.7f, 173.9f, "173.8"},
+    {SA818_CTCSS_179_9, 179.8f, 180.0f, "179.9"},
+    {SA818_CTCSS_186_2, 186.1f, 186.3f, "186.2"},
+    {SA818_CTCSS_192_8, 192.7f, 192.9f, "192.8"},
+    {SA818_CTCSS_203_5, 203.4f, 203.6f, "203.5"},
+    {SA818_CTCSS_210_7, 210.6f, 210.8f, "210.7"},
+    {SA818_CTCSS_218_1, 218.0f, 218.2f, "218.1"},
+    {SA818_CTCSS_225_7, 225.6f, 225.8f, "225.7"},
+    {SA818_CTCSS_233_6, 233.5f, 233.7f, "233.6"},
+    {SA818_CTCSS_241_8, 241.7f, 241.9f, "241.8"},
+    {SA818_CTCSS_250_3, 250.2f, 250.4f, "250.3"},
+    // clang-format on
+};
+static constexpr size_t CTCSS_TABLE_LEN = sizeof(CTCSS_TABLE) / sizeof(CTCSS_TABLE[0]);
+
+/* Bidirectional DCS table: code (39..121) <-> 3-digit string */
+struct dcs_entry {
+  sa818_tone_code code;
+  const char *str;
+};
+
+static const dcs_entry DCS_TABLE[] = {
+    // clang-format off
+    {SA818_DCS_023, "023"}, {SA818_DCS_025, "025"}, {SA818_DCS_026, "026"},
+    {SA818_DCS_031, "031"}, {SA818_DCS_032, "032"}, {SA818_DCS_036, "036"},
+    {SA818_DCS_043, "043"}, {SA818_DCS_047, "047"}, {SA818_DCS_051, "051"},
+    {SA818_DCS_053, "053"}, {SA818_DCS_054, "054"}, {SA818_DCS_065, "065"},
+    {SA818_DCS_071, "071"}, {SA818_DCS_072, "072"}, {SA818_DCS_073, "073"},
+    {SA818_DCS_074, "074"}, {SA818_DCS_114, "114"}, {SA818_DCS_115, "115"},
+    {SA818_DCS_116, "116"}, {SA818_DCS_122, "122"}, {SA818_DCS_125, "125"},
+    {SA818_DCS_131, "131"}, {SA818_DCS_132, "132"}, {SA818_DCS_134, "134"},
+    {SA818_DCS_143, "143"}, {SA818_DCS_145, "145"}, {SA818_DCS_152, "152"},
+    {SA818_DCS_155, "155"}, {SA818_DCS_156, "156"}, {SA818_DCS_162, "162"},
+    {SA818_DCS_165, "165"}, {SA818_DCS_172, "172"}, {SA818_DCS_174, "174"},
+    {SA818_DCS_205, "205"}, {SA818_DCS_212, "212"}, {SA818_DCS_223, "223"},
+    {SA818_DCS_225, "225"}, {SA818_DCS_226, "226"}, {SA818_DCS_243, "243"},
+    {SA818_DCS_244, "244"}, {SA818_DCS_245, "245"}, {SA818_DCS_246, "246"},
+    {SA818_DCS_251, "251"}, {SA818_DCS_252, "252"}, {SA818_DCS_255, "255"},
+    {SA818_DCS_261, "261"}, {SA818_DCS_263, "263"}, {SA818_DCS_265, "265"},
+    {SA818_DCS_266, "266"}, {SA818_DCS_271, "271"}, {SA818_DCS_274, "274"},
+    {SA818_DCS_306, "306"}, {SA818_DCS_311, "311"}, {SA818_DCS_315, "315"},
+    {SA818_DCS_325, "325"}, {SA818_DCS_331, "331"}, {SA818_DCS_332, "332"},
+    {SA818_DCS_343, "343"}, {SA818_DCS_346, "346"}, {SA818_DCS_351, "351"},
+    {SA818_DCS_356, "356"}, {SA818_DCS_364, "364"}, {SA818_DCS_365, "365"},
+    {SA818_DCS_371, "371"}, {SA818_DCS_411, "411"}, {SA818_DCS_412, "412"},
+    {SA818_DCS_413, "413"}, {SA818_DCS_423, "423"}, {SA818_DCS_431, "431"},
+    {SA818_DCS_432, "432"}, {SA818_DCS_445, "445"}, {SA818_DCS_446, "446"},
+    {SA818_DCS_452, "452"}, {SA818_DCS_454, "454"}, {SA818_DCS_455, "455"},
+    {SA818_DCS_462, "462"}, {SA818_DCS_464, "464"}, {SA818_DCS_465, "465"},
+    {SA818_DCS_466, "466"}, {SA818_DCS_503, "503"}, {SA818_DCS_506, "506"},
+    {SA818_DCS_516, "516"}, {SA818_DCS_523, "523"},
+    // clang-format on
+};
+static constexpr size_t DCS_TABLE_LEN = sizeof(DCS_TABLE) / sizeof(DCS_TABLE[0]);
+
+/**
+ * @brief Check if a string is purely numeric (no sign prefix allowed for DCS).
+ */
+static bool is_all_digits(const char *s) {
+  if (!s || *s == '\0') {
+    return false;
+  }
+  for (; *s != '\0'; ++s) {
+    if (*s < '0' || *s > '9') {
+      return false;
+    }
+  }
+  return true;
+}
+
+sa818_tone_code sa818_at_parse_tone(const char *s) {
+  if (!s) {
+    return SA818_TONE_NONE;
+  }
+
+  /* "none" / "off" */
+  if (!strcmp(s, "none") || !strcmp(s, "off")) {
+    return SA818_TONE_NONE;
+  }
+
+  /* Try to parse as CTCSS frequency (e.g. "67.0") -- require the WHOLE string to be a
+   * float, so partial garbage like "67.0junk" is NOT accepted as a tone. */
+  char *end = nullptr;
+  float freq = strtof(s, &end);
+  if (end != s && *end == '\0' && freq > 60.0f && freq < 260.0f) {
+    for (size_t i = 0; i < CTCSS_TABLE_LEN; ++i) {
+      if (freq >= CTCSS_TABLE[i].min_freq && freq <= CTCSS_TABLE[i].max_freq) {
+        return CTCSS_TABLE[i].code;
+      }
+    }
+  }
+
+  /* DCS: a purely-numeric string of exactly 3 digits (e.g. "023") - look up in table */
+  if (is_all_digits(s) && strlen(s) == 3) {
+    for (size_t i = 0; i < DCS_TABLE_LEN; ++i) {
+      if (!strcmp(s, DCS_TABLE[i].str)) {
+        return DCS_TABLE[i].code;
+      }
+    }
+  }
+
+  /* Fallback: numeric code 0..121 (e.g. from shell numeric input) */
+  if (s[0] != '\0') {
+    const char *p = s;
+    if (*p == '+' || *p == '-') {
+      ++p;
+    }
+    if (*p != '\0') {
+      bool is_numeric = true;
+      const char *q = p;
+      while (*q != '\0') {
+        if (*q < '0' || *q > '9') {
+          is_numeric = false;
+          break;
+        }
+        ++q;
+      }
+      if (is_numeric) {
+        int value = atoi(s);
+        if (value >= 0 && value <= 121) {
+          return static_cast<sa818_tone_code>(value);
+        }
+      }
+    }
+  }
+
+  return SA818_TONE_NONE;
+}
+
+int sa818_at_tone_to_str(sa818_tone_code code, char *buf, size_t len) {
+  if (!buf || len == 0) {
+    return -1;
+  }
+
+  /* None */
+  if (code == SA818_TONE_NONE) {
+    int n = snprintf(buf, len, "none");
+    return (n >= 0 && (size_t)n < len) ? n : -1;
+  }
+
+  /* CTCSS range 1..38 */
+  if (code >= SA818_CTCSS_67_0 && code <= SA818_CTCSS_250_3) {
+    for (size_t i = 0; i < CTCSS_TABLE_LEN; ++i) {
+      if (CTCSS_TABLE[i].code == code) {
+        int n = snprintf(buf, len, "%s", CTCSS_TABLE[i].str);
+        return (n >= 0 && (size_t)n < len) ? n : -1;
+      }
+    }
+  }
+
+  /* DCS range 39..121 */
+  if (code >= SA818_DCS_023 && code <= SA818_DCS_523) {
+    for (size_t i = 0; i < DCS_TABLE_LEN; ++i) {
+      if (DCS_TABLE[i].code == code) {
+        int n = snprintf(buf, len, "%s", DCS_TABLE[i].str);
+        return (n >= 0 && (size_t)n < len) ? n : -1;
+      }
+    }
+  }
+
+  return -1;
+}

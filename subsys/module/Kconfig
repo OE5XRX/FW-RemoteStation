@@ -1,0 +1,22 @@
+# Copyright (c) 2025 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+menuconfig MODULE
+  bool "OE5XRX module platform (self-describing device capability interface)"
+  help
+    Generic, machine-readable module capability framework (the `module` shell
+    interface). Concrete device modules are enabled below.
+
+if MODULE
+
+config MODULE_SA818
+  bool "SA818 FM transceiver module"
+  default n
+  depends on SHELL
+  depends on SA818
+  select CBPRINTF_FP_SUPPORT
+  help
+    Registers the generic `module` shell interface for the SA818 FM transceiver,
+    mapping the capability contract onto the SA818 driver.
+
+endif # MODULE
