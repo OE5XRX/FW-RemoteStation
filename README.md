@@ -157,8 +157,8 @@ ermöglicht vollständige Protokoll- und Capability-Tests ohne physische Hardwar
 
 Jeder Pull Request und jeder Push auf `main` muss zwei CI-Jobs bestehen:
 
-- **`clang_format`** — prüft alle `.c/.h/.cpp/.hpp`-Dateien unter `app/`, `boards/`, `tests/`
-  mit clang-format-18; schlägt fehl, sobald eine Abweichung festgestellt wird.
+- **`clang_format`** — prüft alle C/C++-Dateien (`.c/.h/.cc/.hh/.cpp/.hpp`) unter `app/`,
+  `boards/`, `tests/` mit clang-format-18; schlägt fehl, sobald eine Abweichung festgestellt wird.
 - **`build_and_tests`** — baut `native_sim` und führt Twister auf `app --integration`,
   `tests/sim_shell` und `tests/etl` aus.
 
