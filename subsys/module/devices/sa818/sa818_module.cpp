@@ -21,6 +21,7 @@
 #include <optional>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
+#include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/sys/util.h>

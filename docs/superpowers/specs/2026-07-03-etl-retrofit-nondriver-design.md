@@ -12,7 +12,7 @@ buffers, tagged unions, and low-level pointer plumbing. Drivers stay C. This is 
 **type/idiom migration with identical observable behavior** — no feature, API, or wire
 change.
 
-Prerequisites already satisfied on `origin/main`: ETL 20.48.0 is build-integrated (#43,
+Prerequisites already satisfied on `origin/main`: ETL 20.48.0 is build-integrated (#44,
 `CONFIG_ETL=y`, `CONFIG_ETL_LOG_ERRORS=y`, error handler in `app/src/etl_error_handler.cpp`)
 and the coding policy is canonical (#46, CLAUDE.md + CONTRIBUTING.md).
 
