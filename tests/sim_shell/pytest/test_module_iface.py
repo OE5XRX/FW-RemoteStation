@@ -362,3 +362,6 @@ def test_module_set_parse_edges(sa818_sim, shell):
     assert r["ok"] is True and r["value"] == 145.5
     # Out-of-range numeric still parses then range-rejects (not bad_value).
     assert result("module fm set volume 99")["error"] == "out_of_range"
+    # Overflow of `long` is rejected at parse -> bad_value; intentional improvement
+    # over the old strtol clamp -> out_of_range.
+    assert result("module fm set volume 99999999999999999999")["error"] == "bad_value"

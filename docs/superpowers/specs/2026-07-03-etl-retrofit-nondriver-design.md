@@ -145,6 +145,10 @@ tests that pin the **current** accept/reject behavior for those edges; the ETL v
 reproduce them. If any edge genuinely differs, keep a thin adapter so the observable
 accept/reject set is identical (identical behavior beats idiom purity).
 
+**C5 note:** one intentional behavior change — an integer that overflows `long` now returns
+`bad_value` (parse-time reject) instead of the old `out_of_range` (strtol clamp + range check).
+Accepted as an improvement; pinned by `test_module_set_parse_edges`.
+
 ## Out of scope (deliberate)
 
 - **Driver code** (`drivers/radio/sa818/…`) — untouched, stays C.
