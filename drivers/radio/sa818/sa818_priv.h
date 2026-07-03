@@ -27,8 +27,12 @@ extern "C" {
  * @brief Private structures and definitions shared between SA818 modules
  */
 
-/* AT Command timeouts and constants */
-#define SA818_AT_TIMEOUT_MS 5000
+/* AT Command timeouts and constants.
+ * The SA818 answers AT commands within ~1 s; 2000 ms is ample. (The 5000 ms
+ * value was bumped during bring-up while chasing the swapped-PD-GPIO issue and
+ * only served to blow the native_sim test wall-clock, since commands issued
+ * without the AT simulator attached block for the full timeout.) */
+#define SA818_AT_TIMEOUT_MS 2000
 #define SA818_AT_RESPONSE_MAX_LEN 128
 #define SA818_UART_BAUDRATE 9600
 
