@@ -25,11 +25,13 @@
 #error "oe5xrx/module/iface.h is a C++ header (namespaces/classes); include it only from C++."
 #endif
 
+#include <etl/string.h>
 #include <math.h>
 #include <span>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <variant>
 
 namespace mod {
 
@@ -196,64 +198,35 @@ class Result {
 public:
   static Result okInt(int v) {
     Result r(true);
-    r.vk_ = VK::Int;
-    r.i_ = v;
+    r.value_ = v;
     return r;
   }
   static Result okFloat(double v) {
     Result r(true);
-    r.vk_ = VK::Float;
-    r.f_ = v;
+    r.value_ = v;
     return r;
   }
   static Result okBool(bool v) {
     Result r(true);
-    r.vk_ = VK::Bool;
-    r.b_ = v;
+    r.value_ = v;
     return r;
   }
   static Result okStr(const char *v) {
     Result r(true);
-    r.vk_ = VK::Str;
-    r.s_ = v;
+    r.value_ = etl::string<kStrCap>(v != nullptr ? v : "");
     return r;
   }
   static Result okNull() {
     Result r(true);
-    r.vk_ = VK::None;
+    r.value_ = std::monostate{};
     return r;
   }
-  static Result okStrCopy(const char *v) {
-    Result r(true);
-    r.vk_ = VK::Str;
-    size_t i = 0;
-    for (; v != nullptr && v[i] != '\0' && i + 1 < sizeof(r.sbuf_); ++i) {
-      r.sbuf_[i] = v[i];
-    }
-    r.sbuf_[i] = '\0';
-    r.s_ = r.sbuf_;
-    return r;
-  }
+  // Kept for source compatibility; okStr already copies into the owned string.
+  static Result okStrCopy(const char *v) { return okStr(v); }
   static Result err(const char *code) {
     Result r(false);
     r.err_ = code;
     return r;
-  }
-  Result(const Result &o) { *this = o; }
-  Result &operator=(const Result &o) {
-    if (this == &o) {
-      return *this;
-    }
-    ok_ = o.ok_;
-    vk_ = o.vk_;
-    i_ = o.i_;
-    f_ = o.f_;
-    b_ = o.b_;
-    err_ = o.err_;
-    for (size_t k = 0; k < sizeof(sbuf_); ++k)
-      sbuf_[k] = o.sbuf_[k];
-    s_ = (o.s_ == o.sbuf_) ? sbuf_ : o.s_;
-    return *this;
   }
 
   /** Render `{"ok":..,"module":..,"cap":..,"op":..,"value"|"error":..}` into @p w. */
@@ -277,47 +250,36 @@ public:
   }
 
 private:
-  enum class VK { None, Int, Float, Bool, Str };
+  static constexpr size_t kStrCap = 15;
 
   explicit Result(bool ok) : ok_(ok) {}
 
+  /** Render the value arm as JSON: integer for Int, always-decimal for Float. */
   void renderValue(JsonWriter &w) const {
     char b[32];
-    switch (vk_) {
-    case VK::Int:
-      snprintf(b, sizeof(b), "%d", i_);
+    if (const int *i = std::get_if<int>(&value_)) {
+      snprintf(b, sizeof(b), "%d", *i);
       w.raw(b);
-      break;
-    case VK::Float:
-      if (!isfinite(f_)) {
+    } else if (const double *f = std::get_if<double>(&value_)) {
+      if (!isfinite(*f)) {
         // NaN/Inf are not valid JSON numbers; keep the contract valid.
         w.raw("null");
-        break;
+        return;
       }
-      snprintf(b, sizeof(b), "%.4f", f_);
+      snprintf(b, sizeof(b), "%.4f", *f);
       w.raw(b);
-      break;
-    case VK::Bool:
-      w.raw(b_ ? "true" : "false");
-      break;
-    case VK::Str:
-      w.quoted(s_);
-      break;
-    case VK::None:
-    default:
-      w.raw("null");
-      break;
+    } else if (const bool *bp = std::get_if<bool>(&value_)) {
+      w.raw(*bp ? "true" : "false");
+    } else if (const etl::string<kStrCap> *s = std::get_if<etl::string<kStrCap>>(&value_)) {
+      w.quoted(s->c_str());
+    } else {
+      w.raw("null"); // std::monostate
     }
   }
 
   bool ok_;
-  VK vk_ = VK::None;
-  int i_ = 0;
-  double f_ = 0.0;
-  bool b_ = false;
-  const char *s_ = nullptr;
+  std::variant<std::monostate, int, double, bool, etl::string<kStrCap>> value_{};
   const char *err_ = nullptr;
-  char sbuf_[16] = {0};
 };
 
 /**
