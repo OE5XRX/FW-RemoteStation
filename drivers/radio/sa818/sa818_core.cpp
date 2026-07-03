@@ -19,6 +19,7 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -48,6 +49,23 @@ static int sa818_init(const struct device *dev) {
   if (!device_is_ready(cfg->uart)) {
     LOG_ERR("UART not ready");
     return -ENODEV;
+  }
+
+  /* Ensure SA818 UART is configured for 9600 8N1, no flow control.
+   * The devicetree "current-speed = <9600>" already brings the port up at the
+   * right rate, so this runtime call is only a belt-and-suspenders override.
+   * When CONFIG_UART_USE_RUNTIME_CONFIGURE is disabled the driver returns
+   * -ENOSYS/-ENOTSUP; that is expected, not a failure, so don't warn on it. */
+  const struct uart_config uart_cfg = {
+      .baudrate = SA818_UART_BAUDRATE,
+      .parity = UART_CFG_PARITY_NONE,
+      .stop_bits = UART_CFG_STOP_BITS_1,
+      .data_bits = UART_CFG_DATA_BITS_8,
+      .flow_ctrl = UART_CFG_FLOW_CTRL_NONE,
+  };
+  int uart_ret = uart_configure(cfg->uart, &uart_cfg);
+  if (uart_ret != 0 && uart_ret != -ENOSYS && uart_ret != -ENOTSUP) {
+    LOG_WRN("UART configure failed: %d", uart_ret);
   }
 
   /* Verify ADC is ready */
@@ -202,7 +220,7 @@ sa818_status sa818_get_status(const struct device *dev) {
       .audio_in = ADC_DT_SPEC_GET_BY_IDX(node_id, 0),                                                                                                          \
       .audio_out_dev = SA818_AUDIO_OUT_DEV(node_id),                                                                                                           \
       .audio_out_channel = SA818_AUDIO_OUT_CHANNEL(node_id),                                                                                                   \
-      .audio_out_resolution = 16,                                                                                                                              \
+      .audio_out_resolution = 12,                                                                                                                              \
       .h_l_power = GPIO_DT_SPEC_GET(node_id, h_l_power_gpios),                                                                                                 \
       .nptt = GPIO_DT_SPEC_GET(node_id, nptt_gpios),                                                                                                           \
       .npower_down = GPIO_DT_SPEC_GET(node_id, npower_down_gpios),                                                                                             \

@@ -19,7 +19,7 @@
 			"environment": [],
 			"externalConsole": false,
 			"MIMode": "gdb",
-			"miDebuggerPath": "${env:HOME}/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
+			"miDebuggerPath": "${env:ZEPHYR_SDK_INSTALL_DIR}/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
 			"miDebuggerServerAddress": "localhost:3333",
 			"serverStarted": "listening on port",
 			"setupCommands": [
@@ -57,7 +57,7 @@
 			"request": "attach",
 			"program": "${workspaceFolder}/build/zephyr/zephyr.elf",
 			"MIMode": "gdb",
-			"miDebuggerPath": "${env:HOME}/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
+			"miDebuggerPath": "${env:ZEPHYR_SDK_INSTALL_DIR}/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
 			"miDebuggerServerAddress": "localhost:3333",
 			"setupCommands": [
 				{

@@ -27,14 +27,22 @@ extern "C" {
  * @brief Private structures and definitions shared between SA818 modules
  */
 
-/* AT Command timeouts and constants */
+/* AT Command timeouts and constants.
+ * The SA818 answers AT commands within ~1 s; 2000 ms is ample. (The 5000 ms
+ * value was bumped during bring-up while chasing the swapped-PD-GPIO issue and
+ * only served to blow the native_sim test wall-clock, since commands issued
+ * without the AT simulator attached block for the full timeout.) */
 #define SA818_AT_TIMEOUT_MS 2000
 #define SA818_AT_RESPONSE_MAX_LEN 128
 #define SA818_UART_BAUDRATE 9600
 
 /* Initialization delays */
 #define SA818_INIT_DELAY_MS 10
-#define SA818_POWER_ON_DELAY_MS 100
+/* SA818 needs a few hundred ms after PD is released before it accepts AT
+ * commands; 500 ms is a safe margin. (The earlier 1500 ms was a red herring
+ * from debugging the swapped PD GPIO, which is the real reason the module
+ * used to stay silent.) */
+#define SA818_POWER_ON_DELAY_MS 500
 
 /**
  * @brief SA818 device configuration (from devicetree)

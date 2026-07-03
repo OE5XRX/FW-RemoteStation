@@ -33,7 +33,7 @@
     {
       "label": "West Flash (PyOCD)",
       "type": "shell",
-      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west flash --runner pyocd",
+      "command": "[ -n \"$ZEPHYR_VENV\" ] && source $ZEPHYR_VENV/bin/activate 2>/dev/null; west flash --runner pyocd -- --connect under-reset",
       "group": "test",
       "dependsOn": [
         "West Build"
@@ -61,7 +61,7 @@
     {
       "label": "PyOCD Flash Only",
       "type": "shell",
-      "command": "pyocd flash -t stm32f302vctx build/zephyr/zephyr.hex",
+      "command": "pyocd flash -t stm32u575citx --connect under-reset build/zephyr/zephyr.hex",
       "group": "test",
       "problemMatcher": [],
       "presentation": {
