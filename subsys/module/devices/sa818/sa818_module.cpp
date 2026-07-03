@@ -61,7 +61,11 @@ struct Sa818Context {
 
 /* Value parsers: return the parsed value, or nullopt on malformed input. Callers apply
  * any capability-specific range/enum check on the parsed value. (Exceptions are disabled,
- * so callers dereference with * / value_or after checking, never with .value().) */
+ * so callers dereference with * / value_or after checking, never with .value().)
+ *
+ * Contract: the input must be a whole, already-tokenized value (no surrounding whitespace).
+ * etl::to_arithmetic parses the entire view and, unlike strtol/strtof, does NOT skip leading
+ * whitespace -- fine here because these only ever receive whitespace-split shell argv tokens. */
 
 std::optional<bool> parse_bool(const char *s) {
   if (!strcmp(s, "on") || !strcmp(s, "1") || !strcmp(s, "true")) {
