@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to **FW-RemoteStation**. This is
 the Zephyr-RTOS firmware for the OE5XRX Remote Station's STM32 part — an
-SA818-based FM transceiver module with a STM32U575 acting as the USB bridge
+SA818-based FM transceiver module with an STM32U575 acting as the USB bridge
 (UAC2 + CDC-ACM + DFU). This project values openness, testability, and
 long-term maintainability. Please read this document carefully before
 submitting changes; it is the single source of truth for the coding policy.
@@ -287,6 +287,7 @@ aid only.
 
 ```
 west init -m https://github.com/OE5XRX/FW-RemoteStation
+cd FW-RemoteStation
 west update
 west zephyr-export
 ```

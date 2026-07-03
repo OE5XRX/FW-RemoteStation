@@ -92,6 +92,7 @@ Protokollen auf dem Entwicklungsrechner — noch bevor echte Hardware erforderli
 
 ```
 west init -m https://github.com/OE5XRX/FW-RemoteStation
+cd FW-RemoteStation
 west update
 west zephyr-export
 ```

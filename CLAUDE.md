@@ -150,4 +150,4 @@ No regressions. New code must include or reference tests.
 - **Driver result codes are `[[nodiscard]]`.** The compiler will warn if you discard the return value of any `sa818_*` function; treat the warning as an error.
 - **DT `band` is a build-time constant.** It selects the SA818 model string, the default frequency, and the valid frequency ranges at compile time via `DT_ENUM_IDX`. Do not attempt to change the band at runtime.
 - **Keep platform/access/persistence out of FW.** The firmware is thin by design. Do not add capability persistence, user/role models, or platform configuration to the firmware.
-- **Real test dirs are `tests/etl`, `tests/sim_shell`, `tests/usb_audio`.** Do not invent or reference test directory names not listed here — the CI workflow is the authoritative list of what is actually run.
+- **Real test dirs are `tests/etl`, `tests/sim_shell`, `tests/usb_audio`.** Do not invent or reference test directory names not listed here. CI currently gates only `app --integration`, `tests/sim_shell`, and `tests/etl`; `tests/usb_audio` exists but is not wired into a CI Twister step yet — check `.github/workflows/ci.yml` for the exact set that runs.
