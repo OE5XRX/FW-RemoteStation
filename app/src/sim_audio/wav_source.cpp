@@ -111,18 +111,18 @@ int WavSource::parse_wav_into_buffer(int fd) {
     return -errno;
 
   const std::size_t available_samples = static_cast<std::size_t>(data_bytes / 2u);
-  const std::size_t max_samples = buf_.size();
+  const std::size_t max_samples = buf_.max_size();
   const std::size_t samples_to_read = (available_samples > max_samples) ? max_samples : available_samples;
 
+  buf_.clear();
   for (std::size_t i = 0; i < samples_to_read; i++) {
     uint8_t b[2]{};
     rc = read_exact(fd, b, sizeof(b));
     if (rc)
       return rc;
-    buf_[i] = static_cast<int16_t>(rd_u16_le(b));
+    buf_.push_back(static_cast<int16_t>(rd_u16_le(b)));
   }
 
-  count_samples_ = samples_to_read;
   idx_samples_ = 0;
   sample_rate_hz_ = sample_rate_hz;
   return 0;
@@ -137,7 +137,7 @@ int WavSource::load(const char *path) {
   ::close(fd);
 
   if (rc) {
-    count_samples_ = 0;
+    buf_.clear();
     idx_samples_ = 0;
     sample_rate_hz_ = 0;
   }
@@ -145,11 +145,11 @@ int WavSource::load(const char *path) {
 }
 
 float WavSource::next_sample_norm() {
-  if (!loaded() || count_samples_ == 0u)
+  if (!loaded() || buf_.size() == 0u)
     return 0.0f;
 
   const int16_t s = buf_[idx_samples_++];
-  if (idx_samples_ >= count_samples_)
+  if (idx_samples_ >= buf_.size())
     idx_samples_ = 0;
 
   // Convert to [-1, +1). Use 32768 to map -32768 -> -1.0 exactly.
