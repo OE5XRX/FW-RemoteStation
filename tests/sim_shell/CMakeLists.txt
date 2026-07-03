@@ -17,3 +17,9 @@ target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/sim_audio/shell_wav.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/main.cpp
 )
+
+if (CONFIG_ETL)
+  target_sources(app PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../app/src/etl_error_handler.cpp
+  )
+endif()

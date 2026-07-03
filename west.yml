@@ -5,6 +5,8 @@ manifest:
   remotes:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
+    - name: etlcpp
+      url-base: https://github.com/ETLCPP
 
   projects:
     - name: zephyr
@@ -14,3 +16,7 @@ manifest:
         name-allowlist:
           - cmsis_6
           - hal_stm32
+    - name: etl
+      remote: etlcpp
+      revision: 20.48.0
+      path: modules/lib/etl
