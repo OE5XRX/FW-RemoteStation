@@ -14,12 +14,13 @@
 
 #ifdef CONFIG_MODULE_SA818
 
+#include <etl/string_view.h>
+#include <etl/to_arithmetic.h>
 #include <math.h>
 #include <oe5xrx/module/iface.h>
 #include <optional>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
-#include <stdlib.h>
 #include <zephyr/device.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/sys/util.h>
@@ -73,21 +74,25 @@ std::optional<bool> parse_bool(const char *s) {
 }
 
 std::optional<float> parse_float(const char *s) {
-  char *end = nullptr;
-  float f = strtof(s, &end);
-  if (end == s || *end != '\0' || !isfinite(f)) {
+  if (s == nullptr || *s == '\0') {
     return std::nullopt;
   }
-  return f;
+  etl::to_arithmetic_result<float> r = etl::to_arithmetic<float>(etl::string_view(s));
+  if (!r.has_value() || !isfinite(r.value())) {
+    return std::nullopt;
+  }
+  return r.value();
 }
 
 std::optional<long> parse_int(const char *s) {
-  char *end = nullptr;
-  long v = strtol(s, &end, 10);
-  if (end == s || *end != '\0') {
+  if (s == nullptr || *s == '\0') {
     return std::nullopt;
   }
-  return v;
+  etl::to_arithmetic_result<long> r = etl::to_arithmetic<long>(etl::string_view(s));
+  if (!r.has_value()) {
+    return std::nullopt;
+  }
+  return r.value();
 }
 
 /* Band selected from devicetree (sa818 node `band` property). */
