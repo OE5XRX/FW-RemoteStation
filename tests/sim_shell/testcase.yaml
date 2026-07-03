@@ -10,6 +10,10 @@ tests:
       - native_sim/native/64
 #      - fm_board
     harness: pytest
+    # All pytest files run back-to-back in one native_sim instance, so this is
+    # the *aggregate* budget for the whole suite (real wall-clock, incl. WAV
+    # file IO). Measured ~81 s locally; keep generous headroom as the suite grows.
+    timeout: 240
     harness_config:
       pytest_root:
         - pytest
