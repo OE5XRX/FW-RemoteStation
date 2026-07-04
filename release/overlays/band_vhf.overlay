@@ -1,0 +1,8 @@
+/*
+ * Copyright (c) 2026 OE5XRX
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Release variant selector: 2m / VHF (SA818-V, 134-174 MHz).
+ */
+&sa818 {
+	band = "vhf";
+};

@@ -1,0 +1,215 @@
+name: Release
+
+# One-button manual release. Computes the next YY.MM.DD-NN, stamps app/VERSION,
+# iterates release-targets.yaml (real + static native_sim), smoke-tests, cosign
+# keyless-signs, emits SHA256SUMS, then commits the stamp + tags + publishes.
+# dry_run builds + smokes everything but skips commit/tag/publish.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build + smoke only; do not commit/tag/publish"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write     # push stamp commit + tag, create release
+  id-token: write     # cosign keyless OIDC
+
+concurrency:
+  group: fw-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard — real release only on the default branch
+        if: ${{ !inputs.dry_run }}
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "${REF_NAME}" != "${DEFAULT_BRANCH}" ]; then
+            echo "::error::A real (non-dry-run) release must run on the default branch (${DEFAULT_BRANCH}), not '${REF_NAME}'. Re-run with dry_run=true on feature branches, or dispatch on ${DEFAULT_BRANCH}." >&2
+            exit 1
+          fi
+          echo "OK — releasing from default branch ${REF_NAME}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: fw
+          fetch-depth: 0        # need tags to compute NN
+          persist-credentials: true
+
+      - name: Compute version
+        id: ver
+        working-directory: fw
+        run: |
+          set -euo pipefail
+          git fetch --tags --quiet
+          today=$(date -u +%y.%m.%d)                 # e.g. 26.07.04
+          # Next sequence = (max existing NN for today) + 1, NOT a count: tags
+          # can be non-contiguous (e.g. -01 and -03), where a count would pick
+          # an already-used NN and the tag push would collide.
+          maxnn=$(git tag -l "${today}-*" | sed -nE "s/.*-0*([0-9]+)$/\1/p" | sort -n | tail -1)
+          nn=$(printf '%02d' $(( ${maxnn:-0} + 1 )))
+          version="${today}-${nn}"
+          IFS=. read -r yy mm dd <<< "$today"
+          {
+            echo "version=${version}"
+            echo "major=$((10#$yy))"
+            echo "minor=$((10#$mm))"
+            echo "patch=$((10#$dd))"
+            echo "tweak=$((10#$nn))"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release version: ${version}"
+
+      - name: Stamp app/VERSION
+        working-directory: fw
+        env:
+          MAJOR: ${{ steps.ver.outputs.major }}
+          MINOR: ${{ steps.ver.outputs.minor }}
+          PATCH: ${{ steps.ver.outputs.patch }}
+          TWEAK: ${{ steps.ver.outputs.tweak }}
+        run: |
+          set -euo pipefail
+          cat > app/VERSION <<EOF
+          VERSION_MAJOR = ${MAJOR}
+          VERSION_MINOR = ${MINOR}
+          PATCHLEVEL = ${PATCH}
+          VERSION_TWEAK = ${TWEAK}
+          EXTRAVERSION =
+          EOF
+          cat app/VERSION
+
+      - name: Setup Zephyr
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: fw
+          toolchains: arm-zephyr-eabi
+
+      - name: Install static link deps
+        run: sudo apt-get update && sudo apt-get install -y libc6-dev
+
+      - name: Install cosign
+        if: ${{ !inputs.dry_run }}
+        uses: sigstore/cosign-installer@v3
+
+      - name: Ensure yq
+        run: |
+          set -euo pipefail
+          # The build loop uses mikefarah yq v4 syntax. A preinstalled yq of a
+          # different flavor (e.g. the python/kislyuk yq) or major version would
+          # silently mis-parse. Only accept mikefarah v4 already on PATH; else
+          # install a pinned, checksum-verified binary to /usr/local/bin (which
+          # precedes /usr/bin, so it wins).
+          if ! { command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -Eq 'mikefarah.* v4\.'; }; then
+            YQ_VER=v4.44.6
+            YQ_SHA=0c2b24e645b57d8e7c0566d18643a6d4f5580feeea3878127354a46f2a1e4598
+            wget -qO /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VER}/yq_linux_amd64"
+            echo "${YQ_SHA}  /tmp/yq" | sha256sum -c -
+            sudo install -m 0755 /tmp/yq /usr/local/bin/yq
+          fi
+          yq --version
+
+      - name: Build all targets
+        working-directory: fw
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release/out
+          count=$(yq -r '.targets | length' release/release-targets.yaml)
+          for i in $(seq 0 $((count - 1))); do
+            name=$(yq -r ".targets[$i].name"  release/release-targets.yaml)
+            board=$(yq -r ".targets[$i].board" release/release-targets.yaml)
+            band=$(yq -r ".targets[$i].band"  release/release-targets.yaml)
+            overlay="$PWD/release/overlays/band_${band}.overlay"
+            arts=$(yq -r ".targets[$i].artifacts[]" release/release-targets.yaml)
+            echo "== ${name} (board=${board} band=${band}) =="
+
+            for art in $arts; do
+              if [ "$art" = "firmware" ]; then
+                west build -b "$board" app -p always -- -DEXTRA_DTC_OVERLAY_FILE="$overlay"
+                cp build/zephyr/zephyr.bin "release/out/${name}.bin"
+                cp build/zephyr/zephyr.elf "release/out/${name}.elf"
+              elif [ "$art" = "native_sim" ]; then
+                west build -b native_sim/native/64 app -p always -- \
+                  -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
+                  -DEXTRA_CONF_FILE="$PWD/release/native_sim_static.conf"
+                cp build/zephyr/zephyr.exe "release/out/${name}.native_sim"
+                ./scripts/release_smoke.sh "release/out/${name}.native_sim" "$VERSION" "$band"
+              fi
+            done
+          done
+          ls -lh release/out/
+
+      - name: Generate SHA256SUMS
+        working-directory: fw/release/out
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # Collect whatever assets were actually produced. A future target may
+          # emit only a subset (e.g. native_sim-only), so an unmatched glob must
+          # vanish (nullglob) rather than survive literally and break sha256sum.
+          assets=( *.bin *.elf *.native_sim )
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::error::no release assets were produced" >&2
+            exit 1
+          fi
+          sha256sum "${assets[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Sign assets (cosign keyless)
+        if: ${{ !inputs.dry_run }}
+        working-directory: fw/release/out
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # nullglob drops any artifact class a future target didn't emit;
+          # SHA256SUMS is a literal (always present) so it is always signed.
+          for f in *.bin *.elf *.native_sim SHA256SUMS; do
+            cosign sign-blob --yes --bundle "${f}.bundle" "${f}"
+          done
+          ls -lh
+
+      - name: Commit stamp, tag, and push
+        if: ${{ !inputs.dry_run }}
+        working-directory: fw
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/VERSION
+          git commit -m "release: FW ${VERSION}"
+          # NOTE: on a partial failure after this push (e.g. the release step
+          # fails), the tag exists without a release; delete it manually and re-run.
+          git tag -a "${VERSION}" -m "FW-RemoteStation ${VERSION}"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
+          git push origin "${VERSION}"
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          files: |
+            fw/release/out/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          body: |
+            ## FW-RemoteStation ${{ steps.ver.outputs.version }}
+
+            | Target | Real (DFU) | Debug | Sim (static) |
+            |---|---|---|---|
+            | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
+            | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
+
+            Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers the build artifacts.
+            The firmware reports this version at runtime via the `version` shell command.
