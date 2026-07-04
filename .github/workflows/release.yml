@@ -176,6 +176,20 @@ jobs:
           done
           ls -lh
 
+      # Attach the built artifacts to the workflow run itself, ALWAYS (dry-run
+      # and real). This lets a dry_run=true build be downloaded and flashed /
+      # simulated for testing without publishing a Release. On a real run these
+      # same files are also published as signed Release assets below; here they
+      # are just the run-scoped copy (bin/elf/native_sim + SHA256SUMS, plus the
+      # cosign .bundle signatures when not a dry run).
+      - name: Attach build artifacts to the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: fw-${{ steps.ver.outputs.version }}${{ inputs.dry_run && '-dryrun' || '' }}
+          path: fw/release/out/*
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Commit stamp, tag, and push
         if: ${{ !inputs.dry_run }}
         working-directory: fw
