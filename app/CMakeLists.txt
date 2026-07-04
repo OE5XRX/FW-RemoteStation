@@ -4,6 +4,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(app LANGUAGES C CXX ASM)
 
 target_sources(app PRIVATE src/main.cpp)
+target_sources(app PRIVATE src/version_shell.cpp)
 
 if (CONFIG_ETL)
     target_sources(app PRIVATE src/etl_error_handler.cpp)
