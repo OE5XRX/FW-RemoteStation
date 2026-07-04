@@ -16,6 +16,9 @@ target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/sim_audio/audio_pipeline.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/sim_audio/shell_wav.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/main.cpp
+  # Ship the same `version` command the release binary exposes so the pytest
+  # suite guards its output format (test_version.py).
+  ${CMAKE_CURRENT_LIST_DIR}/../../app/src/version_shell.cpp
 )
 
 if (CONFIG_ETL)

@@ -1,0 +1,9 @@
+# Test-only version. The release job stamps app/VERSION at build time; this
+# file gives the sim_shell test build its own recognizable values so Zephyr
+# generates app_version.h and test_version.py can assert the full
+# app/VERSION -> app_version.h -> `version` command chain (expects 12.34.56-78).
+VERSION_MAJOR = 12
+VERSION_MINOR = 34
+PATCHLEVEL = 56
+VERSION_TWEAK = 78
+EXTRAVERSION =

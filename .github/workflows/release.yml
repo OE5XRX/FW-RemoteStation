@@ -38,8 +38,11 @@ jobs:
           set -euo pipefail
           git fetch --tags --quiet
           today=$(date -u +%y.%m.%d)                 # e.g. 26.07.04
-          n=$(git tag -l "${today}-*" | wc -l | tr -d ' ')
-          nn=$(printf '%02d' $((n + 1)))
+          # Next sequence = (max existing NN for today) + 1, NOT a count: tags
+          # can be non-contiguous (e.g. -01 and -03), where a count would pick
+          # an already-used NN and the tag push would collide.
+          maxnn=$(git tag -l "${today}-*" | sed -nE "s/.*-0*([0-9]+)$/\1/p" | sort -n | tail -1)
+          nn=$(printf '%02d' $(( ${maxnn:-0} + 1 )))
           version="${today}-${nn}"
           IFS=. read -r yy mm dd <<< "$today"
           {
@@ -130,7 +133,16 @@ jobs:
         working-directory: fw/release/out
         run: |
           set -euo pipefail
-          sha256sum *.bin *.elf *.native_sim > SHA256SUMS
+          shopt -s nullglob
+          # Collect whatever assets were actually produced. A future target may
+          # emit only a subset (e.g. native_sim-only), so an unmatched glob must
+          # vanish (nullglob) rather than survive literally and break sha256sum.
+          assets=( *.bin *.elf *.native_sim )
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::error::no release assets were produced" >&2
+            exit 1
+          fi
+          sha256sum "${assets[@]}" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Sign assets (cosign keyless)
@@ -138,6 +150,9 @@ jobs:
         working-directory: fw/release/out
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          # nullglob drops any artifact class a future target didn't emit;
+          # SHA256SUMS is a literal (always present) so it is always signed.
           for f in *.bin *.elf *.native_sim SHA256SUMS; do
             cosign sign-blob --yes --bundle "${f}.bundle" "${f}"
           done
