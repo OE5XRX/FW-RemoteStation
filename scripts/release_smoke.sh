@@ -29,7 +29,9 @@ out=$(printf 'version\nmodule fm describe\n' | timeout 15 "$bin" -uart_stdinout 
 printf '%s\n' "$out" | grep -qF "APP-VERSION ${expected_ver}" \
 	|| fail "version mismatch; expected APP-VERSION ${expected_ver}. Got:${nl}${out}"
 
-desc=$(printf '%s\n' "$out" | grep -o 'MODULE-DESCRIBE {.*}' | head -1)
+# `|| true` keeps a no-match grep from tripping set -e/pipefail before the
+# explicit guard below can emit the helpful fail message.
+desc=$(printf '%s\n' "$out" | grep -o 'MODULE-DESCRIBE {.*}' | head -1 || true)
 [ -n "$desc" ] || fail "no MODULE-DESCRIBE line. Got:${nl}${out}"
 printf '%s\n' "$desc" | grep -q '"type":"fm_transceiver"' \
 	|| fail "identity.type != fm_transceiver: ${desc}"

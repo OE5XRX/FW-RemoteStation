@@ -101,7 +101,12 @@ jobs:
       - name: Ensure yq
         run: |
           set -euo pipefail
-          if ! command -v yq >/dev/null 2>&1; then
+          # The build loop uses mikefarah yq v4 syntax. A preinstalled yq of a
+          # different flavor (e.g. the python/kislyuk yq) or major version would
+          # silently mis-parse. Only accept mikefarah v4 already on PATH; else
+          # install a pinned, checksum-verified binary to /usr/local/bin (which
+          # precedes /usr/bin, so it wins).
+          if ! { command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -Eq 'mikefarah.* v4\.'; }; then
             YQ_VER=v4.44.6
             YQ_SHA=0c2b24e645b57d8e7c0566d18643a6d4f5580feeea3878127354a46f2a1e4598
             wget -qO /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VER}/yq_linux_amd64"
