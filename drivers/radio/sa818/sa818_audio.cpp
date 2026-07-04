@@ -227,6 +227,24 @@ static void test_tone_work_handler(struct k_work *work) {
     }
   }
 
+  /* Advance the sweep frequency for THIS iteration before it is used below (by
+   * both the sample generation and the phase increment). On the final step of
+   * the cycle we set exactly the end frequency, then restart from the start;
+   * otherwise we linearly interpolate start -> end across the cycle. */
+  if (data->sweep_active) {
+    int64_t now = k_uptime_get();
+    int64_t elapsed_ms = now - data->sweep_start_time;
+    if (elapsed_ms >= static_cast<int64_t>(data->sweep_duration_ms)) {
+      data->test_tone_freq = data->sweep_end_freq;
+      data->sweep_start_time = now;
+      LOG_DBG("Frequency sweep reached %u Hz, restarting from %u Hz", data->sweep_end_freq, data->sweep_start_freq);
+    } else {
+      float progress = static_cast<float>(elapsed_ms) / static_cast<float>(data->sweep_duration_ms);
+      float freq_range = static_cast<float>(data->sweep_end_freq - data->sweep_start_freq);
+      data->test_tone_freq = data->sweep_start_freq + static_cast<uint16_t>(progress * freq_range);
+    }
+  }
+
   /* Generate sine wave sample */
   float sample = std::sin(data->test_tone_phase) * (static_cast<float>(data->test_tone_amplitude) / 255.0f);
 
@@ -252,24 +270,6 @@ static void test_tone_work_handler(struct k_work *work) {
     data->audio_tx_enabled = false;
     k_mutex_unlock(&data->lock);
     return;
-  }
-
-  /* Frequency sweep: linearly interpolate the tone frequency across the cycle,
-   * then loop back to the start frequency and repeat endlessly. */
-  if (data->sweep_active) {
-    int64_t now = k_uptime_get();
-    int64_t elapsed_ms = now - data->sweep_start_time;
-    if (elapsed_ms >= static_cast<int64_t>(data->sweep_duration_ms)) {
-      /* Cycle complete — emit the exact end frequency for this final step,
-       * then restart the cycle so the next sample begins again at the start. */
-      data->test_tone_freq = data->sweep_end_freq;
-      data->sweep_start_time = now;
-      LOG_DBG("Frequency sweep reached %u Hz, restarting from %u Hz", data->sweep_end_freq, data->sweep_start_freq);
-    } else {
-      float progress = static_cast<float>(elapsed_ms) / static_cast<float>(data->sweep_duration_ms);
-      float freq_range = static_cast<float>(data->sweep_end_freq - data->sweep_start_freq);
-      data->test_tone_freq = data->sweep_start_freq + static_cast<uint16_t>(progress * freq_range);
-    }
   }
 
   /* Update phase for next sample */
