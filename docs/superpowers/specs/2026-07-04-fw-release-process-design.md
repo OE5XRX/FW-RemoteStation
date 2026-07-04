@@ -22,7 +22,7 @@
 | Target-Definition | **Deklaratives `release-targets.yaml`** (Ansatz A) | Single-Source-of-Truth; neues Board = ein Eintrag. |
 | Versionierung | **`YYYY.MM.DD-NN`**, repo-weit | Identisch zu linux-image (z.B. `2026.04.24-18`). |
 | Trigger | **Manueller `workflow_dispatch`-Release-Job** (One-Button) | Erzeugt Tag + schreibt Version-Files + baut + published in einem Schritt. |
-| Version-Stamping | **Version-File/Header, vom Release-Job geschrieben** | Firmware meldet ihre Version; Image+FW-Bundle eindeutig zuordenbar. |
+| Version-Stamping | **Zephyr `app/VERSION` → `EXTRAVERSION`, vom Release-Job geschrieben** | Nativer Mechanismus (`app_version.h`); Firmware meldet Version zur Laufzeit. |
 | Bundle | **linux-image bündelt real *und* native_sim** | Image + Firmware werden zusammen deployed + getestet. |
 | Describe-Fähigkeit | **`CONFIG_MODULE_SA818` in `app/prj.conf`** | „geshipptes = getestetes" Binary. |
 | native_sim-Linking | **Statisch** (keine externen Lib-Deps) | Löst die glibc-Kopplung. |
@@ -34,11 +34,11 @@
 - Schema **`YYYY.MM.DD-NN`** (Datum + Tages-Sequenz), **eine repo-weite Version** für alle Boards.
 - **Trigger: ein manueller `workflow_dispatch`-„Release"-Job** (One-Button). Er:
   1. berechnet das nächste `YYYY.MM.DD-NN`,
-  2. **schreibt die Version in ein Version-File/Header** (Build-Zeit-Injektion à la HW-Module-CI `<<VERSION>>`),
+  2. **schreibt die CalVer-Release-ID nach `app/VERSION`** (Zephyr-App-Version-File, Feld `EXTRAVERSION`),
   3. baut alle Targets (real + native_sim),
   4. signiert (cosign) + erzeugt `SHA256SUMS`,
   5. erstellt den Git-Tag und veröffentlicht das GitHub-Release.
-- **Version-Stamping:** die Firmware trägt ihre Release-Version in einem vom Release-Job geschriebenen File/Header und meldet sie **zur Laufzeit** (im `describe`/über ein `version`-Kommando) → Image+Firmware-Bundle sind eindeutig zuordenbar.
+- **Version-Stamping (nativ, `app/VERSION`):** genutzt wird Zephyrs **`app/VERSION`**-File (aktuell `VERSION_MAJOR=1 … EXTRAVERSION=`). Da `YYYY.MM.DD-NN` nicht in die numerischen Semver-Bytes (MAJOR/MINOR/PATCH ≤ 255) passt, schreibt der Release-Job die Release-ID ins **`EXTRAVERSION`**-Feld; `MAJOR.MINOR.PATCH` bleibt die **manuell gepflegte Firmware-Semver**. Zephyr generiert daraus `app_version.h` → die Firmware meldet `APP_VERSION_EXTENDED_STRING` **zur Laufzeit** (im `describe`/über ein `version`-Kommando). So sind Image+Firmware-Bundle eindeutig zuordenbar.
 - *Anmerkung:* linux-image `release.yml` läuft heute auf **Tag-Push** (Version = Tag-Name, kein committetes Version-File). Der One-Button-Job hier ist die gewünschte Weiterentwicklung; er kann intern den Tag erzeugen (→ tag-getriggerter Build) oder alles in einem Job tun — Detail in der Implementierung.
 
 ## 4. Build-Matrix — `release-targets.yaml` (Ansatz A)
