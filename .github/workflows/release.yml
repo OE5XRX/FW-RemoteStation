@@ -1,0 +1,177 @@
+name: Release
+
+# One-button manual release. Computes the next YY.MM.DD-NN, stamps app/VERSION,
+# iterates release-targets.yaml (real + static native_sim), smoke-tests, cosign
+# keyless-signs, emits SHA256SUMS, then commits the stamp + tags + publishes.
+# dry_run builds + smokes everything but skips commit/tag/publish.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build + smoke only; do not commit/tag/publish"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write     # push stamp commit + tag, create release
+  id-token: write     # cosign keyless OIDC
+
+concurrency:
+  group: fw-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: fw
+          fetch-depth: 0        # need tags to compute NN
+          persist-credentials: true
+
+      - name: Compute version
+        id: ver
+        working-directory: fw
+        run: |
+          set -euo pipefail
+          git fetch --tags --quiet
+          today=$(date -u +%y.%m.%d)                 # e.g. 26.07.04
+          n=$(git tag -l "${today}-*" | wc -l | tr -d ' ')
+          nn=$(printf '%02d' $((n + 1)))
+          version="${today}-${nn}"
+          IFS=. read -r yy mm dd <<< "$today"
+          {
+            echo "version=${version}"
+            echo "major=$((10#$yy))"
+            echo "minor=$((10#$mm))"
+            echo "patch=$((10#$dd))"
+            echo "tweak=$((10#$nn))"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release version: ${version}"
+
+      - name: Stamp app/VERSION
+        working-directory: fw
+        env:
+          MAJOR: ${{ steps.ver.outputs.major }}
+          MINOR: ${{ steps.ver.outputs.minor }}
+          PATCH: ${{ steps.ver.outputs.patch }}
+          TWEAK: ${{ steps.ver.outputs.tweak }}
+        run: |
+          set -euo pipefail
+          cat > app/VERSION <<EOF
+          VERSION_MAJOR = ${MAJOR}
+          VERSION_MINOR = ${MINOR}
+          PATCHLEVEL = ${PATCH}
+          VERSION_TWEAK = ${TWEAK}
+          EXTRAVERSION =
+          EOF
+          cat app/VERSION
+
+      - name: Setup Zephyr
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: fw
+          toolchains: arm-zephyr-eabi
+
+      - name: Install static link deps
+        run: sudo apt-get update && sudo apt-get install -y libc6-dev
+
+      - name: Install cosign
+        if: ${{ !inputs.dry_run }}
+        uses: sigstore/cosign-installer@v3
+
+      - name: Ensure yq
+        run: |
+          set -euo pipefail
+          if ! command -v yq >/dev/null 2>&1; then
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+          yq --version
+
+      - name: Build all targets
+        working-directory: fw
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release/out
+          count=$(yq -r '.targets | length' release/release-targets.yaml)
+          for i in $(seq 0 $((count - 1))); do
+            name=$(yq -r ".targets[$i].name"  release/release-targets.yaml)
+            board=$(yq -r ".targets[$i].board" release/release-targets.yaml)
+            band=$(yq -r ".targets[$i].band"  release/release-targets.yaml)
+            overlay="$PWD/release/overlays/band_${band}.overlay"
+            arts=$(yq -r ".targets[$i].artifacts[]" release/release-targets.yaml)
+            echo "== ${name} (board=${board} band=${band}) =="
+
+            for art in $arts; do
+              if [ "$art" = "firmware" ]; then
+                west build -b "$board" app -p always -- -DEXTRA_DTC_OVERLAY_FILE="$overlay"
+                cp build/zephyr/zephyr.bin "release/out/${name}.bin"
+                cp build/zephyr/zephyr.elf "release/out/${name}.elf"
+              elif [ "$art" = "native_sim" ]; then
+                west build -b native_sim/native/64 app -p always -- \
+                  -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
+                  -DEXTRA_CONF_FILE="$PWD/release/native_sim_static.conf"
+                cp build/zephyr/zephyr.exe "release/out/${name}.native_sim"
+                ./scripts/release_smoke.sh "release/out/${name}.native_sim" "$VERSION" "$band"
+              fi
+            done
+          done
+          ls -lh release/out/
+
+      - name: Generate SHA256SUMS
+        working-directory: fw/release/out
+        run: |
+          set -euo pipefail
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Sign assets (cosign keyless)
+        if: ${{ !inputs.dry_run }}
+        working-directory: fw/release/out
+        run: |
+          set -euo pipefail
+          for f in $(ls | grep -v '\.bundle$'); do
+            cosign sign-blob --yes --bundle "${f}.bundle" "${f}"
+          done
+          ls -lh
+
+      - name: Commit stamp, tag, and push
+        if: ${{ !inputs.dry_run }}
+        working-directory: fw
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/VERSION
+          git commit -m "release: FW ${VERSION}"
+          git tag -a "${VERSION}" -m "FW-RemoteStation ${VERSION}"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
+          git push origin "${VERSION}"
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          files: |
+            fw/release/out/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          body: |
+            ## FW-RemoteStation ${{ steps.ver.outputs.version }}
+
+            | Target | Real (DFU) | Debug | Sim (static) |
+            |---|---|---|---|
+            | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
+            | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
+
+            Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers all.
+            The firmware reports this version at runtime via the `version` shell command.
