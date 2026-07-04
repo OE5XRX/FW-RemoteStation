@@ -17,7 +17,7 @@ fail() { echo "::error::release_smoke: $*" >&2; exit 1; }
 [ -x "$bin" ] || fail "$bin is not executable"
 
 # 1. Static check.
-ldd_out=$(ldd "$bin" 2>&1 || true)
+ldd_out=$(LC_ALL=C ldd "$bin" 2>&1 || true)
 printf '%s\n' "$ldd_out" | grep -q "not a dynamic executable" \
 	|| fail "$bin is not statically linked: ${ldd_out}"
 
