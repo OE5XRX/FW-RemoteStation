@@ -86,8 +86,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! command -v yq >/dev/null 2>&1; then
-            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-            sudo chmod +x /usr/local/bin/yq
+            YQ_VER=v4.44.6
+            YQ_SHA=0c2b24e645b57d8e7c0566d18643a6d4f5580feeea3878127354a46f2a1e4598
+            wget -qO /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VER}/yq_linux_amd64"
+            echo "${YQ_SHA}  /tmp/yq" | sha256sum -c -
+            sudo install -m 0755 /tmp/yq /usr/local/bin/yq
           fi
           yq --version
 
@@ -127,7 +130,7 @@ jobs:
         working-directory: fw/release/out
         run: |
           set -euo pipefail
-          sha256sum * > SHA256SUMS
+          sha256sum *.bin *.elf *.native_sim > SHA256SUMS
           cat SHA256SUMS
 
       - name: Sign assets (cosign keyless)
@@ -135,7 +138,7 @@ jobs:
         working-directory: fw/release/out
         run: |
           set -euo pipefail
-          for f in $(ls | grep -v '\.bundle$'); do
+          for f in *.bin *.elf *.native_sim SHA256SUMS; do
             cosign sign-blob --yes --bundle "${f}.bundle" "${f}"
           done
           ls -lh
@@ -151,6 +154,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add app/VERSION
           git commit -m "release: FW ${VERSION}"
+          # NOTE: on a partial failure after this push (e.g. the release step
+          # fails), the tag exists without a release; delete it manually and re-run.
           git tag -a "${VERSION}" -m "FW-RemoteStation ${VERSION}"
           git push origin HEAD:"${GITHUB_REF_NAME}"
           git push origin "${VERSION}"
@@ -173,5 +178,5 @@ jobs:
             | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
             | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
 
-            Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers all.
+            Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers the build artifacts.
             The firmware reports this version at runtime via the `version` shell command.
