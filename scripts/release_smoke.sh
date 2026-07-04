@@ -12,6 +12,7 @@ bin=${1:?binary path required}
 expected_ver=${2:?expected version required}     # e.g. 26.07.04-01
 expected_band=${3:?expected band required}       # vhf | uhf
 
+nl=$'\n'   # real newline; bash does not interpret \n inside "double quotes"
 fail() { echo "::error::release_smoke: $*" >&2; exit 1; }
 
 [ -x "$bin" ] || fail "$bin is not executable"
@@ -26,10 +27,10 @@ printf '%s\n' "$ldd_out" | grep -q "not a dynamic executable" \
 out=$(printf 'version\nmodule fm describe\n' | timeout 15 "$bin" -uart_stdinout 2>&1 || true)
 
 printf '%s\n' "$out" | grep -qF "APP-VERSION ${expected_ver}" \
-	|| fail "version mismatch; expected APP-VERSION ${expected_ver}. Got:\n${out}"
+	|| fail "version mismatch; expected APP-VERSION ${expected_ver}. Got:${nl}${out}"
 
 desc=$(printf '%s\n' "$out" | grep -o 'MODULE-DESCRIBE {.*}' | head -1)
-[ -n "$desc" ] || fail "no MODULE-DESCRIBE line. Got:\n${out}"
+[ -n "$desc" ] || fail "no MODULE-DESCRIBE line. Got:${nl}${out}"
 printf '%s\n' "$desc" | grep -q '"type":"fm_transceiver"' \
 	|| fail "identity.type != fm_transceiver: ${desc}"
 printf '%s\n' "$desc" | grep -q "\"version\":\"${expected_band}\"" \

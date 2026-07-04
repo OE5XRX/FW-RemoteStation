@@ -21,5 +21,5 @@ def test_version_command_format(shell):
     out = shell.exec_command("version")
     lines = out if isinstance(out, list) else str(out).splitlines()
     text = "\n".join(_ANSI.sub("", line) for line in lines)
-    assert _FORMAT.search(text), f"no `APP-VERSION dd.dd.dd-dd` line in output: {text}"
+    assert _FORMAT.search(text), f"no `APP-VERSION YY.MM.DD-NN` line in output: {text}"
     assert _EXPECTED in text, f"expected {_EXPECTED!r} (from tests/sim_shell/VERSION) in: {text}"
