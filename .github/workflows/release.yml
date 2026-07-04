@@ -24,6 +24,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Guard — real release only on the default branch
+        if: ${{ !inputs.dry_run }}
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "${REF_NAME}" != "${DEFAULT_BRANCH}" ]; then
+            echo "::error::A real (non-dry-run) release must run on the default branch (${DEFAULT_BRANCH}), not '${REF_NAME}'. Re-run with dry_run=true on feature branches, or dispatch on ${DEFAULT_BRANCH}." >&2
+            exit 1
+          fi
+          echo "OK — releasing from default branch ${REF_NAME}"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
