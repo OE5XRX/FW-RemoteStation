@@ -56,21 +56,30 @@ def test_sa818_sweep_defaults(shell):
 
 
 def test_sa818_sweep_rejects_end_le_start(shell):
-    """end_hz must be greater than start_hz."""
+    """end_hz must be greater than start_hz (assert the specific message)."""
+    shell.exec_command("sa818 power on")
+    shell.exec_command("sa818 ptt on")
     out = shell.exec_command("sa818 test sweep 2000 500")
     text = _as_text(out).lower()
-    assert "greater than start" in text or "error" in text
+    assert "greater than start" in text
+    shell.exec_command("sa818 ptt off")
 
 
 def test_sa818_sweep_rejects_out_of_range_freq(shell):
-    """Frequencies outside 100-3000 Hz are rejected."""
+    """Frequencies outside 100-3000 Hz are rejected (assert the specific message)."""
+    shell.exec_command("sa818 power on")
+    shell.exec_command("sa818 ptt on")
     out = shell.exec_command("sa818 test sweep 50 2000")
     text = _as_text(out).lower()
-    assert "invalid start frequency" in text or "error" in text
+    assert "invalid start frequency" in text
+    shell.exec_command("sa818 ptt off")
 
 
 def test_sa818_sweep_rejects_bad_duration(shell):
-    """Duration outside 1000-60000 ms is rejected."""
+    """Duration outside 1000-60000 ms is rejected (assert the specific message)."""
+    shell.exec_command("sa818 power on")
+    shell.exec_command("sa818 ptt on")
     out = shell.exec_command("sa818 test sweep 300 2000 100")
     text = _as_text(out).lower()
-    assert "invalid duration" in text or "error" in text
+    assert "invalid duration" in text
+    shell.exec_command("sa818 ptt off")
