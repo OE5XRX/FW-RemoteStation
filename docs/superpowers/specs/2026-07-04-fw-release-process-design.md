@@ -20,9 +20,9 @@
 | Scope | **Sim + Real** in einem Release | Beide Konsumenten (D2-Sim, Bench-DFU) an einem Tag versorgt. |
 | Board-Abdeckung | **Monorepo, Artefakte pro Board/Variante** benannt | „fm sa818 2m" muss sofort auffindbar sein. |
 | Target-Definition | **Deklaratives `release-targets.yaml`** (Ansatz A) | Single-Source-of-Truth; neues Board = ein Eintrag. |
-| Versionierung | **`YYYY.MM.DD-NN`**, repo-weit | Identisch zu linux-image (z.B. `2026.04.24-18`). |
+| Versionierung | **`YY.MM.DD-NN`**, repo-weit (z.B. `26.07.04-01`) | 2-stelliges Jahr passt direkt in Zephyrs numerische VERSION-Felder. (linux-image nutzt 4-stellig — bewusste Abweichung.) |
 | Trigger | **Manueller `workflow_dispatch`-Release-Job** (One-Button) | Erzeugt Tag + schreibt Version-Files + baut + published in einem Schritt. |
-| Version-Stamping | **Zephyr `app/VERSION` → `EXTRAVERSION`, vom Release-Job geschrieben** | Nativer Mechanismus (`app_version.h`); Firmware meldet Version zur Laufzeit. |
+| Version-Stamping | **Zephyr `app/VERSION`: MAJOR=YY · MINOR=MM · PATCH=DD · TWEAK=NN**, vom Release-Job geschrieben | Passt nativ in die numerischen Felder; `app_version.h` → Firmware meldet Version zur Laufzeit. |
 | Bundle | **linux-image bündelt real *und* native_sim** | Image + Firmware werden zusammen deployed + getestet. |
 | Describe-Fähigkeit | **`CONFIG_MODULE_SA818` in `app/prj.conf`** | „geshipptes = getestetes" Binary. |
 | native_sim-Linking | **Statisch** (keine externen Lib-Deps) | Löst die glibc-Kopplung. |
@@ -31,14 +31,14 @@
 
 ## 3. Versionierung, Trigger & Version-Stamping
 
-- Schema **`YYYY.MM.DD-NN`** (Datum + Tages-Sequenz), **eine repo-weite Version** für alle Boards.
+- Schema **`YY.MM.DD-NN`** (2-stelliges Jahr + Monat + Tag + Tages-Sequenz, z.B. `26.07.04-01`), **eine repo-weite Version** für alle Boards. Das 2-stellige Jahr ist bewusst gewählt, damit die Version **direkt in Zephyrs numerische `app/VERSION`-Felder** passt. *(linux-image nutzt 4-stellig `2026.MM.DD-NN` — bewusste Abweichung zugunsten des nativen Zephyr-Version-Mechanismus.)*
 - **Trigger: ein manueller `workflow_dispatch`-„Release"-Job** (One-Button). Er:
-  1. berechnet das nächste `YYYY.MM.DD-NN`,
-  2. **schreibt die CalVer-Release-ID nach `app/VERSION`** (Zephyr-App-Version-File, Feld `EXTRAVERSION`),
+  1. berechnet das nächste `YY.MM.DD-NN`,
+  2. **schreibt die Version in `app/VERSION`** (`VERSION_MAJOR=YY`, `VERSION_MINOR=MM`, `PATCHLEVEL=DD`, `VERSION_TWEAK=NN`),
   3. baut alle Targets (real + native_sim),
   4. signiert (cosign) + erzeugt `SHA256SUMS`,
   5. erstellt den Git-Tag und veröffentlicht das GitHub-Release.
-- **Version-Stamping (nativ, `app/VERSION`):** genutzt wird Zephyrs **`app/VERSION`**-File (aktuell `VERSION_MAJOR=1 … EXTRAVERSION=`). Da `YYYY.MM.DD-NN` nicht in die numerischen Semver-Bytes (MAJOR/MINOR/PATCH ≤ 255) passt, schreibt der Release-Job die Release-ID ins **`EXTRAVERSION`**-Feld; `MAJOR.MINOR.PATCH` bleibt die **manuell gepflegte Firmware-Semver**. Zephyr generiert daraus `app_version.h` → die Firmware meldet `APP_VERSION_EXTENDED_STRING` **zur Laufzeit** (im `describe`/über ein `version`-Kommando). So sind Image+Firmware-Bundle eindeutig zuordenbar.
+- **Version-Stamping (nativ, `app/VERSION`):** Zephyrs **`app/VERSION`**-File nimmt die Version **direkt in die numerischen Felder** auf: `VERSION_MAJOR=YY`, `VERSION_MINOR=MM`, `PATCHLEVEL=DD`, `VERSION_TWEAK=NN` — alle ≤ 255, passt sauber. Die aktuell dort stehende `1.0.0` wird vom Release-Job überschrieben; **eine separate manuelle Firmware-Semver entfällt** — die Datums-Version IST die Version. Zephyr generiert `app_version.h` → die Firmware meldet `APP_VERSION_STRING` (`26.7.4`) + `APP_VERSION_NUMBER` (maschinen-vergleichbar) **zur Laufzeit** (im `describe`/über ein `version`-Kommando). So sind Image+Firmware-Bundle eindeutig zuordenbar.
 - *Anmerkung:* linux-image `release.yml` läuft heute auf **Tag-Push** (Version = Tag-Name, kein committetes Version-File). Der One-Button-Job hier ist die gewünschte Weiterentwicklung; er kann intern den Tag erzeugen (→ tag-getriggerter Build) oder alles in einem Job tun — Detail in der Implementierung.
 
 ## 4. Build-Matrix — `release-targets.yaml` (Ansatz A)
@@ -122,7 +122,7 @@ Plus ein **`SHA256SUMS`**-Manifest über alle Assets. (70cm analog.) Jedes Binar
 ## 12. Testing
 
 - **Release-Workflow (dry-run/PR):** Matrix baut alle Targets; Assets entstehen + sind korrekt benannt; `SHA256SUMS` stimmt.
-- **Version-Stamp:** die gebaute Firmware meldet zur Laufzeit die Release-Version (`YYYY.MM.DD-NN`) — matcht Tag + Asset-Namen.
+- **Version-Stamp:** die gebaute Firmware meldet zur Laufzeit die Release-Version (`YY.MM.DD-NN`) — matcht Tag + Asset-Namen.
 - **Describe-Smoke:** das native_sim-Asset startet und antwortet auf `module describe` mit `MODULE-DESCRIBE …` (identity.type=fm_transceiver) — für 2m *und* 70cm die passende `version` (vhf/uhf).
 - **Static-Check:** `ldd <asset>` meldet „not a dynamic executable".
 - **Pin-Roundtrip:** `pin-*.sh` zieht URL+sha256, linux-image baut das Bundle dagegen.
