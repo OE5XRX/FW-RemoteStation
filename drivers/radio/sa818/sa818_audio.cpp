@@ -248,6 +248,7 @@ static void test_tone_work_handler(struct k_work *work) {
   if (ret != 0) {
     LOG_ERR("DAC write failed during test tone: %d", ret);
     data->test_tone_active = false;
+    data->sweep_active = false;
     data->audio_tx_enabled = false;
     k_mutex_unlock(&data->lock);
     return;
@@ -256,12 +257,13 @@ static void test_tone_work_handler(struct k_work *work) {
   /* Frequency sweep: linearly interpolate the tone frequency across the cycle,
    * then loop back to the start frequency and repeat endlessly. */
   if (data->sweep_active) {
-    int64_t elapsed_ms = k_uptime_get() - data->sweep_start_time;
+    int64_t now = k_uptime_get();
+    int64_t elapsed_ms = now - data->sweep_start_time;
     if (elapsed_ms >= static_cast<int64_t>(data->sweep_duration_ms)) {
       /* Cycle complete — emit the exact end frequency for this final step,
        * then restart the cycle so the next sample begins again at the start. */
       data->test_tone_freq = data->sweep_end_freq;
-      data->sweep_start_time = k_uptime_get();
+      data->sweep_start_time = now;
       LOG_DBG("Frequency sweep reached %u Hz, restarting from %u Hz", data->sweep_end_freq, data->sweep_start_freq);
     } else {
       float progress = static_cast<float>(elapsed_ms) / static_cast<float>(data->sweep_duration_ms);
@@ -326,11 +328,13 @@ sa818_result sa818_audio_generate_test_tone(const struct device *dev, uint16_t f
     k_work_cancel_delayable(&data->test_tone_work);
   }
 
-  /* Initialize test tone state */
+  /* Initialize test tone state. Clear sweep_active so a fixed tone is never
+   * treated as a sweep (the work handler only interpolates when sweep_active). */
   data->test_tone_freq = freq_hz;
   data->test_tone_amplitude = amplitude;
   data->test_tone_phase = 0.0f;
   data->test_tone_active = true;
+  data->sweep_active = false;
 
   /* Calculate end time if duration is specified */
   if (duration_ms > 0) {
