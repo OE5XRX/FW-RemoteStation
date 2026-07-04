@@ -122,6 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release/out
+          mem="release/out/MEMORY-USAGE.md"
+          printf '# FW-RemoteStation memory usage — %s\n\n' "$VERSION" > "$mem"
           count=$(yq -r '.targets | length' release/release-targets.yaml)
           for i in $(seq 0 $((count - 1))); do
             name=$(yq -r ".targets[$i].name"  release/release-targets.yaml)
@@ -133,19 +135,36 @@ jobs:
 
             for art in $arts; do
               if [ "$art" = "firmware" ]; then
-                west build -b "$board" app -p always -- -DEXTRA_DTC_OVERLAY_FILE="$overlay"
+                # tee the build so we can lift Zephyr's FLASH/RAM memory report.
+                west build -b "$board" app -p always -- -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
+                  2>&1 | tee "/tmp/build-${name}.log"
                 cp build/zephyr/zephyr.bin "release/out/${name}.bin"
                 cp build/zephyr/zephyr.elf "release/out/${name}.elf"
+                # Memory-usage overview: the "Memory region" table (FLASH/RAM/...)
+                # Zephyr prints on link. ANSI-stripped; header through first blank.
+                {
+                  printf '## %s — board %s, band %s (real firmware)\n\n```\n' "$name" "$board" "$band"
+                  sed 's/\x1b\[[0-9;]*m//g' "/tmp/build-${name}.log" \
+                    | awk '/Memory region/{print; f=1; next}
+                           f && /^ *[A-Za-z0-9_]+: +[0-9]/ {print; next}
+                           f {exit}'
+                  printf '```\n\n'
+                } >> "$mem"
               elif [ "$art" = "native_sim" ]; then
                 west build -b native_sim/native/64 app -p always -- \
                   -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
                   -DEXTRA_CONF_FILE="$PWD/release/native_sim_static.conf"
                 cp build/zephyr/zephyr.exe "release/out/${name}.native_sim"
                 ./scripts/release_smoke.sh "release/out/${name}.native_sim" "$VERSION" "$band"
+                # native_sim is a host binary (no MCU regions); record on-disk size.
+                printf '## %s.native_sim — host binary (static): %s\n\n' \
+                  "$name" "$(du -h "release/out/${name}.native_sim" | cut -f1)" >> "$mem"
               fi
             done
           done
           ls -lh release/out/
+          # Surface the overview on the run's summary page too.
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$mem" >> "$GITHUB_STEP_SUMMARY"; fi
 
       - name: Generate SHA256SUMS
         working-directory: fw/release/out
@@ -176,28 +195,32 @@ jobs:
           done
           ls -lh
 
-      - name: Commit stamp, tag, and push
-        if: ${{ !inputs.dry_run }}
-        working-directory: fw
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add app/VERSION
-          git commit -m "release: FW ${VERSION}"
-          # NOTE: on a partial failure after this push (e.g. the release step
-          # fails), the tag exists without a release; delete it manually and re-run.
-          git tag -a "${VERSION}" -m "FW-RemoteStation ${VERSION}"
-          git push origin HEAD:"${GITHUB_REF_NAME}"
-          git push origin "${VERSION}"
+      # Attach the built artifacts to the workflow run itself, ALWAYS (dry-run
+      # and real). This lets a dry_run=true build be downloaded and flashed /
+      # simulated for testing without publishing a Release. On a real run these
+      # same files are also published as signed Release assets below; here they
+      # are just the run-scoped copy (bin/elf/native_sim + SHA256SUMS, plus the
+      # cosign .bundle signatures when not a dry run).
+      - name: Attach build artifacts to the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: fw-${{ steps.ver.outputs.version }}${{ inputs.dry_run && '-dryrun' || '' }}
+          path: fw/release/out/*
+          if-no-files-found: error
+          retention-days: 90
 
+      # No git push to the default branch: it is protected (PR-only). The
+      # app/VERSION stamp is ephemeral — used only to build version-stamped
+      # binaries this run — and is NOT committed. The version lives in the tag
+      # + release + the binaries' app_version.h (same model as linux-image:
+      # version == tag, no committed version file). The release action creates
+      # the tag itself (target_commitish below), so no branch/tag push is needed.
       - name: Create GitHub Release
         if: ${{ !inputs.dry_run }}
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: |
             fw/release/out/*
           generate_release_notes: true
