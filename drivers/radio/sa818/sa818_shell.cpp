@@ -449,11 +449,77 @@ static int cmd_sa818_test_tone_stop(const struct shell *shell, size_t argc, char
   return 0;
 }
 
+static int cmd_sa818_test_sweep(const struct shell *shell, size_t argc, char **argv) {
+  if (argc < 3) {
+    shell_error(shell, "usage: sa818 test sweep <start_hz> <end_hz> [duration_ms] [amplitude]");
+    shell_error(shell, "  start_hz:    100-3000 Hz");
+    shell_error(shell, "  end_hz:      100-3000 Hz (must be > start_hz)");
+    shell_error(shell, "  duration_ms: 1000-60000 ms per sweep cycle (default: 10000)");
+    shell_error(shell, "  amplitude:   0-255 (default: 128)");
+    shell_error(shell, "  Note: the sweep loops continuously; stop it with 'sa818 test tone_stop'");
+    return -EINVAL;
+  }
+
+  const struct device *dev = sa818_dev();
+  if (!dev || !device_is_ready(dev)) {
+    shell_error(shell, "sa818 not ready");
+    return -ENODEV;
+  }
+
+  int start_freq = atoi(argv[1]);
+  if (start_freq < 100 || start_freq > 3000) {
+    shell_error(shell, "invalid start frequency: %d Hz (valid range: 100-3000 Hz)", start_freq);
+    return -EINVAL;
+  }
+
+  int end_freq = atoi(argv[2]);
+  if (end_freq < 100 || end_freq > 3000) {
+    shell_error(shell, "invalid end frequency: %d Hz (valid range: 100-3000 Hz)", end_freq);
+    return -EINVAL;
+  }
+
+  if (end_freq <= start_freq) {
+    shell_error(shell, "end frequency must be greater than start frequency");
+    return -EINVAL;
+  }
+
+  uint32_t duration_ms = 10000; /* default 10 s per cycle */
+  if (argc >= 4) {
+    int duration = atoi(argv[3]);
+    if (duration < 1000 || duration > 60000) {
+      shell_error(shell, "invalid duration: %d ms (valid range: 1000-60000 ms)", duration);
+      return -EINVAL;
+    }
+    duration_ms = static_cast<uint32_t>(duration);
+  }
+
+  uint8_t amplitude = 128; /* default 50 %% */
+  if (argc >= 5) {
+    int amp = atoi(argv[4]);
+    if (amp < 0 || amp > 255) {
+      shell_error(shell, "invalid amplitude: %d (valid range: 0-255)", amp);
+      return -EINVAL;
+    }
+    amplitude = static_cast<uint8_t>(amp);
+  }
+
+  sa818_result ret = sa818_audio_generate_sweep(dev, static_cast<uint16_t>(start_freq), static_cast<uint16_t>(end_freq), duration_ms, amplitude);
+  if (ret != SA818_OK) {
+    shell_error(shell, "Failed to start sweep: %d", ret);
+    return ret;
+  }
+
+  shell_print(shell, "Frequency sweep started: %d Hz -> %d Hz, cycling every %u ms at amplitude %u", start_freq, end_freq, duration_ms, amplitude);
+  shell_print(shell, "Use 'sa818 test tone_stop' to stop the sweep");
+  return 0;
+}
+
 // clang-format off
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_test_cmds,
     SHELL_CMD(tone, NULL, "Generate test tone", cmd_sa818_test_tone),
     SHELL_CMD(tone_stop, NULL, "Stop test tone", cmd_sa818_test_tone_stop),
+    SHELL_CMD(sweep, NULL, "Continuous frequency sweep", cmd_sa818_test_sweep),
     SHELL_SUBCMD_SET_END);
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sa818_at_cmds,

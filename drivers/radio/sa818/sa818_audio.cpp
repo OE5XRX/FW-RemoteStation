@@ -28,6 +28,8 @@ LOG_MODULE_REGISTER(sa818_audio, LOG_LEVEL_INF);
 #define TEST_TONE_MIN_FREQ_HZ 100
 #define TEST_TONE_MAX_FREQ_HZ 3000
 #define TEST_TONE_MAX_DURATION_MS 3600000 /* 1 hour */
+#define SWEEP_MIN_DURATION_MS 1000        /* fastest meaningful sweep cycle */
+#define SWEEP_MAX_DURATION_MS 60000       /* longest sweep cycle */
 
 /* Forward declarations */
 static void test_tone_work_handler(struct k_work *work);
@@ -215,6 +217,7 @@ static void test_tone_work_handler(struct k_work *work) {
       LOG_INF("Test tone duration expired");
       data->test_tone_active = false;
       data->audio_tx_enabled = false;
+      data->sweep_active = false;
 
       /* Reset DAC to midpoint before stopping */
       reset_dac_to_midpoint(cfg);
@@ -248,6 +251,21 @@ static void test_tone_work_handler(struct k_work *work) {
     data->audio_tx_enabled = false;
     k_mutex_unlock(&data->lock);
     return;
+  }
+
+  /* Frequency sweep: linearly interpolate the tone frequency across the cycle,
+   * then loop back to the start frequency and repeat endlessly. */
+  if (data->sweep_active) {
+    int64_t elapsed_ms = k_uptime_get() - data->sweep_start_time;
+    if (elapsed_ms >= static_cast<int64_t>(data->sweep_duration_ms)) {
+      /* Cycle complete — restart from the start frequency. */
+      data->sweep_start_time = k_uptime_get();
+      elapsed_ms = 0;
+      LOG_DBG("Frequency sweep looping, restarting from %u Hz", data->sweep_start_freq);
+    }
+    float progress = static_cast<float>(elapsed_ms) / static_cast<float>(data->sweep_duration_ms);
+    float freq_range = static_cast<float>(data->sweep_end_freq - data->sweep_start_freq);
+    data->test_tone_freq = data->sweep_start_freq + static_cast<uint16_t>(progress * freq_range);
   }
 
   /* Update phase for next sample */
@@ -361,8 +379,9 @@ sa818_result sa818_audio_stop_test_tone(const struct device *dev) {
     return SA818_OK;
   }
 
-  /* Stop test tone */
+  /* Stop test tone (and any active sweep) */
   data->test_tone_active = false;
+  data->sweep_active = false;
   k_work_cancel_delayable(&data->test_tone_work);
 
   /* Reset DAC to midpoint before disabling TX path */
@@ -375,6 +394,71 @@ sa818_result sa818_audio_stop_test_tone(const struct device *dev) {
   LOG_INF("Test tone stopped");
 
   k_mutex_unlock(&data->lock);
+
+  return SA818_OK;
+}
+
+sa818_result sa818_audio_generate_sweep(const struct device *dev, uint16_t start_freq_hz, uint16_t end_freq_hz, uint32_t duration_ms, uint8_t amplitude) {
+  if (!dev || !device_is_ready(dev)) {
+    return SA818_ERROR_INVALID_DEVICE;
+  }
+
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+
+  /* Validate parameters */
+  if (start_freq_hz < TEST_TONE_MIN_FREQ_HZ || start_freq_hz > TEST_TONE_MAX_FREQ_HZ || end_freq_hz < TEST_TONE_MIN_FREQ_HZ ||
+      end_freq_hz > TEST_TONE_MAX_FREQ_HZ) {
+    LOG_ERR("Invalid frequency range: %u-%u Hz (valid: %u-%u Hz)", start_freq_hz, end_freq_hz, TEST_TONE_MIN_FREQ_HZ, TEST_TONE_MAX_FREQ_HZ);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  if (end_freq_hz <= start_freq_hz) {
+    LOG_ERR("End frequency (%u Hz) must be greater than start frequency (%u Hz)", end_freq_hz, start_freq_hz);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  if (duration_ms < SWEEP_MIN_DURATION_MS || duration_ms > SWEEP_MAX_DURATION_MS) {
+    LOG_ERR("Invalid sweep duration: %u ms (valid: %u-%u ms)", duration_ms, SWEEP_MIN_DURATION_MS, SWEEP_MAX_DURATION_MS);
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  if (!cfg->audio_out_dev || !device_is_ready(cfg->audio_out_dev)) {
+    LOG_ERR("DAC device not available");
+    return SA818_ERROR_DAC;
+  }
+
+  k_mutex_lock(&data->lock, K_FOREVER);
+
+  /* Stop any existing test tone or sweep */
+  if (data->test_tone_active) {
+    LOG_WRN("Stopping existing test tone/sweep");
+    data->test_tone_active = false;
+    k_work_cancel_delayable(&data->test_tone_work);
+  }
+
+  /* Initialize sweep state. The sweep runs continuously (no end time); the
+   * work handler interpolates the frequency and loops back at cycle end. */
+  data->test_tone_freq = start_freq_hz;
+  data->test_tone_amplitude = amplitude;
+  data->test_tone_phase = 0.0f;
+  data->test_tone_end_time = 0;
+  data->test_tone_active = true;
+  data->sweep_active = true;
+  data->sweep_start_freq = start_freq_hz;
+  data->sweep_end_freq = end_freq_hz;
+  data->sweep_duration_ms = duration_ms;
+  data->sweep_start_time = k_uptime_get();
+
+  /* Enable TX audio path */
+  data->audio_tx_enabled = true;
+
+  LOG_INF("Starting frequency sweep: %u-%u Hz over %u ms, amplitude %u", start_freq_hz, end_freq_hz, duration_ms, amplitude);
+
+  k_mutex_unlock(&data->lock);
+
+  /* Start work handler (first sample ASAP; subsequent samples self-timed) */
+  k_work_schedule(&data->test_tone_work, K_NO_WAIT);
 
   return SA818_OK;
 }
