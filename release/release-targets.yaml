@@ -1,0 +1,18 @@
+# Copyright (c) 2026 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+#
+# Declarative release targets (spec Ansatz A). One entry per board/variant.
+# The release workflow iterates this list. A new board = one entry here.
+#   name      -> asset basename (fm-sa818-2m -> fm-sa818-2m.bin/.elf/.native_sim)
+#   board     -> west -b <board>
+#   band      -> selects release/overlays/band_<band>.overlay (vhf|uhf)
+#   artifacts -> firmware (real .bin/.elf) and/or native_sim (static .native_sim)
+targets:
+  - name: fm-sa818-2m
+    board: fm_board
+    band: vhf
+    artifacts: [firmware, native_sim]
+  - name: fm-sa818-70cm
+    board: fm_board
+    band: uhf
+    artifacts: [firmware, native_sim]
