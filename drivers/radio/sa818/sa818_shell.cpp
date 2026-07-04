@@ -493,7 +493,7 @@ static int cmd_sa818_test_sweep(const struct shell *shell, size_t argc, char **a
     duration_ms = static_cast<uint32_t>(duration);
   }
 
-  uint8_t amplitude = 128; /* default 50 %% */
+  uint8_t amplitude = 128; /* default 50% */
   if (argc >= 5) {
     int amp = atoi(argv[4]);
     if (amp < 0 || amp > 255) {
