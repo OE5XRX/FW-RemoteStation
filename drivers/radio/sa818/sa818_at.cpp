@@ -151,6 +151,12 @@ static sa818_result uart_read_response(struct sa818_data *data, char *response, 
       }
     }
 
+    /* Buffer full without a newline: return the truncated line (SA818_OK below)
+     * instead of blocking on k_sem_take for a terminator that will not fit. */
+    if (pos >= response_len - 1) {
+      break;
+    }
+
     int32_t remaining = static_cast<int32_t>(timeout_ms) - static_cast<int32_t>(k_uptime_get() - start);
     if (remaining <= 0) {
       LOG_ERR("UART read timeout");
