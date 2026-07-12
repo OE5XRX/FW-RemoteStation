@@ -9,15 +9,15 @@ tests:
     # Build test - verifies USB Audio compiles for fm_board
     build_only: true
     platform_allow:
-      - fm_board/stm32f302xc
+      - fm_board/stm32u575xx
     tags:
       - usb
       - audio
-    
+
   fm.usb_audio.stream:
     # Runtime test on fm_board with USB Audio enabled
     platform_allow:
-      - fm_board/stm32f302xc
+      - fm_board/stm32u575xx
     harness: pytest
     harness_config:
       pytest_root:
@@ -27,4 +27,4 @@ tests:
       - audio
       - hardware
     integration_platforms:
-      - fm_board/stm32f302xc
+      - fm_board/stm32u575xx
