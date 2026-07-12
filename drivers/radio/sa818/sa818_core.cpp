@@ -89,7 +89,8 @@ static int sa818_init(const struct device *dev) {
 
   /* Initialize synchronization primitives */
   k_mutex_init(&data->lock);
-  k_sem_init(&data->at_response_sem, 0, 1);
+  ring_buf_init(&data->at_rx_rb, sizeof(data->at_rx_rb_buf), data->at_rx_rb_buf);
+  k_sem_init(&data->at_rx_sem, 0, 1);
 
   /* Initialize device state */
   data->device_power = SA818_DEVICE_OFF;
@@ -99,7 +100,13 @@ static int sa818_init(const struct device *dev) {
   data->audio_rx_enabled = false;
   data->audio_tx_enabled = false;
   data->current_volume = 4; // Default mid-level
-  data->at_response_len = 0;
+  data->at_rx_overrun = false;
+
+  ret = sa818_at_uart_init(dev);
+  if (ret != 0) {
+    LOG_ERR("SA818 AT UART init failed: %d", ret);
+    return ret;
+  }
 
   /* Give hardware time to stabilize */
   k_msleep(SA818_INIT_DELAY_MS);

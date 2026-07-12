@@ -18,6 +18,7 @@
 #include <zephyr/drivers/dac.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/ring_buffer.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,8 @@ extern "C" {
 #define SA818_AT_TIMEOUT_MS 2000
 #define SA818_AT_RESPONSE_MAX_LEN 128
 #define SA818_UART_BAUDRATE 9600
+/* RX ring buffer: > SA818_AT_RESPONSE_MAX_LEN (128) with burst headroom */
+#define SA818_AT_RX_RB_SIZE 256
 
 /* Initialization delays */
 #define SA818_INIT_DELAY_MS 10
@@ -75,9 +78,10 @@ struct sa818_data {
 
   /* AT Command synchronization */
   struct k_mutex lock;
-  struct k_sem at_response_sem;
-  char at_response_buf[SA818_AT_RESPONSE_MAX_LEN];
-  size_t at_response_len;
+  struct ring_buf at_rx_rb; /* ISR -> reader byte stream */
+  uint8_t at_rx_rb_buf[SA818_AT_RX_RB_SIZE];
+  struct k_sem at_rx_sem; /* "data available", binary (max count 1) */
+  bool at_rx_overrun;     /* ISR sets on ring-buffer overflow */
 
   /* Audio state */
   bool audio_rx_enabled;
@@ -108,6 +112,8 @@ struct sa818_data {
  * @return 0 on success, negative errno on failure
  */
 int sa818_gpio_init(const struct sa818_config *cfg);
+
+int sa818_at_uart_init(const struct device *dev);
 
 #ifdef __cplusplus
 }
