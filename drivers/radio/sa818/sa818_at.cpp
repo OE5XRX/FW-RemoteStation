@@ -11,6 +11,7 @@
 
 #include "sa818_priv.h"
 
+#include <errno.h>
 #include <sa818/sa818_at.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,67 @@
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(sa818_at, LOG_LEVEL_DBG);
+
+static void sa818_uart_isr(const struct device *uart, void *user_data) {
+  struct sa818_data *data = static_cast<struct sa818_data *>(user_data);
+  if (!uart || !data) {
+    return;
+  }
+
+  while (true) {
+    uart_irq_update(uart);
+    if (!uart_irq_is_pending(uart)) {
+      break;
+    }
+    if (!uart_irq_rx_ready(uart)) {
+      break; /* only RX IRQ is enabled; anything else -> leave, do not spin */
+    }
+
+    uint8_t buf[16];
+    int n = uart_fifo_read(uart, buf, sizeof(buf));
+    if (n <= 0) {
+      break;
+    }
+    if (ring_buf_put(&data->at_rx_rb, buf, n) < static_cast<uint32_t>(n)) {
+      data->at_rx_overrun = true;
+    }
+    k_sem_give(&data->at_rx_sem);
+  }
+}
+
+int sa818_at_uart_init(const struct device *dev) {
+  if (!dev) {
+    return -EINVAL;
+  }
+
+  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
+  struct sa818_data *data = static_cast<struct sa818_data *>(dev->data);
+
+  int ret = uart_irq_callback_user_data_set(cfg->uart, sa818_uart_isr, data);
+  if (ret != 0) {
+    LOG_ERR("SA818 UART IRQ callback registration failed: %d", ret);
+    return ret;
+  }
+
+  uart_irq_rx_enable(cfg->uart);
+  return 0;
+}
+
+static void uart_flush_rx(struct sa818_data *data) {
+  if (!data) {
+    return;
+  }
+  /* Called under data->lock right before TX. In practice the line is idle here
+   * (the SA818 only replies to commands, never unsolicited), but ring_buf_reset
+   * is not part of ring_buf's lock-free single-producer/single-consumer
+   * contract and the mutex does not exclude the RX ISR, so mask interrupts for
+   * the brief reset to make it atomic w.r.t. sa818_uart_isr. */
+  unsigned int key = irq_lock();
+  ring_buf_reset(&data->at_rx_rb);
+  k_sem_reset(&data->at_rx_sem);
+  data->at_rx_overrun = false;
+  irq_unlock(key);
+}
 
 /**
  * @brief Write AT command to UART
@@ -51,62 +113,61 @@ static sa818_result uart_write_command(const struct device *uart, std::string_vi
 }
 
 /**
- * @brief Read UART response with timeout
+ * @brief Read one AT response line from the ISR-fed RX ring buffer
  *
- * Reads characters from UART using uart_poll_in() until newline is received
- * or timeout expires. Implements timeout using k_uptime_get() and k_uptime_delta().
+ * Drains bytes from the RX ring buffer (filled by sa818_uart_isr) until a
+ * newline terminates the line or the timeout expires, blocking on the RX
+ * semaphore between chunks. Carriage returns are skipped; a full buffer without
+ * a newline returns the truncated line. Timeout is measured via k_uptime_get().
  *
- * @param uart UART device
+ * @param data SA818 driver data (owns the RX ring buffer and semaphore)
  * @param response Buffer to store response
  * @param response_len Size of response buffer
  * @param timeout_ms Timeout in milliseconds
  * @return SA818_OK on success, SA818_ERROR_TIMEOUT on timeout, SA818_ERROR_INVALID_PARAM on invalid params
  */
-static sa818_result uart_read_response(const struct device *uart, char *response, size_t response_len, uint32_t timeout_ms) {
-  if (!uart || !response || response_len == 0) {
+static sa818_result uart_read_response(struct sa818_data *data, char *response, size_t response_len, uint32_t timeout_ms) {
+  if (!data || !response || response_len == 0) {
     return SA818_ERROR_INVALID_PARAM;
   }
 
-  const int64_t start_time = k_uptime_get();
-  int64_t current_time = start_time;
-  size_t pos = 0;
-
-  /* Clear response buffer */
   memset(response, 0, response_len);
+  size_t pos = 0;
+  const int64_t start = k_uptime_get();
 
   while (pos < response_len - 1) {
-    /* Check timeout */
-    current_time = k_uptime_get();
-    int64_t elapsed = current_time - start_time;
-    if (elapsed >= timeout_ms) {
-      LOG_ERR("UART read timeout after %lld ms", elapsed);
-      return SA818_ERROR_TIMEOUT;
-    }
-
-    /* Try to read one character */
-    unsigned char c;
-    int ret = uart_poll_in(uart, &c);
-
-    if (ret == 0) {
-      /* Character received */
+    uint8_t c;
+    while (ring_buf_get(&data->at_rx_rb, &c, 1) == 1) {
       if (c == '\n') {
-        /* Newline marks end of response */
         response[pos] = '\0';
         return SA818_OK;
-      } else if (c == '\r') {
-        /* Skip carriage return */
-        continue;
-      } else {
-        /* Store character */
-        response[pos++] = c;
       }
-    } else {
-      /* No data available, sleep briefly to avoid busy-wait */
-      k_sleep(K_MSEC(1));
+      if (c == '\r') {
+        continue;
+      }
+      response[pos++] = c;
+      if (pos >= response_len - 1) {
+        break;
+      }
+    }
+
+    /* Buffer full without a newline: return the truncated line (SA818_OK below)
+     * instead of blocking on k_sem_take for a terminator that will not fit. */
+    if (pos >= response_len - 1) {
+      break;
+    }
+
+    int32_t remaining = static_cast<int32_t>(timeout_ms) - static_cast<int32_t>(k_uptime_get() - start);
+    if (remaining <= 0) {
+      LOG_ERR("UART read timeout");
+      return SA818_ERROR_TIMEOUT;
+    }
+    if (k_sem_take(&data->at_rx_sem, K_MSEC(remaining)) != 0) {
+      LOG_ERR("UART read timeout");
+      return SA818_ERROR_TIMEOUT;
     }
   }
 
-  /* Buffer full without receiving newline */
   response[response_len - 1] = '\0';
   return SA818_OK;
 }
@@ -127,6 +188,8 @@ sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, ch
 
   k_mutex_lock(&data->lock, K_FOREVER);
 
+  uart_flush_rx(data);
+
   /* Send command over UART */
   LOG_DBG("TX: %s", cmd);
   sa818_result ret = uart_write_command(cfg->uart, cmd);
@@ -137,11 +200,20 @@ sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, ch
   }
 
   /* Read response from UART */
-  ret = uart_read_response(cfg->uart, response, response_len, timeout_ms);
+  ret = uart_read_response(data, response, response_len, timeout_ms);
   if (ret != SA818_OK) {
     LOG_ERR("AT command timeout: %s", cmd);
     k_mutex_unlock(&data->lock);
     return ret;
+  }
+
+  /* at_rx_overrun is written by sa818_uart_isr; read it under irq_lock so the
+   * thread-side load cannot race the ISR store. */
+  unsigned int key = irq_lock();
+  bool overrun = data->at_rx_overrun;
+  irq_unlock(key);
+  if (overrun) {
+    LOG_WRN("SA818 RX ring-buffer overrun; response may be truncated");
   }
 
   LOG_DBG("RX: %s", response);
