@@ -73,6 +73,10 @@ static void uart_flush_rx(struct sa818_data *data) {
   if (!data) {
     return;
   }
+  /* Called under data->lock right before TX, while the line is idle: the SA818
+   * sends no unsolicited traffic and only replies to commands, so no ISR
+   * ring_buf_put is in flight here. The RX IRQ is intentionally left enabled
+   * (the reset is not otherwise atomic against a concurrent producer). */
   ring_buf_reset(&data->at_rx_rb);
   k_sem_reset(&data->at_rx_sem);
   data->at_rx_overrun = false;

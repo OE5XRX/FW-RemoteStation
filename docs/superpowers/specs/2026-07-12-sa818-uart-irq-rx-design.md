@@ -13,6 +13,15 @@ genuine improvement, and the full `tests/sim_shell` suite (79 cases) passes on
 `native_sim/native/64`. However the implementation carries avoidable
 complexity and one hardware-robustness risk:
 
+> **Note on committed history.** That first IRQ conversion existed only as
+> **uncommitted working-tree state** — a byte-wise `k_msgq` implementation
+> (`at_rx_msgq`, `at_irq_enabled`) with silent drop-oldest overflow. It was
+> never committed on its own; the cleanup below superseded it in the same
+> commit. The `git` baseline this work is diffed against (`312d2b8`) is
+> therefore still **poll-based**, so the resulting commit reads as
+> poll → `ring_buf`/IRQ even though the design was developed against the
+> intermediate `k_msgq` version described in points 2–4 below.
+
 1. **ISR can spin on real hardware.** The ISR loops
    `while (true) { uart_irq_update; if (!pending) break; if (!rx_ready) continue; ... }`.
    On `native_sim` `is_pending == rx_ready`, so it is harmless there. On the
