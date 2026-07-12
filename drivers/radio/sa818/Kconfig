@@ -11,8 +11,12 @@ config SA818
   depends on GPIO
   depends on ADC
   depends on DAC
+  select UART_INTERRUPT_DRIVEN
   help
     Driver for SA818 / SA818S UART-controlled FM transceiver modules.
+    The AT-command RX path is interrupt-driven; UART_INTERRUPT_DRIVEN
+    is required (selected automatically) since the ISR-fed ring_buf
+    read path has no polling fallback.
 
 if SA818
 
