@@ -187,7 +187,7 @@ int main(void) {
 
 ```bash
 # Build with USB Audio
-west build -p -b fm_board/stm32f302xc app
+west build -p always -b fm_board/stm32u575xx app
 
 # Flash
 west flash
