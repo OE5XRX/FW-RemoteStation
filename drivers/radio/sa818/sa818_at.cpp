@@ -73,13 +73,16 @@ static void uart_flush_rx(struct sa818_data *data) {
   if (!data) {
     return;
   }
-  /* Called under data->lock right before TX, while the line is idle: the SA818
-   * sends no unsolicited traffic and only replies to commands, so no ISR
-   * ring_buf_put is in flight here. The RX IRQ is intentionally left enabled
-   * (the reset is not otherwise atomic against a concurrent producer). */
+  /* Called under data->lock right before TX. In practice the line is idle here
+   * (the SA818 only replies to commands, never unsolicited), but ring_buf_reset
+   * is not part of ring_buf's lock-free single-producer/single-consumer
+   * contract and the mutex does not exclude the RX ISR, so mask interrupts for
+   * the brief reset to make it atomic w.r.t. sa818_uart_isr. */
+  unsigned int key = irq_lock();
   ring_buf_reset(&data->at_rx_rb);
   k_sem_reset(&data->at_rx_sem);
   data->at_rx_overrun = false;
+  irq_unlock(key);
 }
 
 /**
@@ -110,12 +113,14 @@ static sa818_result uart_write_command(const struct device *uart, std::string_vi
 }
 
 /**
- * @brief Read UART response with timeout
+ * @brief Read one AT response line from the ISR-fed RX ring buffer
  *
- * Reads characters from UART using uart_poll_in() until newline is received
- * or timeout expires. Implements timeout using k_uptime_get() and k_uptime_delta().
+ * Drains bytes from the RX ring buffer (filled by sa818_uart_isr) until a
+ * newline terminates the line or the timeout expires, blocking on the RX
+ * semaphore between chunks. Carriage returns are skipped; a full buffer without
+ * a newline returns the truncated line. Timeout is measured via k_uptime_get().
  *
- * @param uart UART device
+ * @param data SA818 driver data (owns the RX ring buffer and semaphore)
  * @param response Buffer to store response
  * @param response_len Size of response buffer
  * @param timeout_ms Timeout in milliseconds
@@ -196,7 +201,12 @@ sa818_result sa818_at_send_command(const struct device *dev, const char *cmd, ch
     return ret;
   }
 
-  if (data->at_rx_overrun) {
+  /* at_rx_overrun is written by sa818_uart_isr; read it under irq_lock so the
+   * thread-side load cannot race the ISR store. */
+  unsigned int key = irq_lock();
+  bool overrun = data->at_rx_overrun;
+  irq_unlock(key);
+  if (overrun) {
     LOG_WRN("SA818 RX ring-buffer overrun; response may be truncated");
   }
 
