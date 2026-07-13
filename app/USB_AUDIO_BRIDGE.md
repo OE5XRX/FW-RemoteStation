@@ -129,7 +129,7 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
 ### UAC2 Callbacks
 
 ```cpp
-static const struct uac2_ops sa818_uac2_ops = {
+static const struct uac2_ops uac2_ops = {
     .sof_cb = uac2_sof_cb,                    // Start of Frame (1ms): sendet USB IN, aktualisiert Feedback-Regler
     .terminal_update_cb = uac2_terminal_update_cb,  // Terminal enable/disable
     .get_recv_buf = uac2_get_recv_buf,        // Buffer für USB OUT

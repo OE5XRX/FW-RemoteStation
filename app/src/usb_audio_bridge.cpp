@@ -50,6 +50,13 @@ LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
 #define USB_BUF_COUNT 8
 #define USB_BUF_SIZE 32 /* 16 samples max per SOF */
 
+/* Max bytes for one async IN isochronous packet == the IN endpoint's
+ * wMaxPacketSize. The clock is free-running (not SOF-synchronized), so the UAC2
+ * class sizes the endpoint for (nominal + 1) samples per frame. The per-SOF send
+ * MUST NOT exceed this or the UDC emits an oversized (babble) packet. This caps
+ * only the SEND; USB_BUF_SIZE (pool storage) may stay larger. */
+#define USB_IN_MAX_PACKET_BYTES ((USB_SAMPLES_PER_SOF + 1) * AUDIO_BYTES_PER_SAMPLE)
+
 /*
  * Terminal IDs the UAC2 class reports to the application callbacks.
  *
@@ -193,8 +200,8 @@ static void uac2_sof_cb(const struct device *dev, void *user_data) {
   bool rx = ctx->rx_enabled;
   size_t avail = ring_buf_size_get(&ctx->rx_ring);
   size_t to_send = avail - (avail % AUDIO_BYTES_PER_SAMPLE);
-  if (to_send > USB_BUF_SIZE) {
-    to_send = USB_BUF_SIZE - (USB_BUF_SIZE % AUDIO_BYTES_PER_SAMPLE);
+  if (to_send > USB_IN_MAX_PACKET_BYTES) {
+    to_send = USB_IN_MAX_PACKET_BYTES;
   }
 
   if (rx && to_send > 0) {
