@@ -109,9 +109,6 @@ struct usb_audio_bridge_ctx {
 
 static struct usb_audio_bridge_ctx bridge_ctx;
 
-/* Forward declarations */
-static void usb_in_thread_func(void *p1, void *p2, void *p3);
-
 /**
  * @brief SA818 TX audio request callback
  *
@@ -171,6 +168,9 @@ static void sa818_rx_data_cb(const struct device *dev, const uint8_t *buffer, si
 
 /**
  * @brief UAC2 SOF (Start of Frame) callback
+ *
+ * All UAC2 ops callbacks (this one included) run serially on Zephyr's
+ * usbd_thread, so ctx->feedback needs no separate lock of its own.
  */
 static void uac2_sof_cb(const struct device *dev, void *user_data) {
   struct usb_audio_bridge_ctx *ctx = (struct usb_audio_bridge_ctx *)user_data;
@@ -185,6 +185,34 @@ static void uac2_sof_cb(const struct device *dev, void *user_data) {
 
   if (tx) {
     ctx->feedback.update(tx_used, TX_RING_SIZE / AUDIO_BYTES_PER_SAMPLE);
+  }
+
+  /* IN capture: send whatever whole samples we have this SOF. As an async IN
+   * endpoint the variable packet size itself conveys the rate; no feedback. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool rx = ctx->rx_enabled;
+  size_t avail = ring_buf_size_get(&ctx->rx_ring);
+  size_t to_send = avail - (avail % AUDIO_BYTES_PER_SAMPLE);
+  if (to_send > USB_BUF_SIZE) {
+    to_send = USB_BUF_SIZE - (USB_BUF_SIZE % AUDIO_BYTES_PER_SAMPLE);
+  }
+
+  if (rx && to_send > 0) {
+    uint8_t buf_idx = ctx->usb_in_buf_idx;
+    ctx->usb_in_buf_idx = (ctx->usb_in_buf_idx + 1) % USB_BUF_COUNT;
+    void *buf = ctx->usb_in_buf_pool[buf_idx];
+    uint32_t bytes_read = ring_buf_get(&ctx->rx_ring, (uint8_t *)buf, to_send);
+    k_mutex_unlock(&ctx->lock);
+
+    /* -EAGAIN just means the host has not drained the previous IN packet yet;
+     * drop silently (rate-limited for genuinely unexpected errors) so we never
+     * flood the log and starve the USB thread. */
+    int ret = usbd_uac2_send(ctx->uac2_dev, USB_IN_TERMINAL_ID, buf, bytes_read);
+    if (ret != 0 && ret != -EAGAIN) {
+      LOG_WRN_RATELIMIT("USB IN send failed: %d", ret);
+    }
+  } else {
+    k_mutex_unlock(&ctx->lock);
   }
 }
 
@@ -323,66 +351,6 @@ static const struct uac2_ops uac2_ops = {
 };
 
 /**
- * @brief USB IN streaming thread
- */
-static void usb_in_thread_func(void *p1, void *p2, void *p3) {
-  struct usb_audio_bridge_ctx *ctx = (struct usb_audio_bridge_ctx *)p1;
-
-  ARG_UNUSED(p2);
-  ARG_UNUSED(p3);
-
-  while (true) {
-    k_msleep(1); /* Run at ~1kHz (USB SOF rate) */
-
-    k_mutex_lock(&ctx->lock, K_FOREVER);
-
-    if (!ctx->rx_enabled) {
-      k_mutex_unlock(&ctx->lock);
-      continue;
-    }
-
-    /* Check if we have enough data to send */
-    if (ring_buf_size_get(&ctx->rx_ring) >= USB_BYTES_PER_SOF) {
-      /* Allocate buffer from IN pool - mutex already held */
-      uint8_t buf_idx = ctx->usb_in_buf_idx;
-      ctx->usb_in_buf_idx = (ctx->usb_in_buf_idx + 1) % USB_BUF_COUNT;
-      void *buf = ctx->usb_in_buf_pool[buf_idx];
-
-      /* Pull data from RX ring buffer */
-      uint32_t bytes_read = ring_buf_get(&ctx->rx_ring, (uint8_t *)buf, USB_BYTES_PER_SOF);
-
-      k_mutex_unlock(&ctx->lock);
-
-      /* Check if we got expected amount of data */
-      if (bytes_read == USB_BYTES_PER_SOF) {
-        /* Send to USB host */
-        int ret = usbd_uac2_send(ctx->uac2_dev, USB_IN_TERMINAL_ID, buf, bytes_read);
-        /* -EAGAIN means the host has not collected the previous isochronous IN
-         * packets yet (host idle / not actively consuming the capture stream).
-         * That is expected backpressure -- drop this frame silently. Logging it
-         * per SOF floods the log subsystem and starves the lower-priority USB
-         * thread, which makes the host reset (re-enumerate) the whole device.
-         * Only rate-limit genuinely unexpected errors. */
-        if (ret != 0 && ret != -EAGAIN) {
-          LOG_WRN_RATELIMIT("USB IN send failed: %d", ret);
-        } else {
-          LOG_DBG("USB IN: %u bytes sent", bytes_read);
-        }
-      } else if (bytes_read > 0) {
-        LOG_WRN_RATELIMIT("USB IN: partial read %u/%u bytes, frame dropped", bytes_read, USB_BYTES_PER_SOF);
-      }
-    } else {
-      k_mutex_unlock(&ctx->lock);
-    }
-  }
-}
-
-/* USB IN thread - priority 7. Created NOT started (SYS_FOREVER_MS delay): the
- * thread body locks ctx->lock and uses ctx->uac2_dev, which are only valid once
- * usb_audio_bridge_register_ops() has run. usb_audio_bridge_start() starts it. */
-K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, SYS_FOREVER_MS);
-
-/**
  * @brief Register UAC2 ops and prepare the bridge context.
  *
  * Must run BEFORE usbd_init() (the UAC2 class init hook rejects the config with
@@ -500,9 +468,6 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
   LOG_INF("USB Audio Bridge started (8kHz, 16-bit, mono)");
   LOG_INF("  USB OUT -> TX Ring (%u bytes) -> SA818 TX", TX_RING_SIZE);
   LOG_INF("  SA818 RX -> RX Ring (%u bytes) -> USB IN", RX_RING_SIZE);
-
-  /* Start USB IN thread now that context is fully initialized */
-  k_thread_start(usb_in_tid);
 
   return 0;
 }
