@@ -9,15 +9,10 @@ These tests require actual hardware (fm_board) with USB connection.
 
 import pytest
 
-
-@pytest.fixture(scope="session")
-def dut(request):
-    """
-    Device Under Test fixture.
-    Provides access to the hardware device for testing.
-    """
-    # The DUT is provided by Twister's hardware testing framework
-    return request.config.dut
+# The `dut` fixture (a twister_harness DeviceAdapter, with readlines()/write())
+# is provided automatically by the pytest-twister-harness plugin when the tests
+# run under Twister. Do NOT redefine it here — a local fixture would shadow the
+# plugin's and break access to the real device.
 
 
 @pytest.fixture
