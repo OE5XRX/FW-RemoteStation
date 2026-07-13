@@ -307,13 +307,19 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
       if (bytes_read == USB_BYTES_PER_SOF) {
         /* Send to USB host */
         int ret = usbd_uac2_send(ctx->uac2_dev, USB_IN_TERMINAL_ID, buf, bytes_read);
-        if (ret != 0) {
-          LOG_WRN("USB IN send failed: %d", ret);
+        /* -EAGAIN means the host has not collected the previous isochronous IN
+         * packets yet (host idle / not actively consuming the capture stream).
+         * That is expected backpressure -- drop this frame silently. Logging it
+         * per SOF floods the log subsystem and starves the lower-priority USB
+         * thread, which makes the host reset (re-enumerate) the whole device.
+         * Only rate-limit genuinely unexpected errors. */
+        if (ret != 0 && ret != -EAGAIN) {
+          LOG_WRN_RATELIMIT("USB IN send failed: %d", ret);
         } else {
           LOG_DBG("USB IN: %u bytes sent", bytes_read);
         }
       } else if (bytes_read > 0) {
-        LOG_WRN("USB IN: partial read %u/%u bytes, frame dropped", bytes_read, USB_BYTES_PER_SOF);
+        LOG_WRN_RATELIMIT("USB IN: partial read %u/%u bytes, frame dropped", bytes_read, USB_BYTES_PER_SOF);
       }
     } else {
       k_mutex_unlock(&ctx->lock);
