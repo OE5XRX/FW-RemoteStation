@@ -22,6 +22,14 @@ CONFIG_REGULATOR=y
 
 # USB Configuration
 CONFIG_USB_DEVICE_STACK_NEXT=y
+# The STM32U575 OTG is full-speed only (DT maximum-speed = "full-speed"). The
+# STM32 UDC Kconfig selects UDC_DRIVER_HAS_HIGH_SPEED_SUPPORT, which otherwise
+# defaults the device stack to High-Speed. Force full-speed to match the hardware
+# and drop the unused high-speed descriptor/config support. Disabling the
+# high-speed chirp is also what unlocks USBD_MAX_SPEED_FULL (its dependency is
+# !UDC_DRIVER_HIGH_SPEED_SUPPORT_ENABLED).
+CONFIG_UDC_DRIVER_HIGH_SPEED_SUPPORT_ENABLED=n
+CONFIG_USBD_MAX_SPEED_FULL=y
 CONFIG_SAMPLE_USBD_VID=0x2FE3
 CONFIG_SAMPLE_USBD_PID=0x0012
 CONFIG_SAMPLE_USBD_PRODUCT="FM Transceiver Board"
