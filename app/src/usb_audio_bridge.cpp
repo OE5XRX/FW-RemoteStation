@@ -314,15 +314,14 @@ K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7
  * NOTE: This function must only be called once during system initialization
  * from a single thread. It is not thread-safe for concurrent calls.
  */
-extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struct device *uac2_dev) {
+extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
   struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
 
-  if (ctx->sa818_dev != NULL) {
-    LOG_WRN("USB Audio Bridge already initialized");
+  if (ctx->uac2_dev != NULL) {
+    LOG_WRN("USB Audio Bridge ops already registered");
     return 0;
   }
 
-  ctx->sa818_dev = sa818_dev;
   ctx->uac2_dev = uac2_dev;
 
   /* Initialize ring buffers */
@@ -338,8 +337,28 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   ctx->usb_out_buf_idx = 0;
   ctx->usb_in_buf_idx = 0;
 
-  /* Register UAC2 callbacks */
+  /* Register UAC2 callbacks. This MUST happen before usbd_init(): the UAC2
+   * class init hook returns -EINVAL ("Application did not register UAC2 ops")
+   * otherwise, which fails the whole USB device init and prevents enumeration. */
   usbd_uac2_set_ops(uac2_dev, &uac2_ops, ctx);
+
+  return 0;
+}
+
+extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
+  struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
+
+  if (ctx->uac2_dev == NULL) {
+    LOG_ERR("usb_audio_bridge_register_ops() must be called first");
+    return -EINVAL;
+  }
+
+  if (ctx->sa818_dev != NULL) {
+    LOG_WRN("USB Audio Bridge already started");
+    return 0;
+  }
+
+  ctx->sa818_dev = sa818_dev;
 
   /* Register SA818 audio callbacks */
   struct sa818_audio_callbacks sa818_cbs = {
@@ -351,6 +370,7 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   sa818_result ret = sa818_audio_stream_register(sa818_dev, &sa818_cbs);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to register SA818 audio callbacks: %d", ret);
+    ctx->sa818_dev = NULL;
     return -EIO;
   }
 
@@ -364,10 +384,11 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   ret = sa818_audio_stream_start(sa818_dev, &format);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to start SA818 audio streaming: %d", ret);
+    ctx->sa818_dev = NULL;
     return -EIO;
   }
 
-  LOG_INF("USB Audio Bridge initialized (8kHz, 16-bit, mono)");
+  LOG_INF("USB Audio Bridge started (8kHz, 16-bit, mono)");
   LOG_INF("  USB OUT -> TX Ring (%u bytes) -> SA818 TX", TX_RING_SIZE);
   LOG_INF("  SA818 RX -> RX Ring (%u bytes) -> USB IN", RX_RING_SIZE);
 
