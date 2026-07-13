@@ -12,6 +12,7 @@
  */
 
 #include <sa818/sa818.h>
+#include <sa818/sa818_audio.h>
 #include <sa818/sa818_audio_stream.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
@@ -44,28 +45,31 @@ LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
 #define USB_BUF_SIZE 32 /* 16 samples max per SOF */
 
 /*
- * Terminal IDs from USB Audio Class 2 (UAC2) descriptors
+ * Terminal IDs the UAC2 class reports to the application callbacks.
  *
- * NOTE:
- *   - UAC2 terminal IDs are assigned by the descriptor generator based on
- *     the order of terminals in the device tree.
- *   - For the current board/device-tree configuration, the UAC2 class
- *     exposes:
- *       * USB OUT terminal for SA818 TX  -> ID 1
- *       * USB IN terminal for SA818 RX   -> ID 4
+ * The class identifies each AudioStreaming interface by the entity ID of its
+ * `linked-terminal` (see usbd_uac2.c: cfg->as_terminals[]). Entity IDs are
+ * assigned in device-tree child order, and the CLOCK SOURCE is entity 1 -- so
+ * the terminals do NOT start at 1. For fm_board.dts the order is:
+ *   aclk=1, usb_out=2, sa818_tx=3, sa818_rx=4, usb_in=5.
+ * The streaming interfaces link to usb_out (OUT) and usb_in (IN), so the class
+ * passes those IDs to get_recv_buf()/data_recv_cb() and expects them in
+ * usbd_uac2_send():
+ *       * USB OUT (host -> SA818 TX)  -> usb_out terminal -> ID 2
+ *       * USB IN  (SA818 RX -> host)  -> usb_in terminal  -> ID 5
  *
  * These values MUST match the actual UAC2 descriptors. If you change the
- * UAC2 audio topology (e.g. add/remove/reorder terminals in the device tree
+ * UAC2 audio topology (e.g. add/remove/reorder entities in the device tree
  * or Kconfig), re-check the generated descriptors and update the defines
  * and static_asserts below accordingly.
  */
-#define USB_OUT_TERMINAL_ID 1 /* USB -> SA818 TX */
-#define USB_IN_TERMINAL_ID 4  /* SA818 RX -> USB */
+#define USB_OUT_TERMINAL_ID 2 /* USB -> SA818 TX (usb_out terminal) */
+#define USB_IN_TERMINAL_ID 5  /* SA818 RX -> USB (usb_in terminal) */
 
 /* Build-time guard: force maintainers to consciously update IDs if they change. */
-static_assert(USB_OUT_TERMINAL_ID == 1, "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
+static_assert(USB_OUT_TERMINAL_ID == 2, "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
                                         "the device tree/descriptors and update this check accordingly.");
-static_assert(USB_IN_TERMINAL_ID == 4, "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
+static_assert(USB_IN_TERMINAL_ID == 5, "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
                                        "the device tree/descriptors and update this check accordingly.");
 
 /**
@@ -182,7 +186,19 @@ static void uac2_terminal_update_cb(const struct device *dev, uint8_t terminal, 
     }
   }
 
+  bool rx = ctx->rx_enabled;
+  bool tx = ctx->tx_enabled;
+  const struct device *sa818 = ctx->sa818_dev;
+
   k_mutex_unlock(&ctx->lock);
+
+  /* Enable/disable the SA818 ADC(RX)/DAC(TX) audio paths to match the active
+   * USB streams. Without this the ADC is never sampled, so rx_ring stays empty
+   * and no capture data ever reaches the host. Called outside ctx->lock to keep
+   * a consistent lock order with the SA818 driver's own lock. */
+  if (sa818 != NULL) {
+    (void)sa818_audio_enable_path(sa818, rx, tx);
+  }
 }
 
 /**
