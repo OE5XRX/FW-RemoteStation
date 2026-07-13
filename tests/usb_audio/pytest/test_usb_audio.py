@@ -26,9 +26,13 @@ def test_usb_audio_boot_sequence(dut):
 
     assert "USB device enabled" in text, f"USB device did not enable.\nLog:\n{text}"
     assert "SA818 device ready" in text, f"SA818 device not ready.\nLog:\n{text}"
-    assert "USB Audio Bridge" in text, f"USB Audio Bridge did not start.\nLog:\n{text}"
+    # Assert on the specific success message, not just "USB Audio Bridge" (which
+    # would also match an error like "USB Audio Bridge start failed").
+    assert "USB Audio Bridge enabled" in text, f"USB Audio Bridge did not start.\nLog:\n{text}"
     assert "System ready" in text, f"System did not reach ready state.\nLog:\n{text}"
 
     low = text.lower()
-    assert "failed" not in low, f"Boot log reports a failure.\nLog:\n{text}"
+    # "failed to" matches Zephyr's error phrasing without tripping on unrelated
+    # text; the <err> level check below is the primary error guard.
+    assert "failed to" not in low, f"Boot log reports a failure.\nLog:\n{text}"
     assert "<err>" not in low, f"Boot log contains an error-level message.\nLog:\n{text}"

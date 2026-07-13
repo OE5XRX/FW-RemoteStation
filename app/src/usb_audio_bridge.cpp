@@ -311,7 +311,10 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
 K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, SYS_FOREVER_MS);
 
 /**
- * @brief Initialize USB Audio Bridge
+ * @brief Register UAC2 ops and prepare the bridge context.
+ *
+ * Must run BEFORE usbd_init() (the UAC2 class init hook rejects the config with
+ * -EINVAL if the ops are not registered yet). See usb_audio_bridge.h.
  *
  * NOTE: This function must only be called once during system initialization
  * from a single thread. It is not thread-safe for concurrent calls.
