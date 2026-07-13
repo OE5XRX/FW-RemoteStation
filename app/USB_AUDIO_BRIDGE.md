@@ -46,19 +46,28 @@ USB Audio Class 2 (UAC2) Integration auf Application-Level.
 
 ## Audio-Datenfluss
 
-**Transmission (USB OUT → SA818 TX)**:
+**Transmission (USB OUT → SA818 TX)**: asynchronous sink with an **explicit
+feedback endpoint** (no `implicit-feedback` in the devicetree). The TX ring
+fill level is regulated by the software `BufferFeedback` PI controller
+(set point = half full); `feedback_cb` reports the current rate correction
+to the host and is mandatory for this interface once `implicit-feedback` is
+removed — the class init fails without it.
 1. Host sendet Audio via USB Audio OUT (Playback)
 2. UAC2 Stack empfängt Daten in `uac2_data_recv_cb()`
 3. Daten werden in TX Ring Buffer geschrieben
 4. `audio_work_handler()` liest aus Ring Buffer
 5. 16-bit PCM wird zu DAC-Wert konvertiert
 6. DAC schreibt zu SA818 TX Modulator
+7. `uac2_feedback_cb()` liefert die von `BufferFeedback` berechnete
+   Korrektur an den Host zurück, sodass der Ring mittig bleibt
 
-**Reception (SA818 RX → USB IN)**:
+**Reception (SA818 RX → USB IN)**: plain **asynchronous capture endpoint**
+(no `implicit-feedback`) — this is what makes the host present it as a
+microphone with a level meter, instead of no capture device at all.
 1. `audio_work_handler()` liest ADC-Wert
 2. ADC-Wert wird zu 16-bit PCM konvertiert
 3. PCM-Sample wird in RX Ring Buffer geschrieben
-4. `usb_in_thread()` liest aus Ring Buffer
+4. `uac2_sof_cb()` sendet pro SOF ein variabel großes Paket aus dem Ring Buffer
 5. Daten werden via `usbd_uac2_send()` gesendet
 6. Host empfängt Audio via USB Audio IN (Capture)
 
@@ -100,7 +109,8 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
 - Verbindet SA818 Audio Callbacks mit UAC2 Events
 - Verwaltet Ring Buffer für USB ↔ SA818
 - Handhabt UAC2 Terminal Activation
-- USB IN Thread für Host-Streaming
+- SOF-getriebenes USB IN Streaming (`uac2_sof_cb()`, kein separater Thread)
+- Software-Feedback-Regler (`BufferFeedback`) für den TX Ring (explicit feedback)
 
 **Ring Buffer**:
 - **TX Ring**: 512 Bytes (256 Samples = 32ms @ 8kHz)
@@ -113,17 +123,19 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
 - **Format**: 16-bit signed PCM, Mono
 - **Processing Rate**: 125µs pro Sample (8kHz)
 - **Work Handler**: Delayable work, läuft mit 8kHz
-- **USB Thread**: Separate Thread für USB IN mit 1ms Periode
+- **USB IN**: SOF-getrieben (`uac2_sof_cb`), ein variabel großes Paket pro SOF (1ms), kein separater Polling-Thread
+- **USB OUT Feedback**: `uac2_feedback_cb` meldet die von `BufferFeedback` (PI-Regler, Sollwert = halb voller TX-Ring) berechnete Korrektur an den Host
 
 ### UAC2 Callbacks
 
 ```cpp
 static const struct uac2_ops sa818_uac2_ops = {
-    .sof_cb = uac2_sof_cb,                    // Start of Frame (1ms)
+    .sof_cb = uac2_sof_cb,                    // Start of Frame (1ms): sendet USB IN, aktualisiert Feedback-Regler
     .terminal_update_cb = uac2_terminal_update_cb,  // Terminal enable/disable
     .get_recv_buf = uac2_get_recv_buf,        // Buffer für USB OUT
     .data_recv_cb = uac2_data_recv_cb,        // USB OUT Daten empfangen
     .buf_release_cb = uac2_buf_release_cb,    // USB IN Buffer freigeben
+    .feedback_cb = uac2_feedback_cb,          // Explicit Feedback für USB OUT (mandatory ohne implicit-feedback)
 };
 ```
 
@@ -310,10 +322,17 @@ putty -serial COM3 -sercfg 115200,8,n,1,N
 - Toleriert USB Bus-Jitter und SOF-Timing-Variationen
 - Vermeidet Buffer-Overflows bei Burst-Transfers
 
-### Warum separate Threads?
-- USB IN erfordert aktives Polling (keine Callback-basierte TX)
-- Work Handler für DAC/ADC läuft mit fester Rate (8kHz)
-- Separation verbessert Timing-Determinismus
+### Warum SOF-getriebenes USB IN statt Polling-Thread?
+- Der Host pollt UAC2-IN ohnehin im 1ms-SOF-Takt; `uac2_sof_cb()` sendet
+  direkt ein passend großes Paket, ohne eigenen Thread
+- Work Handler für DAC/ADC läuft weiterhin mit fester Rate (8kHz)
+- Weniger Kontextwechsel, geringere Latenz als mit separatem Thread
+
+### Warum explicit Feedback statt implicit Feedback (OUT)?
+- `implicit-feedback` verlangt vom Host, die Rate aus dem IN-Stream
+  abzuleiten — das ist mit dem jetzt reinen Capture-IN nicht mehr sinnvoll
+- Ein expliziter Feedback-Endpoint plus `BufferFeedback`-PI-Regler regelt
+  den TX-Ring-Füllstand direkt und unabhängig vom IN-Pfad
 
 ### Warum 8kHz?
 - SA818 Audio-Bandbreite: 300-3000 Hz

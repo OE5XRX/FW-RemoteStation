@@ -125,7 +125,6 @@
 		as_iso_out: out_interface {
 			compatible = "zephyr,uac2-audio-streaming";
 			linked-terminal = <&usb_out_terminal>;
-			implicit-feedback;
 			subslot-size = <2>;
 			bit-resolution = <16>;
 		};
@@ -133,7 +132,6 @@
 		as_iso_in: in_interface {
 			compatible = "zephyr,uac2-audio-streaming";
 			linked-terminal = <&usb_in_terminal>;
-			implicit-feedback;
 			subslot-size = <2>;
 			bit-resolution = <16>;
 		};
