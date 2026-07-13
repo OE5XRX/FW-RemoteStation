@@ -390,12 +390,17 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
     return -EINVAL;
   }
 
+  /* sa818_dev is read by uac2_terminal_update_cb() under ctx->lock and this
+   * function runs after usbd_enable() (callbacks can fire concurrently), so the
+   * check-and-set must be done under the same lock. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
   if (ctx->sa818_dev != NULL) {
+    k_mutex_unlock(&ctx->lock);
     LOG_WRN("USB Audio Bridge already started");
     return 0;
   }
-
   ctx->sa818_dev = sa818_dev;
+  k_mutex_unlock(&ctx->lock);
 
   /* Register SA818 audio callbacks */
   struct sa818_audio_callbacks sa818_cbs = {
@@ -407,7 +412,9 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
   sa818_result ret = sa818_audio_stream_register(sa818_dev, &sa818_cbs);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to register SA818 audio callbacks: %d", ret);
+    k_mutex_lock(&ctx->lock, K_FOREVER);
     ctx->sa818_dev = NULL;
+    k_mutex_unlock(&ctx->lock);
     return -EIO;
   }
 
@@ -421,7 +428,9 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
   ret = sa818_audio_stream_start(sa818_dev, &format);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to start SA818 audio streaming: %d", ret);
+    k_mutex_lock(&ctx->lock, K_FOREVER);
     ctx->sa818_dev = NULL;
+    k_mutex_unlock(&ctx->lock);
     return -EIO;
   }
 
