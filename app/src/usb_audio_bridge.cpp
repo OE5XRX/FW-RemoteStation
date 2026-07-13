@@ -11,6 +11,8 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
+#include "feedback.h"
+
 #include <sa818/sa818.h>
 #include <sa818/sa818_audio.h>
 #include <sa818/sa818_audio_stream.h>
@@ -39,6 +41,10 @@ LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
 /* Ring buffer sizes (must be power of 2) */
 #define TX_RING_SIZE 512 /* USB -> SA818 (256 samples = 32ms) */
 #define RX_RING_SIZE 512 /* SA818 -> USB (256 samples = 32ms) */
+
+/* Start draining the TX ring to the SA818 only once it is ~half full, so the
+ * feedback loop has slack in both directions from the first consumed sample. */
+#define TX_PREBUFFER_BYTES (TX_RING_SIZE / 2)
 
 /* USB buffer pool */
 #define USB_BUF_COUNT 8
@@ -95,8 +101,10 @@ struct usb_audio_bridge_ctx {
   struct k_mutex lock;
 
   /* Status */
-  bool tx_enabled; /* USB OUT terminal active */
-  bool rx_enabled; /* USB IN terminal active */
+  bool tx_enabled;                    /* USB OUT terminal active */
+  bool rx_enabled;                    /* USB IN terminal active */
+  bool tx_prebuffered;                /* TX ring reached the prebuffer threshold */
+  usb_audio::BufferFeedback feedback; /* explicit feedback regulator (OUT) */
 };
 
 static struct usb_audio_bridge_ctx bridge_ctx;
@@ -118,8 +126,19 @@ static size_t sa818_tx_request_cb(const struct device *dev, uint8_t *buffer, siz
     return 0;
   }
 
-  /* Pull audio from TX ring buffer (USB OUT data) */
   k_mutex_lock(&ctx->lock, K_FOREVER);
+
+  /* Hold off draining until the ring has prebuffered ~half full. Until then
+   * emit silence so the loop has slack before the SA818 starts consuming. */
+  if (!ctx->tx_prebuffered) {
+    if (ring_buf_size_get(&ctx->tx_ring) >= TX_PREBUFFER_BYTES) {
+      ctx->tx_prebuffered = true;
+    } else {
+      k_mutex_unlock(&ctx->lock);
+      return 0;
+    }
+  }
+
   uint32_t bytes_read = ring_buf_get(&ctx->tx_ring, buffer, size);
   k_mutex_unlock(&ctx->lock);
 
@@ -154,9 +173,19 @@ static void sa818_rx_data_cb(const struct device *dev, const uint8_t *buffer, si
  * @brief UAC2 SOF (Start of Frame) callback
  */
 static void uac2_sof_cb(const struct device *dev, void *user_data) {
+  struct usb_audio_bridge_ctx *ctx = (struct usb_audio_bridge_ctx *)user_data;
+
   ARG_UNUSED(dev);
-  ARG_UNUSED(user_data);
-  /* SOF occurs every 1ms - can be used for timing if needed */
+
+  /* OUT explicit feedback: keep the TX ring near half full. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool tx = ctx->tx_enabled;
+  size_t tx_used = ring_buf_size_get(&ctx->tx_ring) / AUDIO_BYTES_PER_SAMPLE;
+  k_mutex_unlock(&ctx->lock);
+
+  if (tx) {
+    ctx->feedback.update(tx_used, TX_RING_SIZE / AUDIO_BYTES_PER_SAMPLE);
+  }
 }
 
 /**
@@ -172,6 +201,8 @@ static void uac2_terminal_update_cb(const struct device *dev, uint8_t terminal, 
 
   if (terminal == USB_OUT_TERMINAL_ID) {
     ctx->tx_enabled = enabled;
+    ctx->tx_prebuffered = false;
+    ctx->feedback.reset();
     LOG_INF("USB OUT (TX) terminal %s", enabled ? "enabled" : "disabled");
 
     if (!enabled) {
@@ -263,6 +294,24 @@ static void uac2_buf_release_cb(const struct device *dev, uint8_t terminal, void
   /* Buffer is from our pool, no need to free */
 }
 
+/**
+ * @brief UAC2 explicit feedback callback (OUT / playback path)
+ *
+ * Returns the Q10.14 samples-per-SOF the host should send so the TX ring stays
+ * near half full. Only the OUT input-terminal has a feedback endpoint.
+ */
+static uint32_t uac2_feedback_cb(const struct device *dev, uint8_t terminal, void *user_data) {
+  struct usb_audio_bridge_ctx *ctx = (struct usb_audio_bridge_ctx *)user_data;
+
+  ARG_UNUSED(dev);
+
+  if (terminal != USB_OUT_TERMINAL_ID) {
+    return 0;
+  }
+
+  return ctx->feedback.value();
+}
+
 /* UAC2 operations structure */
 static const struct uac2_ops uac2_ops = {
     .sof_cb = uac2_sof_cb,
@@ -270,6 +319,7 @@ static const struct uac2_ops uac2_ops = {
     .get_recv_buf = uac2_get_recv_buf,
     .data_recv_cb = uac2_data_recv_cb,
     .buf_release_cb = uac2_buf_release_cb,
+    .feedback_cb = uac2_feedback_cb,
 };
 
 /**
@@ -368,6 +418,8 @@ extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
   ctx->rx_enabled = false;
   ctx->usb_out_buf_idx = 0;
   ctx->usb_in_buf_idx = 0;
+  ctx->tx_prebuffered = false;
+  ctx->feedback.init(USB_SAMPLES_PER_SOF);
 
   /* Register UAC2 callbacks. This MUST happen before usbd_init(): the UAC2
    * class init hook returns -EINVAL ("Application did not register UAC2 ops")
