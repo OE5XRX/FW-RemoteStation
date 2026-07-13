@@ -153,6 +153,21 @@ extern "C" {
 }
 
 int main(void) {
+    /* Get devices */
+    const struct device *sa818 = DEVICE_DT_GET(DT_ALIAS(sa818));
+    const struct device *uac2 = DEVICE_DT_GET(DT_NODELABEL(uac2_radio));
+    if (!device_is_ready(sa818) || !device_is_ready(uac2)) {
+        return -ENODEV;
+    }
+
+    /* Register UAC2 ops BEFORE initializing the USB device. The UAC2 class init
+     * hook returns -EINVAL if the ops are not registered yet, which fails
+     * usbd_init() and prevents the whole device from enumerating. */
+    int ret = usb_audio_bridge_register_ops(uac2);
+    if (ret != 0) {
+        return ret;
+    }
+
     /* Initialize USB device (provided by common sample code) */
     struct usbd_context *sample_usbd = sample_usbd_init_device(NULL);
     if (sample_usbd == NULL) {
@@ -160,22 +175,18 @@ int main(void) {
     }
 
     /* Enable USB device */
-    int ret = usbd_enable(sample_usbd);
+    ret = usbd_enable(sample_usbd);
     if (ret != 0) {
         return ret;
     }
 
-    /* Get devices */
-    const struct device *sa818 = DEVICE_DT_GET(DT_ALIAS(sa818));
-    const struct device *uac2 = DEVICE_DT_GET(DT_NODELABEL(uac2_radio));
-    
-    /* Initialize USB Audio Bridge (connects SA818 ↔ UAC2) */
-    ret = usb_audio_bridge_init(sa818, uac2);
+    /* Start the SA818 <-> UAC2 audio bridge now that USB is enabled */
+    ret = usb_audio_bridge_start(sa818);
     if (ret != 0) {
         usbd_disable(sample_usbd);
         return ret;
     }
-    
+
     /* Power on SA818 */
     sa818_set_power(sa818, SA818_DEVICE_ON);
     

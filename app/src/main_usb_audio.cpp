@@ -39,6 +39,29 @@ int main(void) {
   LOG_INF("SA818 USB Audio Application Starting...");
   LOG_INF("Build: %s %s", __DATE__, __TIME__);
 
+  int ret;
+
+#if DT_NODE_EXISTS(UAC2_NODE)
+  /* Get the UAC2 device and register its ops BEFORE the USB device stack is
+   * initialized. usbd_init() calls the UAC2 class init hook, which returns
+   * -EINVAL ("Application did not register UAC2 ops") if the ops are not set
+   * yet -- that failure aborts the whole USB device and nothing enumerates. */
+  const struct device *uac2 = DEVICE_DT_GET(UAC2_NODE);
+  if (!device_is_ready(uac2)) {
+    LOG_ERR("UAC2 device not ready");
+    return -ENODEV;
+  }
+  LOG_INF("UAC2 device ready");
+
+  ret = usb_audio_bridge_register_ops(uac2);
+  if (ret != 0) {
+    LOG_ERR("Failed to register UAC2 ops: %d", ret);
+    return ret;
+  }
+#else
+  LOG_WRN("USB Audio not configured in device tree");
+#endif
+
   /* Initialize USB device (provided by common sample code) */
   struct usbd_context *sample_usbd = sample_usbd_init_device(NULL);
   if (sample_usbd == NULL) {
@@ -47,7 +70,7 @@ int main(void) {
   }
 
   /* Enable USB device */
-  int ret = usbd_enable(sample_usbd);
+  ret = usbd_enable(sample_usbd);
   if (ret != 0) {
     LOG_ERR("Failed to enable USB device: %d", ret);
     return ret;
@@ -64,26 +87,14 @@ int main(void) {
   LOG_INF("SA818 device ready");
 
 #if DT_NODE_EXISTS(UAC2_NODE)
-  /* Get UAC2 device */
-  const struct device *uac2 = DEVICE_DT_GET(UAC2_NODE);
-  if (!device_is_ready(uac2)) {
-    LOG_ERR("UAC2 device not ready");
-    usbd_disable(sample_usbd);
-    return -ENODEV;
-  }
-  LOG_INF("UAC2 device ready");
-
-  /* Initialize USB Audio Bridge (application-level integration) */
-  ret = usb_audio_bridge_init(sa818, uac2);
+  /* Start the SA818 <-> USB audio bridge now that the USB device is enabled. */
+  ret = usb_audio_bridge_start(sa818);
   if (ret != 0) {
-    LOG_ERR("USB Audio Bridge init failed: %d", ret);
+    LOG_ERR("USB Audio Bridge start failed: %d", ret);
     usbd_disable(sample_usbd);
     return ret;
   }
-
   LOG_INF("USB Audio Bridge enabled");
-#else
-  LOG_WRN("USB Audio not configured in device tree");
 #endif
 
   /* Power on SA818 */

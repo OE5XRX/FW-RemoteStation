@@ -12,6 +12,7 @@
  */
 
 #include <sa818/sa818.h>
+#include <sa818/sa818_audio.h>
 #include <sa818/sa818_audio_stream.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
@@ -44,28 +45,31 @@ LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
 #define USB_BUF_SIZE 32 /* 16 samples max per SOF */
 
 /*
- * Terminal IDs from USB Audio Class 2 (UAC2) descriptors
+ * Terminal IDs the UAC2 class reports to the application callbacks.
  *
- * NOTE:
- *   - UAC2 terminal IDs are assigned by the descriptor generator based on
- *     the order of terminals in the device tree.
- *   - For the current board/device-tree configuration, the UAC2 class
- *     exposes:
- *       * USB OUT terminal for SA818 TX  -> ID 1
- *       * USB IN terminal for SA818 RX   -> ID 4
+ * The class identifies each AudioStreaming interface by the entity ID of its
+ * `linked-terminal` (see usbd_uac2.c: cfg->as_terminals[]). Entity IDs are
+ * assigned in device-tree child order, and the CLOCK SOURCE is entity 1 -- so
+ * the terminals do NOT start at 1. For fm_board.dts the order is:
+ *   aclk=1, usb_out=2, sa818_tx=3, sa818_rx=4, usb_in=5.
+ * The streaming interfaces link to usb_out (OUT) and usb_in (IN), so the class
+ * passes those IDs to get_recv_buf()/data_recv_cb() and expects them in
+ * usbd_uac2_send():
+ *       * USB OUT (host -> SA818 TX)  -> usb_out terminal -> ID 2
+ *       * USB IN  (SA818 RX -> host)  -> usb_in terminal  -> ID 5
  *
  * These values MUST match the actual UAC2 descriptors. If you change the
- * UAC2 audio topology (e.g. add/remove/reorder terminals in the device tree
+ * UAC2 audio topology (e.g. add/remove/reorder entities in the device tree
  * or Kconfig), re-check the generated descriptors and update the defines
  * and static_asserts below accordingly.
  */
-#define USB_OUT_TERMINAL_ID 1 /* USB -> SA818 TX */
-#define USB_IN_TERMINAL_ID 4  /* SA818 RX -> USB */
+#define USB_OUT_TERMINAL_ID 2 /* USB -> SA818 TX (usb_out terminal) */
+#define USB_IN_TERMINAL_ID 5  /* SA818 RX -> USB (usb_in terminal) */
 
 /* Build-time guard: force maintainers to consciously update IDs if they change. */
-static_assert(USB_OUT_TERMINAL_ID == 1, "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
+static_assert(USB_OUT_TERMINAL_ID == 2, "USB_OUT_TERMINAL_ID changed: verify UAC2 OUT terminal ID from "
                                         "the device tree/descriptors and update this check accordingly.");
-static_assert(USB_IN_TERMINAL_ID == 4, "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
+static_assert(USB_IN_TERMINAL_ID == 5, "USB_IN_TERMINAL_ID changed: verify UAC2 IN terminal ID from "
                                        "the device tree/descriptors and update this check accordingly.");
 
 /**
@@ -182,7 +186,19 @@ static void uac2_terminal_update_cb(const struct device *dev, uint8_t terminal, 
     }
   }
 
+  bool rx = ctx->rx_enabled;
+  bool tx = ctx->tx_enabled;
+  const struct device *sa818 = ctx->sa818_dev;
+
   k_mutex_unlock(&ctx->lock);
+
+  /* Enable/disable the SA818 ADC(RX)/DAC(TX) audio paths to match the active
+   * USB streams. Without this the ADC is never sampled, so rx_ring stays empty
+   * and no capture data ever reaches the host. Called outside ctx->lock to keep
+   * a consistent lock order with the SA818 driver's own lock. */
+  if (sa818 != NULL) {
+    (void)sa818_audio_enable_path(sa818, rx, tx);
+  }
 }
 
 /**
@@ -291,13 +307,19 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
       if (bytes_read == USB_BYTES_PER_SOF) {
         /* Send to USB host */
         int ret = usbd_uac2_send(ctx->uac2_dev, USB_IN_TERMINAL_ID, buf, bytes_read);
-        if (ret != 0) {
-          LOG_WRN("USB IN send failed: %d", ret);
+        /* -EAGAIN means the host has not collected the previous isochronous IN
+         * packets yet (host idle / not actively consuming the capture stream).
+         * That is expected backpressure -- drop this frame silently. Logging it
+         * per SOF floods the log subsystem and starves the lower-priority USB
+         * thread, which makes the host reset (re-enumerate) the whole device.
+         * Only rate-limit genuinely unexpected errors. */
+        if (ret != 0 && ret != -EAGAIN) {
+          LOG_WRN_RATELIMIT("USB IN send failed: %d", ret);
         } else {
           LOG_DBG("USB IN: %u bytes sent", bytes_read);
         }
       } else if (bytes_read > 0) {
-        LOG_WRN("USB IN: partial read %u/%u bytes, frame dropped", bytes_read, USB_BYTES_PER_SOF);
+        LOG_WRN_RATELIMIT("USB IN: partial read %u/%u bytes, frame dropped", bytes_read, USB_BYTES_PER_SOF);
       }
     } else {
       k_mutex_unlock(&ctx->lock);
@@ -305,24 +327,33 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
   }
 }
 
-/* USB IN thread - priority 7, starts immediately */
-K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, 0);
+/* USB IN thread - priority 7. Created NOT started (SYS_FOREVER_MS delay): the
+ * thread body locks ctx->lock and uses ctx->uac2_dev, which are only valid once
+ * usb_audio_bridge_register_ops() has run. usb_audio_bridge_start() starts it. */
+K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, SYS_FOREVER_MS);
 
 /**
- * @brief Initialize USB Audio Bridge
+ * @brief Register UAC2 ops and prepare the bridge context.
+ *
+ * Must run BEFORE usbd_init() (the UAC2 class init hook rejects the config with
+ * -EINVAL if the ops are not registered yet). See usb_audio_bridge.h.
  *
  * NOTE: This function must only be called once during system initialization
  * from a single thread. It is not thread-safe for concurrent calls.
  */
-extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struct device *uac2_dev) {
+extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
   struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
 
-  if (ctx->sa818_dev != NULL) {
-    LOG_WRN("USB Audio Bridge already initialized");
+  if (uac2_dev == NULL) {
+    LOG_ERR("uac2_dev is NULL");
+    return -EINVAL;
+  }
+
+  if (ctx->uac2_dev != NULL) {
+    LOG_WRN("USB Audio Bridge ops already registered");
     return 0;
   }
 
-  ctx->sa818_dev = sa818_dev;
   ctx->uac2_dev = uac2_dev;
 
   /* Initialize ring buffers */
@@ -338,8 +369,38 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   ctx->usb_out_buf_idx = 0;
   ctx->usb_in_buf_idx = 0;
 
-  /* Register UAC2 callbacks */
+  /* Register UAC2 callbacks. This MUST happen before usbd_init(): the UAC2
+   * class init hook returns -EINVAL ("Application did not register UAC2 ops")
+   * otherwise, which fails the whole USB device init and prevents enumeration. */
   usbd_uac2_set_ops(uac2_dev, &uac2_ops, ctx);
+
+  return 0;
+}
+
+extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
+  struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
+
+  if (sa818_dev == NULL) {
+    LOG_ERR("sa818_dev is NULL");
+    return -EINVAL;
+  }
+
+  if (ctx->uac2_dev == NULL) {
+    LOG_ERR("usb_audio_bridge_register_ops() must be called first");
+    return -EINVAL;
+  }
+
+  /* sa818_dev is read by uac2_terminal_update_cb() under ctx->lock and this
+   * function runs after usbd_enable() (callbacks can fire concurrently), so the
+   * check-and-set must be done under the same lock. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  if (ctx->sa818_dev != NULL) {
+    k_mutex_unlock(&ctx->lock);
+    LOG_WRN("USB Audio Bridge already started");
+    return 0;
+  }
+  ctx->sa818_dev = sa818_dev;
+  k_mutex_unlock(&ctx->lock);
 
   /* Register SA818 audio callbacks */
   struct sa818_audio_callbacks sa818_cbs = {
@@ -351,6 +412,9 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   sa818_result ret = sa818_audio_stream_register(sa818_dev, &sa818_cbs);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to register SA818 audio callbacks: %d", ret);
+    k_mutex_lock(&ctx->lock, K_FOREVER);
+    ctx->sa818_dev = NULL;
+    k_mutex_unlock(&ctx->lock);
     return -EIO;
   }
 
@@ -364,10 +428,24 @@ extern "C" int usb_audio_bridge_init(const struct device *sa818_dev, const struc
   ret = sa818_audio_stream_start(sa818_dev, &format);
   if (ret != SA818_OK) {
     LOG_ERR("Failed to start SA818 audio streaming: %d", ret);
+    k_mutex_lock(&ctx->lock, K_FOREVER);
+    ctx->sa818_dev = NULL;
+    k_mutex_unlock(&ctx->lock);
     return -EIO;
   }
 
-  LOG_INF("USB Audio Bridge initialized (8kHz, 16-bit, mono)");
+  /* The host may have enabled AudioStreaming alt-settings before the bridge was
+   * started (uac2_terminal_update_cb then ran with ctx->sa818_dev == NULL and
+   * skipped the path enable). Now that sa818_dev is set, sync the SA818 RX/TX
+   * audio paths to the already-observed USB stream state so the ADC/DAC get
+   * enabled without waiting for the host to toggle streaming again. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool rx_now = ctx->rx_enabled;
+  bool tx_now = ctx->tx_enabled;
+  k_mutex_unlock(&ctx->lock);
+  (void)sa818_audio_enable_path(sa818_dev, rx_now, tx_now);
+
+  LOG_INF("USB Audio Bridge started (8kHz, 16-bit, mono)");
   LOG_INF("  USB OUT -> TX Ring (%u bytes) -> SA818 TX", TX_RING_SIZE);
   LOG_INF("  SA818 RX -> RX Ring (%u bytes) -> USB IN", RX_RING_SIZE);
 
