@@ -68,6 +68,10 @@ ZTEST(feedback, test_converges_under_drift) {
     if (used > cap)
       used = cap;
     fb.update((size_t)used, (size_t)cap);
+    /* Masking invariant: reported value must always have its low 4 bits clear.
+     * As the integrator ramps, integrator_/kTi takes many non-16-aligned values,
+     * so without the mask this would fail at some iteration. */
+    zassert_equal(fb.value() % 16, 0U, "value %u not 16-aligned at frame %d", (unsigned)fb.value(), i);
     ring_q14 += (int64_t)fb.value(); /* host delivers the reported average */
     ring_q14 -= consume_q14;
     zassert_true(ring_q14 > 0, "ring underran at frame %d", i);
@@ -75,4 +79,28 @@ ZTEST(feedback, test_converges_under_drift) {
   }
   int32_t final_used = (int32_t)(ring_q14 >> 14);
   zassert_true(final_used > setp - 50 && final_used < setp + 50, "ring not centered near set point: %d", final_used);
+}
+
+ZTEST(feedback, test_integrator_is_bounded) {
+  usb_audio::BufferFeedback fb;
+  fb.init(kSamplesPerSof);
+
+  /* Sustained maximal empty-ring error drives the integrator to its bound.
+   * Saturation needs integ_limit_/128 = 131072 steps; run well past that. */
+  for (int i = 0; i < 500000; i++) {
+    fb.update(0, kCapacity);
+  }
+  zassert_equal(fb.value(), kNominal + (1u << 13), "saturated output must sit at the upper clamp, got %u", (unsigned)fb.value());
+
+  /* Reverse to sustained maximal full-ring error. With a BOUNDED integrator
+   * (capped at 16,777,216) the output reaches the lower clamp in ~131k steps;
+   * an unbounded integrator wound to 500000*128 = 64,000,000 would need ~500k.
+   * The 200000 threshold sits between the two and fails iff unbounded. */
+  int steps = 0;
+  while (fb.value() != kNominal - (1u << 13) && steps < 500000) {
+    fb.update(kCapacity, kCapacity);
+    steps++;
+  }
+  zassert_true(steps < 200000, "integrator not bounded: recovery took %d steps", steps);
+  zassert_equal(fb.value(), kNominal - (1u << 13), "did not recover to the lower clamp, got %u", (unsigned)fb.value());
 }
