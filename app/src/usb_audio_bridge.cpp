@@ -305,8 +305,10 @@ static void usb_in_thread_func(void *p1, void *p2, void *p3) {
   }
 }
 
-/* USB IN thread - priority 7, starts immediately */
-K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, 0);
+/* USB IN thread - priority 7. Created NOT started (SYS_FOREVER_MS delay): the
+ * thread body locks ctx->lock and uses ctx->uac2_dev, which are only valid once
+ * usb_audio_bridge_register_ops() has run. usb_audio_bridge_start() starts it. */
+K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7, 0, SYS_FOREVER_MS);
 
 /**
  * @brief Initialize USB Audio Bridge

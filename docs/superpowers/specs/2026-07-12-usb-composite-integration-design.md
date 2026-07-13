@@ -96,8 +96,9 @@ resolves once `common.cmake` adds the include dir. Terminal IDs already match `f
 
 ## Data flow (unchanged; now active)
 
+`usb_audio_bridge_register_ops(uac2)` (must run before USB init) →
 `sample_usbd_init_device()` → `usbd_register_all_classes()` → CDC-ACM + UAC2 + DFU in the
-configuration → `usbd_enable()` → `usb_audio_bridge_init(sa818, uac2)` wires the UAC2
+configuration → `usbd_enable()` → `usb_audio_bridge_start(sa818)` wires the UAC2
 terminals to the SA818 generic audio stream via two ring buffers (USB-OUT → SA818-TX,
 SA818-RX → USB-IN, 8 kHz / 16-bit / mono) → host sees an ALSA card ("OE5XRX") plus the
 serial console and a DFU interface.

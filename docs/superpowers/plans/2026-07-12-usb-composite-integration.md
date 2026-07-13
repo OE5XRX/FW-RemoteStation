@@ -101,7 +101,7 @@ Replace the CDC-only app USB path with the composite path for fm_board, keep nat
 - Delete: `app/src/usb_config.cpp`
 
 **Interfaces:**
-- Consumes: `main_usb_audio.cpp` (`main()`, calls `sample_usbd_init_device()`, `usb_audio_bridge_init()`), `usb_audio_bridge.cpp`, and `${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake` (adds the include dir and compiles `sample_usbd_init.c`).
+- Consumes: `main_usb_audio.cpp` (`main()`, calls `sample_usbd_init_device()`, `usb_audio_bridge_register_ops()`/`usb_audio_bridge_start()`), `usb_audio_bridge.cpp`, and `${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake` (adds the include dir and compiles `sample_usbd_init.c`).
 - Produces: an fm_board app image whose USB configuration is assembled by `usbd_register_all_classes()` (CDC-ACM + UAC2 + DFU). Identity at this point is still the defconfig default (PID `0x0100`) — corrected in Task 3.
 
 - [ ] **Step 1: Establish the baseline (both targets build today)**
