@@ -98,9 +98,9 @@ jobs:
           set -euo pipefail
           west twister -T tests/usb_audio -p fm_board/stm32u575xx --build-only -v --inline-logs
 
-#      - name: Twister unit tests
-#        working-directory: fw
-#        shell: bash
-#        run: |
-#          set -euo pipefail
-#          west twister -T tests/unit_audio -p native_sim/native/64 -v --inline-logs
+      - name: Twister unit tests (tests/unit_audio)
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          west twister -T tests/unit_audio -p native_sim/native/64 -v --inline-logs
