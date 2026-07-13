@@ -319,6 +319,11 @@ K_THREAD_DEFINE(usb_in_tid, 1024, usb_in_thread_func, &bridge_ctx, NULL, NULL, 7
 extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
   struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
 
+  if (uac2_dev == NULL) {
+    LOG_ERR("uac2_dev is NULL");
+    return -EINVAL;
+  }
+
   if (ctx->uac2_dev != NULL) {
     LOG_WRN("USB Audio Bridge ops already registered");
     return 0;
@@ -349,6 +354,11 @@ extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
 
 extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
   struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
+
+  if (sa818_dev == NULL) {
+    LOG_ERR("sa818_dev is NULL");
+    return -EINVAL;
+  }
 
   if (ctx->uac2_dev == NULL) {
     LOG_ERR("usb_audio_bridge_register_ops() must be called first");

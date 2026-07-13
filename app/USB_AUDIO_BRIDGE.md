@@ -156,6 +156,9 @@ int main(void) {
     /* Get devices */
     const struct device *sa818 = DEVICE_DT_GET(DT_ALIAS(sa818));
     const struct device *uac2 = DEVICE_DT_GET(DT_NODELABEL(uac2_radio));
+    if (!device_is_ready(sa818) || !device_is_ready(uac2)) {
+        return -ENODEV;
+    }
 
     /* Register UAC2 ops BEFORE initializing the USB device. The UAC2 class init
      * hook returns -EINVAL if the ops are not registered yet, which fails
