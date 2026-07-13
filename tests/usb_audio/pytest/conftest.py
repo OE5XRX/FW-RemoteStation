@@ -7,43 +7,9 @@ Pytest configuration for USB Audio Bridge tests
 These tests require actual hardware (fm_board) with USB connection.
 """
 
-import pytest
-
 # The `dut` fixture (a twister_harness DeviceAdapter, with readlines()/write())
 # is provided automatically by the pytest-twister-harness plugin when the tests
 # run under Twister. Do NOT redefine it here — a local fixture would shadow the
-# plugin's and break access to the real device.
-
-
-@pytest.fixture
-def usb_enumerated(dut):
-    """
-    Fixture that waits for USB enumeration.
-    
-    Returns True when USB device is enumerated by host.
-    """
-    import time
-    
-    # Prefer DUT-provided mechanisms for detecting enumeration, if available.
-    timeout = 10.0
-    poll_interval = 0.1
-
-    wait_method = getattr(dut, "wait_for_usb_enumeration", None)
-    if callable(wait_method):
-        # Let the DUT handle waiting; assume it raises or errors on failure.
-        wait_method(timeout=timeout)
-        return True
-
-    is_enumerated = getattr(dut, "is_usb_enumerated", None)
-    if callable(is_enumerated):
-        start = time.time()
-        while time.time() - start < timeout:
-            if is_enumerated():
-                return True
-            time.sleep(poll_interval)
-        pytest.fail("USB device failed to enumerate within the expected timeout")
-
-    # Fallback: retain original behavior when no status APIs are exposed by the DUT.
-    # This keeps existing setups working but is less robust than the above paths.
-    time.sleep(2)
-    return True
+# plugin's and break access to the real device. The single boot-sequence test
+# waits for the boot log via dut.readlines_until(), so no separate enumeration
+# fixture is needed.
