@@ -425,6 +425,17 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
     return -EIO;
   }
 
+  /* The host may have enabled AudioStreaming alt-settings before the bridge was
+   * started (uac2_terminal_update_cb then ran with ctx->sa818_dev == NULL and
+   * skipped the path enable). Now that sa818_dev is set, sync the SA818 RX/TX
+   * audio paths to the already-observed USB stream state so the ADC/DAC get
+   * enabled without waiting for the host to toggle streaming again. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool rx_now = ctx->rx_enabled;
+  bool tx_now = ctx->tx_enabled;
+  k_mutex_unlock(&ctx->lock);
+  (void)sa818_audio_enable_path(sa818_dev, rx_now, tx_now);
+
   LOG_INF("USB Audio Bridge started (8kHz, 16-bit, mono)");
   LOG_INF("  USB OUT -> TX Ring (%u bytes) -> SA818 TX", TX_RING_SIZE);
   LOG_INF("  SA818 RX -> RX Ring (%u bytes) -> USB IN", RX_RING_SIZE);
