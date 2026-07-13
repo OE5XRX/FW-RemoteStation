@@ -106,9 +106,19 @@ Details:
   value for 8 samples/SOF @ 8 kHz is `8 << 14`.
 - Fixed-point PI controller. Process variable = TX ring fill; set point = half
   capacity; error drives an integrator plus proportional term.
-- The output is **clamped** to a narrow band around nominal (≈ ±0.5 sample) so the host
-  only ever sends nominal ±1 sample per frame. The low LSBs are cleared to match the
-  sample's convention of not using the optional extra resolution.
+- The output is **clamped** to ±0.5 sample around nominal (`8<<14 ± (1<<13)`). This is a
+  **fault-containment anchor, not the operating point**: the steady-state drift the
+  regulator must hold is only ≈ 0.004 sample/frame at the USB 500 ppm worst case (≈ 66
+  LSB), so the clamp is never reached in normal operation. It only bounds pathological
+  excursions (windup, measurement noise). The low LSBs are cleared to match the sample's
+  convention of not using the optional extra resolution.
+- **Integral action carries the long-TX case.** Expected TX durations are ~10 s to
+  ~2 min. Uncorrected, a 128-sample (half-ring) offset is reached in ~32 s at 500 ppm /
+  ~160 s at ~100 ppm, so a 2-minute transmission *requires* active feedback — the I term
+  is what holds the ~0.004 sample/frame drift indefinitely. A pure-P controller would
+  leave a standing error and slowly walk the ring to a rail.
+- **Anti-windup:** the integrator itself is bounded, so a transient underrun (e.g. the
+  host briefly stalls) cannot wind it up and cause a later overshoot.
 - No hardware, no USB dependency → unit-testable in isolation.
 
 ### 3. Bridge changes (`app/src/usb_audio_bridge.cpp`)
@@ -117,6 +127,14 @@ Details:
 - In `uac2_sof_cb` (fires every SOF, ~1 ms): when TX is enabled, read the TX ring fill
   under the existing lock and call `regulator.update(...)`. Call `regulator.reset()`
   when the OUT terminal is disabled (in `uac2_terminal_update_cb`).
+- **Startup prebuffer:** on OUT-terminal enable, hold off starting SA818 TX consumption
+  until the ring has filled to ≈ set point (half). This gives both over- and under-shoot
+  a full ≈ 16 ms of slack from the first consumed sample and avoids an immediate underrun
+  race at stream start. `sa818_tx_request_cb` returns 0 (silence) until the prebuffer
+  threshold is crossed.
+- **Ring size stays at 16 ms** (256 samples half-full). It is deliberately *not* grown
+  for the 2-minute case — larger buffers only add mic→antenna latency; the regulator's
+  integral action, not buffer size, carries long transmissions.
 - **IN path:** replace the fragile `k_msleep(1)` polling thread with **SOF-driven
   sending** inside `uac2_sof_cb`: once per frame, send the available whole samples
   (capped at a max packet size) via `usbd_uac2_send`. As an asynchronous IN endpoint,
