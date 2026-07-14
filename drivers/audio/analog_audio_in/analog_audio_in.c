@@ -131,6 +131,9 @@ static int aai_adc_setup(const struct device *dev) {
   /* One-channel regular sequence on channel 5, 12-bit, TIM6-TRGO triggered. */
   LL_ADC_SetResolution(adc, LL_ADC_RESOLUTION_12B);
   LL_ADC_REG_SetSequencerLength(adc, LL_ADC_REG_SEQ_SCAN_DISABLE);
+  /* STM32U5: the channel must be enabled in PCSEL to connect the analog input,
+   * otherwise conversions return a fixed value instead of the pin voltage. */
+  LL_ADC_SetChannelPreselection(adc, LL_ADC_CHANNEL_5);
   LL_ADC_REG_SetSequencerRanks(adc, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_5);
   LL_ADC_SetChannelSamplingTime(adc, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_391CYCLES_5);
   LL_ADC_REG_SetTriggerSource(adc, LL_ADC_REG_TRIG_EXT_TIM6_TRGO);
