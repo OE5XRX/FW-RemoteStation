@@ -143,7 +143,8 @@ audio_in: analog-audio-in {
 - **The module owns ADC1** for continuous timer+DMA conversion via the STM32 HAL
   (`HAL_ADC_Start_DMA` + external trigger + continuous requests) — a mode Zephyr's generic
   `adc_stm32` driver cannot provide. **Verify during implementation that ADC1 is
-  audio-only** on `fm_board` (no RSSI/battery/other consumer); the `io-channels = <&adc1 5>`
+  audio-only** on `fm_board` (confirmed by the board author: no RSSI/battery/other
+  consumer); the `io-channels = <&adc1 5>`
   reference and channel config move from the SA818 node to the `analog-audio-in` node.
   Clock enable, pinctrl (PA0), and the ADC/DMA IRQ wiring are set up by the module using
   the standard Zephyr STM32 mechanisms (`clock_control`, `pinctrl`, `IRQ_CONNECT`).
@@ -195,8 +196,8 @@ audio_in: analog-audio-in {
 
 ## Risks / open points to confirm during implementation
 
-- **ADC1 is audio-dedicated** on `fm_board` — confirm no other consumer before the module
-  takes it over.
+- **ADC1 is audio-dedicated** on `fm_board` — confirmed by the board author (audio-only,
+  no other consumer), so the module can take it over cleanly.
 - **Exact HW resource triple**: the `gpdma1` channel/request for ADC1 and the `timers6`
   TRGO routing / prescaler+period for 8 kHz — resolve against the STM32U5 RM and verify on
   hardware.
