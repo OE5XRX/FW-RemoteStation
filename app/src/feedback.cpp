@@ -34,7 +34,10 @@ void BufferFeedback::update(size_t used, size_t capacity) {
     integrator_ = -integ_limit_;
   }
 
-  int32_t correction = (error << kFracBits) / kInvKp + integrator_ / kTi;
+  /* P term widened to int64 and computed with a multiply (not a signed left
+   * shift, which is only well-defined for negative operands from C++20 on) so
+   * it stays correct and overflow-free even if the ring range grows. */
+  int32_t correction = static_cast<int32_t>((static_cast<int64_t>(error) * (1 << kFracBits)) / kInvKp) + integrator_ / kTi;
   if (correction > clamp_) {
     correction = clamp_;
   } else if (correction < -clamp_) {
