@@ -17,6 +17,12 @@ CONFIG_GPIO=y
 # enable DAC
 CONFIG_DAC=y
 
+# enable DMA
+CONFIG_DMA=y
+
+# enable hardware-timed analog audio capture (TIM+ADC+DMA)
+CONFIG_ANALOG_AUDIO_IN=y
+
 # enable regulators
 CONFIG_REGULATOR=y
 

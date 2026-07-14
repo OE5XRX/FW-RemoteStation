@@ -11,6 +11,7 @@
 #include <st/u5/stm32u575Xi.dtsi>
 #include <st/u5/stm32u575citx-pinctrl.dtsi>
 #include <zephyr/dt-bindings/usb/audio.h>
+#include <zephyr/dt-bindings/dma/stm32_dma.h>
 
 / {
 	model = "FM-Transceiver for the OE5XRX Remote Station";
@@ -144,6 +145,12 @@
 		band = "vhf";
 		uart = <&usart1>;
 
+		/* NOTE(Task 2): &adc1 5 is intentionally kept here alongside the new
+		 * analog-audio-in node below, which also references &adc1 5. The
+		 * sa818 driver still owns/reads this ADC channel (sa818_core.cpp /
+		 * sa818_audio.cpp use io-channels idx 0 = ADC, idx 1 = DAC); removing
+		 * it here breaks that build. Reconciling ADC ownership between the
+		 * sa818 driver and the new analog_audio_in driver is Task 4's job. */
 		io-channels = <&adc1 5>, <&dac1 1>;
 		io-channel-names = "audio_in", "audio_out";
 
@@ -159,6 +166,18 @@
 
 		tx-enable-delay-ms = <20>;
 		rx-settle-time-ms  = <50>;
+	};
+
+	audio_in: analog-audio-in {
+		compatible = "oe5xrx,analog-audio-in";
+		io-channels = <&adc1 5>;
+		io-channel-names = "audio_in";
+		sampling-timer = <&timers6>;
+		dmas = <&gpdma1 0 0 (STM32_DMA_16BITS | STM32_DMA_PRIORITY_HIGH)>;
+		dma-names = "rx";
+		sampling-frequency = <8000>;
+		resolution = <12>;
+		block-samples = <8>;
 	};
 };
 
@@ -303,6 +322,21 @@ zephyr_udc0: &usbotg_fs {
 	status = "okay";
 	pinctrl-0 = <&dac1_out1_pa4>;
 	pinctrl-names = "default";
+};
+
+&gpdma1 {
+	status = "okay";
+};
+
+&timers6 {
+	status = "okay";
+	/* st,prescaler is required by the st,stm32-timers binding but not
+	 * mentioned in the task brief. TIM6 clocks at 160 MHz (APB1); PSC=0
+	 * keeps the full clock at the timer input. The ARR for 8 kHz TRGO
+	 * (19999, per the analog-audio-in RX design doc) is set at runtime
+	 * by the driver in a later task, not via DT. */
+	st,prescaler = <0>;
+	st,mastermode = "UPDATE";
 };
 
 &iwdg {
