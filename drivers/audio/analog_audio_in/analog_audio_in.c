@@ -277,12 +277,17 @@ int analog_audio_in_stop(const struct device *dev) {
   const struct aai_config *cfg = dev->config;
   struct aai_data *data = dev->data;
 
-  data->running = false;
-  LL_TIM_DisableCounter(cfg->tim);
-  LL_ADC_REG_StopConversion(cfg->adc);
-  dma_stop(cfg->dma_dev, cfg->dma_channel);
-  /* Drop any blocks still queued and clear the callback so a drain_work item
-   * that was already submitted cannot deliver stale samples after stop(). */
+  /* Tear down the hardware only if capture was actually running: stop() can be
+   * called after a skipped/failed start (e.g. device not ready), where touching
+   * the TIM/ADC/DMA registers would be wrong. */
+  if (data->running) {
+    data->running = false;
+    LL_TIM_DisableCounter(cfg->tim);
+    LL_ADC_REG_StopConversion(cfg->adc);
+    dma_stop(cfg->dma_dev, cfg->dma_channel);
+  }
+  /* Always drop queued blocks and clear the callback (even if never started) so
+   * a drain_work item that was already submitted cannot deliver stale samples. */
   k_msgq_purge(&data->rx_msgq);
   data->cb = NULL;
   data->user_data = NULL;
@@ -302,6 +307,17 @@ static int aai_init(const struct device *dev) {
     LOG_ERR("sampling-frequency must be non-zero");
     return -EINVAL;
   }
+  switch (cfg->resolution) {
+  case 6:
+  case 8:
+  case 10:
+  case 12:
+  case 14:
+    break;
+  default:
+    LOG_ERR("unsupported resolution %u (need 6/8/10/12/14)", cfg->resolution);
+    return -EINVAL;
+  }
   if (!device_is_ready(cfg->dma_dev)) {
     LOG_ERR("dma device not ready");
     return -ENODEV;
@@ -315,6 +331,12 @@ static int aai_init(const struct device *dev) {
 }
 
 #define AAI_INIT(inst)                                                                                                                                         \
+  /* The ADC regular trigger is hardcoded to TIM6-TRGO (aai_adc_setup), so the                                                                                 \
+   * DT-selected sampling-timer must be TIM6. Enforce at build time via node                                                                                   \
+   * identity (security-agnostic; a runtime base-address compare is unreliable                                                                                 \
+   * because TIM6 aliases to different secure/non-secure addresses on STM32U5). */                                                                             \
+  BUILD_ASSERT(DT_SAME_NODE(DT_INST_PHANDLE(inst, sampling_timer), DT_NODELABEL(timers6)),                                                                     \
+               "analog-audio-in sampling-timer must be TIM6 (ADC trigger is hardcoded to TIM6-TRGO)");                                                         \
   static const struct stm32_pclken aai_tim_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_PHANDLE(inst, sampling_timer));                                           \
   static const struct stm32_pclken aai_adc_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_IO_CHANNELS_CTLR(inst));                                                  \
   static const struct aai_config aai_cfg_##inst = {                                                                                                            \

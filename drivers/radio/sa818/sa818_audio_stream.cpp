@@ -18,7 +18,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#if DT_NODE_EXISTS(DT_NODELABEL(audio_in))
+/* Require both the DT node AND the driver Kconfig: with the node present but
+ * CONFIG_ANALOG_AUDIO_IN=n the driver is not built, so DEVICE_DT_GET() would
+ * reference an unlinked device symbol and fail to link. */
+#if DT_NODE_EXISTS(DT_NODELABEL(audio_in)) && IS_ENABLED(CONFIG_ANALOG_AUDIO_IN)
 #include <oe5xrx/audio/analog_audio_in.h>
 #define SA818_HAVE_AAI 1
 #endif
