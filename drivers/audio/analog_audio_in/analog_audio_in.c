@@ -15,6 +15,7 @@
 #include <zephyr/drivers/dma.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 
 LOG_MODULE_REGISTER(analog_audio_in, CONFIG_ANALOG_AUDIO_IN_LOG_LEVEL);
 
@@ -41,7 +42,7 @@ struct aai_data {
   const struct device *self;
   analog_audio_in_cb cb;
   void *user_data;
-  bool running;
+  atomic_t running;                    /* written from thread (start/stop), read from DMA ISR */
   uint16_t dma_buf[2 * AAI_MAX_BLOCK]; /* circular: [0..block) | [block..2*block) */
   /* ISR -> thread hand-off: the DMA callback runs in ISR context but the
    * consumer callback may block (e.g. take a mutex), so blocks of converted PCM
@@ -72,8 +73,13 @@ static void aai_drain_work(struct k_work *work) {
   int16_t block[AAI_MAX_BLOCK];
 
   while (k_msgq_get(&data->rx_msgq, block, K_NO_WAIT) == 0) {
-    if (data->cb != NULL) {
-      data->cb(block, cfg->block_samples, data->user_data);
+    /* Snapshot cb/user_data once: stop() may clear them concurrently, so a
+     * check-then-call directly on data->cb could dereference a NULL that was
+     * cleared between the test and the call. */
+    analog_audio_in_cb cb = data->cb;
+    void *user = data->user_data;
+    if (cb != NULL) {
+      cb(block, cfg->block_samples, user);
     }
   }
 }
@@ -87,7 +93,7 @@ static void aai_dma_cb(const struct device *dma_dev, void *user, uint32_t channe
   ARG_UNUSED(dma_dev);
   ARG_UNUSED(channel);
 
-  if (!data->running) {
+  if (!atomic_get(&data->running)) {
     return;
   }
   /* Only the half/full-transfer completions carry a ready buffer half.
@@ -265,31 +271,31 @@ int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void 
   if (cb == NULL) {
     return -EINVAL;
   }
-  if (data->running) {
+  if (atomic_get(&data->running)) {
     return -EALREADY;
   }
   data->cb = cb;
   data->user_data = user_data;
   k_msgq_purge(&data->rx_msgq);
-  data->running = true;
+  atomic_set(&data->running, 1);
 
   r = aai_adc_setup(dev);
   if (r < 0) {
     aai_adc_disable(cfg->adc);
-    data->running = false;
+    atomic_set(&data->running, 0);
     return r;
   }
   r = aai_dma_start(dev);
   if (r < 0) {
     aai_adc_disable(cfg->adc);
-    data->running = false;
+    atomic_set(&data->running, 0);
     return r;
   }
   r = aai_timer_start(dev);
   if (r < 0) {
     dma_stop(cfg->dma_dev, cfg->dma_channel);
     aai_adc_disable(cfg->adc);
-    data->running = false;
+    atomic_set(&data->running, 0);
     return r;
   }
   LL_ADC_REG_StartConversion(cfg->adc);
@@ -311,8 +317,8 @@ int analog_audio_in_stop(const struct device *dev) {
   /* Tear down the hardware only if capture was actually running: stop() can be
    * called after a skipped/failed start (e.g. device not ready), where touching
    * the TIM/ADC/DMA registers would be wrong. */
-  if (data->running) {
-    data->running = false;
+  if (atomic_get(&data->running)) {
+    atomic_set(&data->running, 0);
     LL_TIM_DisableCounter(cfg->tim);
     LL_ADC_REG_StopConversion(cfg->adc);
     dma_stop(cfg->dma_dev, cfg->dma_channel);

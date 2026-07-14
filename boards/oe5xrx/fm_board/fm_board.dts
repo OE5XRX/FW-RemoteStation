@@ -145,12 +145,16 @@
 		band = "vhf";
 		uart = <&usart1>;
 
-		/* NOTE(Task 2): &adc1 5 is intentionally kept here alongside the new
-		 * analog-audio-in node below, which also references &adc1 5. The
-		 * sa818 driver still owns/reads this ADC channel (sa818_core.cpp /
-		 * sa818_audio.cpp use io-channels idx 0 = ADC, idx 1 = DAC); removing
-		 * it here breaks that build. Reconciling ADC ownership between the
-		 * sa818 driver and the new analog_audio_in driver is Task 4's job. */
+		/* &adc1 5 is intentionally kept here alongside the analog-audio-in
+		 * node below, which also references &adc1 5. The RX streaming path no
+		 * longer uses this io-channel (RX capture now comes from the
+		 * analog_audio_in driver); the only remaining adc_read_dt() user is
+		 * sa818_audio_get_rx_level(), which currently has NO callers. The DAC
+		 * (idx 1, audio_out) is still live for TX. So there is no active runtime
+		 * contention today -- but do NOT call sa818_audio_get_rx_level() while
+		 * analog-audio-in capture is running (it would contend on ADC1 ch5).
+		 * Fully removing the sa818 audio_in ADC channel is a follow-up that must
+		 * be HW-validated because it reindexes the still-used audio_out DAC. */
 		io-channels = <&adc1 5>, <&dac1 1>;
 		io-channel-names = "audio_in", "audio_out";
 
