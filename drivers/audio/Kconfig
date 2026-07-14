@@ -2,4 +2,5 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 menu "Audio drivers"
 rsource "analog_audio_in/Kconfig"
+rsource "analog_audio_out/Kconfig"
 endmenu

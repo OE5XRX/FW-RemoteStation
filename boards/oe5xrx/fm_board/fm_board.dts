@@ -179,6 +179,18 @@
 		resolution = <12>;
 		block-samples = <8>;
 	};
+
+	audio_out: analog-audio-out {
+		compatible = "oe5xrx,analog-audio-out";
+		io-channels = <&dac1 1>;
+		io-channel-names = "audio_out";
+		sampling-timer = <&timers7>;
+		dmas = <&gpdma1 1 2 (STM32_DMA_16BITS | STM32_DMA_PRIORITY_HIGH)>;
+		dma-names = "tx";
+		sampling-frequency = <8000>;
+		resolution = <12>;
+		block-samples = <8>;
+	};
 };
 
 &clk_hsi48 {
@@ -337,6 +349,12 @@ zephyr_udc0: &usbotg_fs {
 	 * by the driver in a later task, not via DT. */
 	st,prescaler = <0>;
 	st,mastermode = "UPDATE";
+};
+
+&timers7 {
+	status = "okay";
+	st,mastermode = "UPDATE";
+	st,prescaler = <0>;
 };
 
 &iwdg {

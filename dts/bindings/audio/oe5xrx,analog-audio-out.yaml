@@ -1,0 +1,31 @@
+# Copyright (c) 2026 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+description: |
+  Hardware-timed analog audio playback: a timer TRGO paces DAC conversions fed
+  from a circular memory->DAC DMA. STM32-specific.
+
+compatible: "oe5xrx,analog-audio-out"
+
+include: base.yaml
+
+properties:
+  io-channels:
+    required: true
+    description: DAC instance + channel used for the audio output.
+  sampling-timer:
+    type: phandle
+    required: true
+  dmas:
+    required: true
+  dma-names:
+    required: true
+  sampling-frequency:
+    type: int
+    required: true
+  resolution:
+    type: int
+    required: true
+  block-samples:
+    type: int
+    required: true
