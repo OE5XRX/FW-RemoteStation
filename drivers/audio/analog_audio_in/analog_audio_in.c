@@ -236,56 +236,6 @@ int analog_audio_in_stop(const struct device *dev) {
   return 0;
 }
 
-#ifdef CONFIG_ANALOG_AUDIO_IN_SELFTEST
-#include <zephyr/shell/shell.h>
-static uint32_t aai_st_count;
-static int32_t aai_st_peak;
-static const struct device *aai_st_dev;
-static struct k_work_delayable aai_st_work;
-static void aai_selftest_cb(const int16_t *samples, size_t count, void *user);
-static void aai_selftest_work(struct k_work *w) {
-  ARG_UNUSED(w);
-  int r = analog_audio_in_start(aai_st_dev, aai_selftest_cb, (void *)aai_st_dev);
-  if (r < 0) {
-    LOG_ERR("selftest start failed: %d", r);
-  }
-}
-static void aai_selftest_cb(const int16_t *samples, size_t count, void *user) {
-  const struct device *dev = user;
-  const struct aai_config *cfg = dev->config;
-
-  for (size_t i = 0; i < count; i++) {
-    int32_t a = samples[i] < 0 ? -samples[i] : samples[i];
-    if (a > aai_st_peak) {
-      aai_st_peak = a;
-    }
-  }
-  aai_st_count += count;
-  if (aai_st_count >= cfg->sampling_frequency) {
-    LOG_INF("SELFTEST rx_samples/s=%u peak=%d", aai_st_count, aai_st_peak);
-    aai_st_count = 0;
-    aai_st_peak = 0;
-  }
-}
-static int aai_cmd_start(const struct shell *sh, size_t argc, char **argv) {
-  ARG_UNUSED(argc);
-  ARG_UNUSED(argv);
-  int r = analog_audio_in_start(aai_st_dev, aai_selftest_cb, (void *)aai_st_dev);
-  shell_print(sh, "aai start -> %d", r);
-  return 0;
-}
-static int aai_cmd_stop(const struct shell *sh, size_t argc, char **argv) {
-  ARG_UNUSED(argc);
-  ARG_UNUSED(argv);
-  int r = analog_audio_in_stop(aai_st_dev);
-  shell_print(sh, "aai stop -> %d", r);
-  return 0;
-}
-SHELL_STATIC_SUBCMD_SET_CREATE(aai_sub, SHELL_CMD(start, NULL, "start capture", aai_cmd_start), SHELL_CMD(stop, NULL, "stop capture", aai_cmd_stop),
-                               SHELL_SUBCMD_SET_END);
-SHELL_CMD_REGISTER(aai, &aai_sub, "analog-audio-in diagnostics", NULL);
-#endif
-
 static int aai_init(const struct device *dev) {
   const struct aai_config *cfg = dev->config;
   struct aai_data *data = dev->data;
@@ -302,11 +252,6 @@ static int aai_init(const struct device *dev) {
   data->self = dev;
   k_msgq_init(&data->rx_msgq, data->msgq_buf, AAI_MAX_BLOCK * sizeof(int16_t), AAI_MSGQ_BLOCKS);
   k_work_init(&data->drain_work, aai_drain_work);
-#ifdef CONFIG_ANALOG_AUDIO_IN_SELFTEST
-  aai_st_dev = dev;
-  k_work_init_delayable(&aai_st_work, aai_selftest_work);
-  k_work_schedule(&aai_st_work, K_SECONDS(6));
-#endif
   return 0;
 }
 

@@ -17,12 +17,6 @@ config ANALOG_AUDIO_IN_INIT_PRIORITY
 	help
 	  Device init priority. Must be after the DMA and ADC drivers.
 
-config ANALOG_AUDIO_IN_SELFTEST
-	bool "Self-test: start capture at boot and log the sample rate"
-	help
-	  Diagnostic only. Registers an internal callback that counts samples and
-	  logs rx_samples/s + peak once per second. Remove for production.
-
 module = ANALOG_AUDIO_IN
 module-str = analog_audio_in
 source "subsys/logging/Kconfig.template.log_config"
