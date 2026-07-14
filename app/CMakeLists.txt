@@ -33,6 +33,7 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
     target_sources(app PRIVATE
         src/main_usb_audio.cpp
         src/usb_audio_bridge.cpp
+        src/feedback.cpp
     )
 else()
     target_sources(app PRIVATE src/main.cpp)
