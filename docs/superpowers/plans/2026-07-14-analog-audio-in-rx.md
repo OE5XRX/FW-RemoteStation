@@ -24,7 +24,7 @@ Build/flash environment: `west` in the venv `~/zephyr-oe5xrx` (`source ~/zephyr-
 - Real test dirs only: `tests/etl`, `tests/sim_shell`, `tests/usb_audio`, `tests/unit_audio`. The pure helper's ztest goes in `tests/unit_audio`.
 - Known HW values (from research, STM32U575 @ 160 MHz core, APB1 prescaler 1):
   - ADC1 trigger: `LL_ADC_REG_SetTriggerSource(ADC1, LL_ADC_REG_TRIG_EXT_TIM6_TRGO)`, `LL_ADC_REG_SetTriggerEdge(ADC1, LL_ADC_REG_TRIG_EXT_RISING)`.
-  - ADC1 DMA mode (U5): `LL_ADC_REG_SetDataTransferMode(ADC1, LL_ADC_REG_DMA_TRANSFER_LIMITED)`.
+  - ADC1 DMA mode (U5): `LL_ADC_REG_SetDataTransferMode(ADC1, LL_ADC_REG_DMA_TRANSFER_LIMITED)`. **Bring-up correction (Task 3): this must be `UNLIMITED` — `LIMITED` stops the ADC after ~32 samples. The shipped driver uses `LL_ADC_REG_DMA_TRANSFER_UNLIMITED`.**
   - GPDMA request slot for ADC1: `LL_GPDMA1_REQUEST_ADC1` == `0`.
   - TIM6 clock = 160 MHz (get at runtime via `clock_control_get_rate` on the `STM32_SRC_TIMPCLK1` clock cell; do not hardcode). For 8 kHz: `PSC=0`, `ARR=19999` (`(0+1)*(19999+1)=20000`, `160e6/20000=8000`). TRGO = update: `st,mastermode = "UPDATE"` → `LL_TIM_TRGO_UPDATE`.
   - `&gpdma1` (compatible `st,stm32u5-dma`) and `&timers6` (compatible `st,stm32-timers`) are `status = "disabled"` in the SoC dtsi — both must be enabled in `fm_board.dts`.
@@ -539,8 +539,9 @@ LL_ADC_SetChannelSamplingTime(adc, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_47CYCLE
 /* TIM6 TRGO trigger, rising edge. */
 LL_ADC_REG_SetTriggerSource(adc, LL_ADC_REG_TRIG_EXT_TIM6_TRGO);
 LL_ADC_REG_SetTriggerEdge(adc, LL_ADC_REG_TRIG_EXT_RISING);
-/* One DMA request per conversion. */
-LL_ADC_REG_SetDataTransferMode(adc, LL_ADC_REG_DMA_TRANSFER_LIMITED);
+/* Keep issuing a DMA request per conversion so the circular DMA runs forever.
+ * NOTE (bring-up, Task 3): LIMITED stops after ~32 samples — use UNLIMITED. */
+LL_ADC_REG_SetDataTransferMode(adc, LL_ADC_REG_DMA_TRANSFER_UNLIMITED);
 LL_ADC_REG_SetOverrun(adc, LL_ADC_REG_OVR_DATA_OVERWRITTEN);
 /* Enable ADC, wait ADRDY. */
 LL_ADC_Enable(adc);

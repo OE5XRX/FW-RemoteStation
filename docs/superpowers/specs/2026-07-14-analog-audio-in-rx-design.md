@@ -165,7 +165,7 @@ audio_in: analog-audio-in {
   `sa818_audio_stream.cpp`) is extracted into a standalone, dependency-free function and
   **unit-tested on `native_sim`** (ztest, added to the existing `tests/unit_audio`
   project alongside `BufferFeedback`). This is the extractable logic.
-- **The TIM/ADC/DMA/HAL code is genuine hardware setup** and is verified **on the board**.
+- **The TIM/ADC/DMA low-level (LL) code is genuine hardware setup** and is verified **on the board**.
   Per `CLAUDE.md`, this is acceptable because the hardware-specific code is cleanly
   encapsulated in the module and the surrounding logic (conversion, ring buffering, bridge)
   stays testable off-hardware.

@@ -14,8 +14,13 @@ extern "C" {
 #endif
 
 /* Result codes must be checked (driver-layer convention, CLAUDE.md). Use the
- * GCC attribute so the warning applies to both C and C++ consumers. */
+ * GCC/Clang attribute (both define __GNUC__) so the warning applies to C and
+ * C++ consumers; degrade to nothing on other toolchains. */
+#if defined(__GNUC__)
 #define ANALOG_AUDIO_IN_MUST_CHECK __attribute__((warn_unused_result))
+#else
+#define ANALOG_AUDIO_IN_MUST_CHECK
+#endif
 
 /**
  * Delivers a batch of converted 16-bit PCM samples. Invoked from the system
