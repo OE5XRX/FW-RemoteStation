@@ -1,0 +1,35 @@
+# Copyright (c) 2026 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+description: |
+  Hardware-timed analog audio capture: a timer TRGO drives periodic ADC
+  conversions into a circular DMA buffer. STM32-specific.
+
+compatible: "oe5xrx,analog-audio-in"
+
+include: base.yaml
+
+properties:
+  io-channels:
+    required: true
+    description: ADC instance + channel used for the audio input.
+  sampling-timer:
+    type: phandle
+    required: true
+    description: Timer node whose TRGO paces conversions (master-mode = UPDATE).
+  dmas:
+    required: true
+  dma-names:
+    required: true
+  sampling-frequency:
+    type: int
+    required: true
+    description: Sample rate in Hz (e.g. 8000).
+  resolution:
+    type: int
+    required: true
+    description: ADC resolution in bits (e.g. 12).
+  block-samples:
+    type: int
+    required: true
+    description: Samples per DMA half-buffer / per consumer callback.

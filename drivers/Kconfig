@@ -3,3 +3,4 @@
 
 rsource "radio/Kconfig"
 rsource "dac/Kconfig"
+rsource "audio/Kconfig"
