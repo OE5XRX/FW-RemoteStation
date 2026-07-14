@@ -153,8 +153,15 @@ sa818_result sa818_audio_stream_register(const struct device *dev, const struct 
  * mutex) is safe. */
 static void sa818_aai_on_samples(const int16_t *samples, size_t count, void *user) {
   struct sa818_audio_stream_ctx *ctx = static_cast<struct sa818_audio_stream_ctx *>(user);
+  struct sa818_data *data = static_cast<struct sa818_data *>(ctx->dev->data);
 
-  if (ctx->callbacks.rx_data) {
+  /* Honour the RX audio-path enable flag (sa818_audio_enable_path) so RX can
+   * still be muted, matching the previous ADC-read path's gating behaviour. */
+  k_mutex_lock(&data->lock, K_FOREVER);
+  bool rx_enabled = data->audio_rx_enabled;
+  k_mutex_unlock(&data->lock);
+
+  if (rx_enabled && ctx->callbacks.rx_data) {
     ctx->callbacks.rx_data(ctx->dev, reinterpret_cast<const uint8_t *>(samples), count * SA818_AUDIO_SAMPLE_SIZE, ctx->callbacks.user_data);
   }
 }
@@ -187,10 +194,17 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
 #ifdef SA818_HAVE_AAI
   /* Start the hardware-timed RX capture module; it delivers PCM via the callback.
    * A failure only disables RX capture (TX still works), so surface it loudly
-   * rather than fail the whole stream. */
-  int aai_ret = analog_audio_in_start(DEVICE_DT_GET(DT_NODELABEL(audio_in)), sa818_aai_on_samples, &audio_ctx);
-  if (aai_ret < 0) {
-    LOG_ERR("analog-audio-in start failed: %d (RX capture unavailable)", aai_ret);
+   * rather than fail the whole stream. Verify the device initialised before use
+   * (per the driver-layer device_is_ready() convention) so a failed init cannot
+   * leave analog_audio_in_start() operating on uninitialised runtime state. */
+  const struct device *aai_dev = DEVICE_DT_GET(DT_NODELABEL(audio_in));
+  if (!device_is_ready(aai_dev)) {
+    LOG_ERR("analog-audio-in device not ready (RX capture unavailable)");
+  } else {
+    int aai_ret = analog_audio_in_start(aai_dev, sa818_aai_on_samples, &audio_ctx);
+    if (aai_ret < 0) {
+      LOG_ERR("analog-audio-in start failed: %d (RX capture unavailable)", aai_ret);
+    }
   }
 #endif
 

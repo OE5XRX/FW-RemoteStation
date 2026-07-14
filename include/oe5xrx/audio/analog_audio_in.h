@@ -13,7 +13,10 @@
 extern "C" {
 #endif
 
-/** Delivers a batch of converted 16-bit PCM samples. May run in IRQ context. */
+/**
+ * Delivers a batch of converted 16-bit PCM samples. Invoked from the system
+ * workqueue thread (not IRQ context), so the consumer may block / take a mutex.
+ */
 typedef void (*analog_audio_in_cb)(const int16_t *samples, size_t count, void *user_data);
 
 /** Start hardware-timed capture; @p cb is invoked once per DMA half/full block. */

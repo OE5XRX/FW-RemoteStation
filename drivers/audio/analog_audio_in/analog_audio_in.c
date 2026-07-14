@@ -87,11 +87,21 @@ static void aai_dma_cb(const struct device *dma_dev, void *user, uint32_t channe
   ARG_UNUSED(dma_dev);
   ARG_UNUSED(channel);
 
-  if (!data->running || status < 0) {
+  if (!data->running) {
     return;
   }
-  /* DMA_STATUS_BLOCK = half-transfer (first half ready); COMPLETE = second half. */
-  const uint16_t *src = (status == DMA_STATUS_BLOCK) ? &data->dma_buf[0] : &data->dma_buf[cfg->block_samples];
+  /* Only the half/full-transfer completions carry a ready buffer half.
+   * DMA_STATUS_BLOCK = first half ready, DMA_STATUS_COMPLETE = second half.
+   * Ignore errors (status < 0) and any other/unexpected status so we never
+   * read from the wrong half and enqueue corrupted samples. */
+  const uint16_t *src;
+  if (status == DMA_STATUS_BLOCK) {
+    src = &data->dma_buf[0];
+  } else if (status == DMA_STATUS_COMPLETE) {
+    src = &data->dma_buf[cfg->block_samples];
+  } else {
+    return;
+  }
   for (uint16_t i = 0; i < cfg->block_samples; i++) {
     block[i] = adc_to_pcm16(src[i], cfg->resolution);
   }
@@ -271,6 +281,11 @@ int analog_audio_in_stop(const struct device *dev) {
   LL_TIM_DisableCounter(cfg->tim);
   LL_ADC_REG_StopConversion(cfg->adc);
   dma_stop(cfg->dma_dev, cfg->dma_channel);
+  /* Drop any blocks still queued and clear the callback so a drain_work item
+   * that was already submitted cannot deliver stale samples after stop(). */
+  k_msgq_purge(&data->rx_msgq);
+  data->cb = NULL;
+  data->user_data = NULL;
   return 0;
 }
 
@@ -279,8 +294,12 @@ static int aai_init(const struct device *dev) {
   struct aai_data *data = dev->data;
 
   LOG_INF("init: %u Hz, %u-bit, block=%u", cfg->sampling_frequency, cfg->resolution, cfg->block_samples);
-  if (cfg->block_samples > AAI_MAX_BLOCK) {
-    LOG_ERR("block-samples %u exceeds max %u", cfg->block_samples, AAI_MAX_BLOCK);
+  if (cfg->block_samples == 0 || cfg->block_samples > AAI_MAX_BLOCK) {
+    LOG_ERR("block-samples %u out of range (1..%u)", cfg->block_samples, AAI_MAX_BLOCK);
+    return -EINVAL;
+  }
+  if (cfg->sampling_frequency == 0) {
+    LOG_ERR("sampling-frequency must be non-zero");
     return -EINVAL;
   }
   if (!device_is_ready(cfg->dma_dev)) {
@@ -288,7 +307,9 @@ static int aai_init(const struct device *dev) {
     return -ENODEV;
   }
   data->self = dev;
-  k_msgq_init(&data->rx_msgq, data->msgq_buf, AAI_MAX_BLOCK * sizeof(int16_t), AAI_MSGQ_BLOCKS);
+  /* Size the queue element to the configured block so put()/get() copy exactly
+   * block_samples and never carry uninitialized tail bytes of the ISR buffer. */
+  k_msgq_init(&data->rx_msgq, data->msgq_buf, cfg->block_samples * sizeof(int16_t), AAI_MSGQ_BLOCKS);
   k_work_init(&data->drain_work, aai_drain_work);
   return 0;
 }
