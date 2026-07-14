@@ -185,8 +185,13 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
   k_work_reschedule(&audio_ctx.audio_work, K_MSEC(1));
 
 #ifdef SA818_HAVE_AAI
-  /* Start the hardware-timed RX capture module; it delivers PCM via the callback. */
-  (void)analog_audio_in_start(DEVICE_DT_GET(DT_NODELABEL(audio_in)), sa818_aai_on_samples, &audio_ctx);
+  /* Start the hardware-timed RX capture module; it delivers PCM via the callback.
+   * A failure only disables RX capture (TX still works), so surface it loudly
+   * rather than fail the whole stream. */
+  int aai_ret = analog_audio_in_start(DEVICE_DT_GET(DT_NODELABEL(audio_in)), sa818_aai_on_samples, &audio_ctx);
+  if (aai_ret < 0) {
+    LOG_ERR("analog-audio-in start failed: %d (RX capture unavailable)", aai_ret);
+  }
 #endif
 
   LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);

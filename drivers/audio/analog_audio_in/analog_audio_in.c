@@ -27,6 +27,7 @@ struct aai_config {
   uint32_t sampling_frequency;
   uint16_t block_samples;
   uint8_t resolution;
+  uint32_t adc_ll_channel; /* LL_ADC_CHANNEL_x derived from io-channels */
   TIM_TypeDef *tim;
   ADC_TypeDef *adc;
   const struct stm32_pclken *tim_pclken; /* [0]=bus enable, [1]=kernel clock */
@@ -101,6 +102,23 @@ static void aai_dma_cb(const struct device *dma_dev, void *user, uint32_t channe
   }
 }
 
+static uint32_t aai_ll_resolution(uint8_t bits) {
+  switch (bits) {
+  case 14:
+    return LL_ADC_RESOLUTION_14B;
+  case 12:
+    return LL_ADC_RESOLUTION_12B;
+  case 10:
+    return LL_ADC_RESOLUTION_10B;
+  case 8:
+    return LL_ADC_RESOLUTION_8B;
+  case 6:
+    return LL_ADC_RESOLUTION_6B;
+  default:
+    return LL_ADC_RESOLUTION_12B;
+  }
+}
+
 static int aai_adc_setup(const struct device *dev) {
   const struct aai_config *cfg = dev->config;
   const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
@@ -128,14 +146,16 @@ static int aai_adc_setup(const struct device *dev) {
     return r;
   }
 
-  /* One-channel regular sequence on channel 5, 12-bit, TIM6-TRGO triggered. */
-  LL_ADC_SetResolution(adc, LL_ADC_RESOLUTION_12B);
+  /* One-channel regular sequence on the DT-selected channel, TIM6-TRGO triggered. */
+  LL_ADC_SetResolution(adc, aai_ll_resolution(cfg->resolution));
   LL_ADC_REG_SetSequencerLength(adc, LL_ADC_REG_SEQ_SCAN_DISABLE);
   /* STM32U5: the channel must be enabled in PCSEL to connect the analog input,
-   * otherwise conversions return a fixed value instead of the pin voltage. */
-  LL_ADC_SetChannelPreselection(adc, LL_ADC_CHANNEL_5);
-  LL_ADC_REG_SetSequencerRanks(adc, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_5);
-  LL_ADC_SetChannelSamplingTime(adc, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_391CYCLES_5);
+   * otherwise conversions return a fixed value instead of the pin voltage. This
+   * is set here (not delegated to the co-bound Zephyr adc driver) so capture
+   * does not depend on anything else having configured the channel first. */
+  LL_ADC_SetChannelPreselection(adc, cfg->adc_ll_channel);
+  LL_ADC_REG_SetSequencerRanks(adc, LL_ADC_REG_RANK_1, cfg->adc_ll_channel);
+  LL_ADC_SetChannelSamplingTime(adc, cfg->adc_ll_channel, LL_ADC_SAMPLINGTIME_391CYCLES_5);
   LL_ADC_REG_SetTriggerSource(adc, LL_ADC_REG_TRIG_EXT_TIM6_TRGO);
   LL_ADC_REG_SetTriggerEdge(adc, LL_ADC_REG_TRIG_EXT_RISING);
   /* UNLIMITED: keep issuing a DMA request per TRGO-triggered conversion so the
@@ -187,19 +207,24 @@ static int aai_dma_start(const struct device *dev) {
   return dma_start(cfg->dma_dev, cfg->dma_channel);
 }
 
-static void aai_timer_start(const struct device *dev) {
+static int aai_timer_start(const struct device *dev) {
   const struct aai_config *cfg = dev->config;
   const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
   uint32_t tim_clk = 0;
 
   (void)clock_control_on(clk, (clock_control_subsys_t)&cfg->tim_pclken[0]);
-  (void)clock_control_get_rate(clk, (clock_control_subsys_t)&cfg->tim_pclken[1], &tim_clk);
+  int r = clock_control_get_rate(clk, (clock_control_subsys_t)&cfg->tim_pclken[1], &tim_clk);
+  if (r < 0 || tim_clk == 0) {
+    LOG_ERR("timer clock rate unavailable (r=%d, clk=%u)", r, tim_clk);
+    return r < 0 ? r : -EINVAL;
+  }
 
   LL_TIM_SetPrescaler(cfg->tim, 0);
   LL_TIM_SetAutoReload(cfg->tim, (tim_clk / cfg->sampling_frequency) - 1U);
   LL_TIM_SetTriggerOutput(cfg->tim, LL_TIM_TRGO_UPDATE);
   LL_TIM_GenerateEvent_UPDATE(cfg->tim);
   LL_TIM_EnableCounter(cfg->tim);
+  return 0;
 }
 
 int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void *user_data) {
@@ -209,6 +234,9 @@ int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void 
   if (cb == NULL) {
     return -EINVAL;
   }
+  if (data->running) {
+    return -EALREADY;
+  }
   data->cb = cb;
   data->user_data = user_data;
   k_msgq_purge(&data->rx_msgq);
@@ -216,13 +244,20 @@ int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void 
 
   r = aai_adc_setup(dev);
   if (r < 0) {
+    data->running = false;
     return r;
   }
   r = aai_dma_start(dev);
   if (r < 0) {
+    data->running = false;
     return r;
   }
-  aai_timer_start(dev);
+  r = aai_timer_start(dev);
+  if (r < 0) {
+    dma_stop(((const struct aai_config *)dev->config)->dma_dev, ((const struct aai_config *)dev->config)->dma_channel);
+    data->running = false;
+    return r;
+  }
   LL_ADC_REG_StartConversion(((const struct aai_config *)dev->config)->adc);
   LOG_INF("capture started");
   return 0;
@@ -265,6 +300,7 @@ static int aai_init(const struct device *dev) {
       .sampling_frequency = DT_INST_PROP(inst, sampling_frequency),                                                                                            \
       .block_samples = DT_INST_PROP(inst, block_samples),                                                                                                      \
       .resolution = DT_INST_PROP(inst, resolution),                                                                                                            \
+      .adc_ll_channel = __LL_ADC_DECIMAL_NB_TO_CHANNEL(DT_INST_IO_CHANNELS_INPUT(inst)),                                                                       \
       .tim = (TIM_TypeDef *)DT_REG_ADDR(DT_INST_PHANDLE(inst, sampling_timer)),                                                                                \
       .adc = (ADC_TypeDef *)DT_REG_ADDR(DT_INST_IO_CHANNELS_CTLR(inst)),                                                                                       \
       .tim_pclken = aai_tim_pclken_##inst,                                                                                                                     \
