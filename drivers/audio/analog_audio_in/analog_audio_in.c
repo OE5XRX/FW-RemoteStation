@@ -229,18 +229,39 @@ static int aai_timer_start(const struct device *dev) {
     return r < 0 ? r : -EINVAL;
   }
 
+  /* TIM6 is a 16-bit timer: ARR = tim_clk/fs - 1 must fit in [0, 0xFFFF]. Reject
+   * a sample rate the timer cannot produce; divider 0 (fs > tim_clk) would also
+   * underflow the subtraction. */
+  uint32_t div = tim_clk / cfg->sampling_frequency;
+  if (div == 0U || div > 0x10000U) {
+    LOG_ERR("sample rate %u Hz unattainable from tim_clk %u (divider %u)", cfg->sampling_frequency, tim_clk, div);
+    return -EINVAL;
+  }
   LL_TIM_SetPrescaler(cfg->tim, 0);
-  LL_TIM_SetAutoReload(cfg->tim, (tim_clk / cfg->sampling_frequency) - 1U);
+  LL_TIM_SetAutoReload(cfg->tim, div - 1U);
   LL_TIM_SetTriggerOutput(cfg->tim, LL_TIM_TRGO_UPDATE);
   LL_TIM_GenerateEvent_UPDATE(cfg->tim);
   LL_TIM_EnableCounter(cfg->tim);
   return 0;
 }
 
+/* Best-effort ADC power-down for start() error paths (leaves no ADC enabled/
+ * calibrated/clocked behind after a partial bring-up). */
+static void aai_adc_disable(ADC_TypeDef *adc) {
+  LL_ADC_Disable(adc);
+  LL_ADC_DisableInternalRegulator(adc);
+}
+
 int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void *user_data) {
+  const struct aai_config *cfg = dev->config;
   struct aai_data *data = dev->data;
   int r;
 
+  /* Guard against a never-initialised device (aai_init failed => not ready):
+   * rx_msgq/drain_work would be uninitialised and purging them is UB. */
+  if (!device_is_ready(dev)) {
+    return -ENODEV;
+  }
   if (cb == NULL) {
     return -EINVAL;
   }
@@ -254,21 +275,24 @@ int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void 
 
   r = aai_adc_setup(dev);
   if (r < 0) {
+    aai_adc_disable(cfg->adc);
     data->running = false;
     return r;
   }
   r = aai_dma_start(dev);
   if (r < 0) {
+    aai_adc_disable(cfg->adc);
     data->running = false;
     return r;
   }
   r = aai_timer_start(dev);
   if (r < 0) {
-    dma_stop(((const struct aai_config *)dev->config)->dma_dev, ((const struct aai_config *)dev->config)->dma_channel);
+    dma_stop(cfg->dma_dev, cfg->dma_channel);
+    aai_adc_disable(cfg->adc);
     data->running = false;
     return r;
   }
-  LL_ADC_REG_StartConversion(((const struct aai_config *)dev->config)->adc);
+  LL_ADC_REG_StartConversion(cfg->adc);
   LOG_INF("capture started");
   return 0;
 }
@@ -276,6 +300,13 @@ int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void 
 int analog_audio_in_stop(const struct device *dev) {
   const struct aai_config *cfg = dev->config;
   struct aai_data *data = dev->data;
+
+  /* Guard against a never-initialised device: rx_msgq is only valid once
+   * aai_init() succeeded, and callers (SA818 stream stop) invoke this
+   * unconditionally, so purging an uninitialised msgq would be UB. */
+  if (!device_is_ready(dev)) {
+    return -ENODEV;
+  }
 
   /* Tear down the hardware only if capture was actually running: stop() can be
    * called after a skipped/failed start (e.g. device not ready), where touching
