@@ -1,0 +1,5 @@
+# Copyright (c) 2026 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+menu "Audio drivers"
+rsource "analog_audio_in/Kconfig"
+endmenu

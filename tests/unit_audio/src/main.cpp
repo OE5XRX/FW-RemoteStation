@@ -4,6 +4,7 @@
  *
  * Unit tests for the UAC2 explicit-feedback regulator (native_sim).
  */
+#include "adc_pcm.h"
 #include "feedback.h"
 
 #include <zephyr/ztest.h>
@@ -103,4 +104,24 @@ ZTEST(feedback, test_integrator_is_bounded) {
   }
   zassert_true(steps < 200000, "integrator not bounded: recovery took %d steps", steps);
   zassert_equal(fb.value(), kNominal - (1u << 13), "did not recover to the lower clamp, got %u", (unsigned)fb.value());
+}
+
+ZTEST_SUITE(adc_pcm, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(adc_pcm, test_midpoint_is_zero) {
+  /* 12-bit midpoint 2048 -> left-shifted to 32768 -> minus 32768 == 0. */
+  zassert_equal(adc_to_pcm16(2048, 12), 0, "midpoint must map to 0, got %d", adc_to_pcm16(2048, 12));
+}
+
+ZTEST(adc_pcm, test_full_scale_extremes) {
+  /* 12-bit: 0 -> -32768; 4095 -> +32752 (0xFFF << 4 = 0xFFF0 = 65520 - 32768). */
+  zassert_equal(adc_to_pcm16(0, 12), -32768, "min: got %d", adc_to_pcm16(0, 12));
+  zassert_equal(adc_to_pcm16(4095, 12), 32752, "max: got %d", adc_to_pcm16(4095, 12));
+}
+
+ZTEST(adc_pcm, test_16bit_is_identity_offset) {
+  /* resolution 16: no shift; 0 -> -32768, 32768 -> 0, 65535 -> 32767. */
+  zassert_equal(adc_to_pcm16(0, 16), -32768, "got %d", adc_to_pcm16(0, 16));
+  zassert_equal(adc_to_pcm16(32768, 16), 0, "got %d", adc_to_pcm16(32768, 16));
+  zassert_equal(adc_to_pcm16(65535, 16), 32767, "got %d", adc_to_pcm16(65535, 16));
 }

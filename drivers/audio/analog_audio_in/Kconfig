@@ -1,0 +1,23 @@
+# Copyright (c) 2026 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+config ANALOG_AUDIO_IN
+	bool "Hardware-timed analog audio capture (TIM+ADC+DMA)"
+	default y
+	depends on DT_HAS_OE5XRX_ANALOG_AUDIO_IN_ENABLED
+	select DMA
+	help
+	  Timer-TRGO-triggered ADC + circular DMA analog audio capture driver.
+
+if ANALOG_AUDIO_IN
+
+config ANALOG_AUDIO_IN_INIT_PRIORITY
+	int "Init priority"
+	default 90
+	help
+	  Device init priority. Must be after the DMA and ADC drivers.
+
+module = ANALOG_AUDIO_IN
+module-str = analog_audio_in
+source "subsys/logging/Kconfig.template.log_config"
+endif

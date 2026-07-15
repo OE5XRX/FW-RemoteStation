@@ -18,6 +18,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+/* Require the DT node to be status=okay AND the driver Kconfig on. The device
+ * is only instantiated via DT_INST_FOREACH_STATUS_OKAY, so an existing-but-
+ * disabled node (or CONFIG_ANALOG_AUDIO_IN=n) has no device symbol and
+ * DEVICE_DT_GET() would fail to link. Use HAS_STATUS(okay), not NODE_EXISTS. */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(audio_in), okay) && IS_ENABLED(CONFIG_ANALOG_AUDIO_IN)
+#include <oe5xrx/audio/analog_audio_in.h>
+#define SA818_HAVE_AAI 1
+#endif
+
 LOG_MODULE_REGISTER(sa818_audio_stream, LOG_LEVEL_INF);
 
 /* Audio streaming configuration */
@@ -85,10 +94,11 @@ static void audio_stream_work_handler(struct k_work *work) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(ctx->dev->config);
   struct sa818_data *data = static_cast<struct sa818_data *>(ctx->dev->data);
 
-  /* Protect access to audio enable flags */
+  /* Protect access to audio enable flags. RX is now sourced from the
+   * hardware-timed analog-audio-in module (see sa818_aai_on_samples), so this
+   * work handler only drives the TX (DAC) path. */
   k_mutex_lock(&data->lock, K_FOREVER);
   bool tx_enabled = data->audio_tx_enabled;
-  bool rx_enabled = data->audio_rx_enabled;
   k_mutex_unlock(&data->lock);
 
   /* Process TX: Get audio from application -> DAC */
@@ -106,44 +116,13 @@ static void audio_stream_work_handler(struct k_work *work) {
        * behaviour, so right-shift when the DAC has fewer than 16 bits
        * (e.g. the STM32U5 12-bit DAC => >> 4). */
       uint32_t unsigned_sample = (uint32_t)(pcm_sample + 32768);
-      uint32_t dac_value = (cfg->audio_out_resolution >= 16)
-                               ? (unsigned_sample << (cfg->audio_out_resolution - 16))
-                               : (unsigned_sample >> (16 - cfg->audio_out_resolution));
+      uint32_t dac_value =
+          (cfg->audio_out_resolution >= 16) ? (unsigned_sample << (cfg->audio_out_resolution - 16)) : (unsigned_sample >> (16 - cfg->audio_out_resolution));
       dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
     }
   }
 
-  /* Process RX: ADC -> Application callback */
-  if (ctx->callbacks.rx_data && rx_enabled) {
-    /* Read ADC */
-    uint16_t adc_sequence_buf[1];
-    struct adc_sequence sequence = {};
-
-    adc_sequence_init_dt(&cfg->audio_in, &sequence);
-    sequence.buffer = adc_sequence_buf;
-    sequence.buffer_size = sizeof(adc_sequence_buf);
-
-    int ret = adc_read_dt(&cfg->audio_in, &sequence);
-    if (ret == 0) {
-      /* Convert the ADC sample to signed 16-bit PCM.
-       * adc_sequence_init_dt() populated sequence.resolution from the channel's
-       * devicetree "zephyr,resolution" (12 bits on the STM32U5 ADC). Left-shift
-       * the unsigned reading up to the full 16-bit range, then subtract the
-       * midpoint. Clamp the shift to [0,16] so a 16-bit channel is a no-op and
-       * we never shift by a negative amount.
-       */
-      uint8_t resolution = sequence.resolution;
-      uint8_t up_shift = (resolution < 16) ? (uint8_t)(16 - resolution) : 0;
-      uint16_t adc_value = adc_sequence_buf[0];
-      int16_t pcm_sample = (int16_t)(((int32_t)adc_value << up_shift) - 32768);
-
-      ctx->rx_buffer[0] = (uint8_t)(pcm_sample & 0xFF);
-      ctx->rx_buffer[1] = (uint8_t)((pcm_sample >> 8) & 0xFF);
-
-      /* Call application callback */
-      ctx->callbacks.rx_data(ctx->dev, ctx->rx_buffer, SA818_AUDIO_SAMPLE_SIZE, ctx->callbacks.user_data);
-    }
-  }
+  /* RX is delivered asynchronously by the analog-audio-in module callback. */
 
   /* Reschedule based on sample rate - check streaming flag again under mutex */
   k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
@@ -172,6 +151,26 @@ sa818_result sa818_audio_stream_register(const struct device *dev, const struct 
   return SA818_OK;
 }
 
+#ifdef SA818_HAVE_AAI
+/* Hardware-timed RX samples from the analog-audio-in module. Runs in the module's
+ * workqueue thread (not an ISR), so forwarding through rx_data (which may take a
+ * mutex) is safe. */
+static void sa818_aai_on_samples(const int16_t *samples, size_t count, void *user) {
+  struct sa818_audio_stream_ctx *ctx = static_cast<struct sa818_audio_stream_ctx *>(user);
+  struct sa818_data *data = static_cast<struct sa818_data *>(ctx->dev->data);
+
+  /* Honour the RX audio-path enable flag (sa818_audio_enable_path) so RX can
+   * still be muted, matching the previous ADC-read path's gating behaviour. */
+  k_mutex_lock(&data->lock, K_FOREVER);
+  bool rx_enabled = data->audio_rx_enabled;
+  k_mutex_unlock(&data->lock);
+
+  if (rx_enabled && ctx->callbacks.rx_data) {
+    ctx->callbacks.rx_data(ctx->dev, reinterpret_cast<const uint8_t *>(samples), count * SA818_AUDIO_SAMPLE_SIZE, ctx->callbacks.user_data);
+  }
+}
+#endif
+
 /**
  * @brief Start audio streaming
  */
@@ -196,6 +195,23 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
 
   k_work_reschedule(&audio_ctx.audio_work, K_MSEC(1));
 
+#ifdef SA818_HAVE_AAI
+  /* Start the hardware-timed RX capture module; it delivers PCM via the callback.
+   * A failure only disables RX capture (TX still works), so surface it loudly
+   * rather than fail the whole stream. Verify the device initialised before use
+   * (per the driver-layer device_is_ready() convention) so a failed init cannot
+   * leave analog_audio_in_start() operating on uninitialised runtime state. */
+  const struct device *aai_dev = DEVICE_DT_GET(DT_NODELABEL(audio_in));
+  if (!device_is_ready(aai_dev)) {
+    LOG_ERR("analog-audio-in device not ready (RX capture unavailable)");
+  } else {
+    int aai_ret = analog_audio_in_start(aai_dev, sa818_aai_on_samples, &audio_ctx);
+    if (aai_ret < 0) {
+      LOG_ERR("analog-audio-in start failed: %d (RX capture unavailable)", aai_ret);
+    }
+  }
+#endif
+
   LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);
 
   return SA818_OK;
@@ -212,6 +228,15 @@ sa818_result sa818_audio_stream_stop(const struct device *dev) {
   k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = false;
   k_mutex_unlock(&audio_ctx_mutex);
+
+#ifdef SA818_HAVE_AAI
+  /* Consume the result: analog_audio_in_stop() is warn_unused_result, and GCC's
+   * attribute (unlike [[nodiscard]]) is NOT silenced by a (void) cast. */
+  int aai_stop_ret = analog_audio_in_stop(DEVICE_DT_GET(DT_NODELABEL(audio_in)));
+  if (aai_stop_ret < 0) {
+    LOG_WRN("analog-audio-in stop returned %d", aai_stop_ret);
+  }
+#endif
 
   /* Ensure work is fully stopped before returning */
   struct k_work_sync sync;
