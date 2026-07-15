@@ -230,7 +230,12 @@ sa818_result sa818_audio_stream_stop(const struct device *dev) {
   k_mutex_unlock(&audio_ctx_mutex);
 
 #ifdef SA818_HAVE_AAI
-  (void)analog_audio_in_stop(DEVICE_DT_GET(DT_NODELABEL(audio_in)));
+  /* Consume the result: analog_audio_in_stop() is warn_unused_result, and GCC's
+   * attribute (unlike [[nodiscard]]) is NOT silenced by a (void) cast. */
+  int aai_stop_ret = analog_audio_in_stop(DEVICE_DT_GET(DT_NODELABEL(audio_in)));
+  if (aai_stop_ret < 0) {
+    LOG_WRN("analog-audio-in stop returned %d", aai_stop_ret);
+  }
 #endif
 
   /* Ensure work is fully stopped before returning */
