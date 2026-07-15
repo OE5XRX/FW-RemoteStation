@@ -340,6 +340,11 @@ static int aao_init(const struct device *dev) {
    * aliases to different secure/non-secure addresses on STM32U5). */                                                                                          \
   BUILD_ASSERT(DT_SAME_NODE(DT_INST_PHANDLE(inst, sampling_timer), DT_NODELABEL(timers7)),                                                                     \
                "analog-audio-out sampling-timer must be TIM7 (DAC trigger is hardcoded to TIM7-TRGO)");                                                        \
+  /* aao_dma_start() overrides the dest data width via LL on the hardcoded GPDMA1                                                                              \
+   * instance (the STM32U5 word-write DAC fix), so the DT-selected DMA controller                                                                              \
+   * must be GPDMA1. Enforce at build time. */                                                                                                                 \
+  BUILD_ASSERT(DT_SAME_NODE(DT_INST_DMAS_CTLR_BY_NAME(inst, tx), DT_NODELABEL(gpdma1)),                                                                        \
+               "analog-audio-out tx DMA controller must be GPDMA1 (LL dest-width override is GPDMA1-specific)");                                               \
   static const struct stm32_pclken aao_tim_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_PHANDLE(inst, sampling_timer));                                           \
   static const struct stm32_pclken aao_dac_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_IO_CHANNELS_CTLR(inst));                                                  \
   static const struct aao_config aao_cfg_##inst = {                                                                                                            \
