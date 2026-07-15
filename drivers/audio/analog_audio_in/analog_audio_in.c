@@ -48,7 +48,7 @@ struct aai_data {
    * consumer callback may block (e.g. take a mutex), so blocks of converted PCM
    * are queued here and delivered from the system workqueue thread. */
   struct k_msgq rx_msgq;
-  char msgq_buf[AAI_MSGQ_BLOCKS * AAI_MAX_BLOCK * sizeof(int16_t)] __aligned(sizeof(int16_t));
+  char msgq_buf[AAI_MSGQ_BLOCKS * AAI_MAX_BLOCK * sizeof(int16_t)] __aligned(sizeof(void *));
   struct k_work drain_work;
   struct dma_config dma_cfg;
   struct dma_block_config blk;
