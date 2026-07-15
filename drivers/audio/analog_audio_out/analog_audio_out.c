@@ -43,7 +43,7 @@ struct aao_data {
   void *user_data;
   atomic_t running;                    /* written from thread (start/stop), read from DMA ISR */
   uint16_t dma_buf[2 * AAO_MAX_BLOCK]; /* circular DAC codes: [0..block) | [block..2*block) */
-  volatile uint8_t refill_half;        /* which half just finished playing (0/1) */
+  atomic_t pending;                    /* bitmask of halves needing refill: BIT(0)=first, BIT(1)=second */
   struct k_work refill_work;
   struct dma_config dma_cfg;
   struct dma_block_config blk;
@@ -59,13 +59,33 @@ static uint32_t aao_ll_channel(uint32_t nb) {
 static void aao_refill_work(struct k_work *work) {
   struct aao_data *data = CONTAINER_OF(work, struct aao_data, refill_work);
   const struct aao_config *cfg = data->self->config;
-  int16_t pcm[AAO_MAX_BLOCK];
-  uint16_t *dst = &data->dma_buf[data->refill_half * cfg->block_samples];
   uint16_t mid = pcm16_to_dac(0, cfg->resolution);
 
-  size_t got = data->src ? data->src(pcm, cfg->block_samples, data->user_data) : 0;
-  for (uint16_t i = 0; i < cfg->block_samples; i++) {
-    dst[i] = (i < got) ? pcm16_to_dac(pcm[i], cfg->resolution) : mid;
+  /* Drain every pending half. A single k_work cannot queue twice, so the DMA
+   * ISR records the finished halves in a bitmask and we clear+service all of
+   * them here; a half flagged during a refill re-arms pending and resubmits, so
+   * no half is lost even when several IRQs coalesce into one work run. */
+  atomic_val_t bits;
+  while ((bits = atomic_clear(&data->pending)) != 0) {
+    /* Stop delivering once stop() clears running (DMA already halted, so buffer
+     * contents no longer matter); snapshot src/user_data once so a concurrent
+     * stop() clearing them cannot be observed mid-call. */
+    if (!atomic_get(&data->running)) {
+      return;
+    }
+    analog_audio_out_src src = data->src;
+    void *user = data->user_data;
+    for (uint8_t half = 0; half < 2; half++) {
+      if ((bits & BIT(half)) == 0) {
+        continue;
+      }
+      uint16_t *dst = &data->dma_buf[half * cfg->block_samples];
+      int16_t pcm[AAO_MAX_BLOCK];
+      size_t got = src ? src(pcm, cfg->block_samples, user) : 0;
+      for (uint16_t i = 0; i < cfg->block_samples; i++) {
+        dst[i] = (i < got) ? pcm16_to_dac(pcm[i], cfg->resolution) : mid;
+      }
+    }
   }
 }
 
@@ -83,9 +103,9 @@ static void aao_dma_cb(const struct device *dma_dev, void *user, uint32_t channe
    * DMA_STATUS_BLOCK = first half just played, DMA_STATUS_COMPLETE = second half.
    * Ignore errors (status < 0) and any other/unexpected status. */
   if (status == DMA_STATUS_BLOCK) {
-    data->refill_half = 0;
+    atomic_or(&data->pending, BIT(0));
   } else if (status == DMA_STATUS_COMPLETE) {
-    data->refill_half = 1;
+    atomic_or(&data->pending, BIT(1));
   } else {
     return;
   }
@@ -105,7 +125,13 @@ static int aao_dac_setup(const struct device *dev) {
    * At the default reset value (<=80 MHz) the interface cannot keep up at higher
    * HCLK. Set it from the actual DAC bus-clock rate while the channel is disabled. */
   uint32_t dac_bus_hz = 0;
-  (void)clock_control_get_rate(clk, (clock_control_subsys_t)&cfg->dac_pclken[0], &dac_bus_hz);
+  int cr = clock_control_get_rate(clk, (clock_control_subsys_t)&cfg->dac_pclken[0], &dac_bus_hz);
+  if (cr < 0 || dac_bus_hz == 0) {
+    /* HFSEL must match the actual AHB clock for reliable DMA-paced DAC writes;
+     * guessing from a failed/zero rate query would silently leave it wrong. */
+    LOG_ERR("DAC bus clock rate unavailable (r=%d, hz=%u)", cr, dac_bus_hz);
+    return cr < 0 ? cr : -EINVAL;
+  }
   uint32_t hfsel = LL_DAC_HIGH_FREQ_MODE_DISABLE;
   if (dac_bus_hz > 160000000U) {
     hfsel = LL_DAC_HIGH_FREQ_MODE_ABOVE_160MHZ;
@@ -229,6 +255,7 @@ int analog_audio_out_start(const struct device *dev, analog_audio_out_src src, v
   }
   data->src = src;
   data->user_data = user_data;
+  atomic_set(&data->pending, 0);
   atomic_set(&data->running, 1);
 
   /* Arm the memory->DAC DMA FIRST so it is ready to service the DAC's first
