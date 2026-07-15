@@ -2,8 +2,10 @@
  * @file sa818_audio_stream.cpp
  * @brief SA818 Audio Streaming Implementation
  *
- * Implements generic audio streaming interface using callbacks.
- * Hardware-agnostic - can be connected to USB, I2S, files, network, etc.
+ * Implements a generic, hardware-agnostic audio streaming interface using
+ * callbacks. The actual sample timing is delegated to the hardware-timed
+ * analog-audio-in (RX capture) and analog-audio-out (TX playback) modules; this
+ * layer only bridges their PCM to/from the application callbacks (USB, etc.).
  *
  * @copyright Copyright (c) 2025 OE5XRX
  * @spdx-license-identifier LGPL-3.0-or-later
@@ -13,8 +15,6 @@
 
 #include <sa818/sa818_audio_stream.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/adc.h>
-#include <zephyr/drivers/dac.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -23,11 +23,14 @@
 #define SA818_HAVE_AAI 1
 #endif
 
+#if DT_NODE_EXISTS(DT_NODELABEL(audio_out))
+#include <oe5xrx/audio/analog_audio_out.h>
+#define SA818_HAVE_AAO 1
+#endif
+
 LOG_MODULE_REGISTER(sa818_audio_stream, LOG_LEVEL_INF);
 
-/* Audio streaming configuration */
-#define SA818_AUDIO_BUFFER_SIZE 32 /* Samples per callback */
-#define SA818_AUDIO_SAMPLE_SIZE 2  /* 16-bit = 2 bytes */
+#define SA818_AUDIO_SAMPLE_SIZE 2 /* 16-bit = 2 bytes */
 
 /**
  * @brief Audio streaming context
@@ -36,13 +39,7 @@ struct sa818_audio_stream_ctx {
   const struct device *dev;
   struct sa818_audio_callbacks callbacks;
   struct sa818_audio_format format;
-
-  struct k_work_delayable audio_work;
   bool streaming;
-
-  /* Buffers for audio processing */
-  uint8_t tx_buffer[SA818_AUDIO_BUFFER_SIZE * SA818_AUDIO_SAMPLE_SIZE];
-  uint8_t rx_buffer[SA818_AUDIO_BUFFER_SIZE * SA818_AUDIO_SAMPLE_SIZE];
 };
 
 /*
@@ -55,10 +52,6 @@ struct sa818_audio_stream_ctx {
  * If support for multiple SA818 radios is needed in the future, this should be
  * refactored to store the audio context in the device's runtime data structure
  * (struct sa818_data), similar to how other device-specific state is managed.
- * This would require:
- * 1. Adding audio_stream_ctx to struct sa818_data
- * 2. Updating all API functions to access ctx via dev->data
- * 3. Ensuring proper initialization/cleanup per device instance
  */
 
 /* Static mutex for audio context - initialized at compile time */
@@ -66,86 +59,29 @@ K_MUTEX_DEFINE(audio_ctx_mutex);
 
 static struct sa818_audio_stream_ctx audio_ctx;
 
-/**
- * @brief Audio processing work handler
- *
- * Periodically processes audio:
- * - Calls tx_request callback to get audio for TX
- * - Writes samples to DAC
- * - Reads samples from ADC
- * - Calls rx_data callback with received audio
- */
-static void audio_stream_work_handler(struct k_work *work) {
-  struct k_work_delayable *dwork = k_work_delayable_from_work(work);
-  struct sa818_audio_stream_ctx *ctx = CONTAINER_OF(dwork, struct sa818_audio_stream_ctx, audio_work);
-
-  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
-  bool streaming = ctx->streaming;
-  k_mutex_unlock(&audio_ctx_mutex);
-
-  if (!streaming) {
-    return;
-  }
-
-  const struct sa818_config *cfg = static_cast<const struct sa818_config *>(ctx->dev->config);
+#ifdef SA818_HAVE_AAO
+/* Hardware-timed TX playback pull-source for the analog-audio-out module. Runs
+ * in that module's workqueue thread (thread context, may take a mutex). Sources
+ * signed 16-bit PCM from the application via the tx_request callback, gated by
+ * the TX-enable flag. Returning fewer than @p max samples (or 0 when TX is
+ * disabled / no data) makes the module emit mid-scale silence for the shortfall.
+ * Host PCM is little-endian, matching the Cortex-M, so the byte buffer maps
+ * directly onto int16 samples with no swap. */
+static size_t sa818_aao_tx_src(int16_t *dst, size_t max, void *user) {
+  struct sa818_audio_stream_ctx *ctx = static_cast<struct sa818_audio_stream_ctx *>(user);
   struct sa818_data *data = static_cast<struct sa818_data *>(ctx->dev->data);
 
-  /* Protect access to audio enable flags. RX is now sourced from the
-   * hardware-timed analog-audio-in module (see sa818_aai_on_samples), so this
-   * work handler only drives the TX (DAC) path. */
   k_mutex_lock(&data->lock, K_FOREVER);
   bool tx_enabled = data->audio_tx_enabled;
   k_mutex_unlock(&data->lock);
 
-  /* Process TX: Get audio from application -> DAC */
-  if (ctx->callbacks.tx_request && tx_enabled) {
-    size_t bytes = ctx->callbacks.tx_request(ctx->dev, ctx->tx_buffer, sizeof(ctx->tx_buffer), ctx->callbacks.user_data);
-
-    /* Process all complete samples in the TX buffer */
-    size_t samples = bytes / SA818_AUDIO_SAMPLE_SIZE;
-    for (size_t i = 0; i < samples; ++i) {
-      const uint8_t *sample_ptr = &ctx->tx_buffer[i * SA818_AUDIO_SAMPLE_SIZE];
-      int16_t pcm_sample = (int16_t)((sample_ptr[1] << 8) | sample_ptr[0]);
-      /* Scale signed 16-bit PCM (-32768..32767) to the DAC's unsigned range.
-       * pcm_sample + 32768 is the full 16-bit unsigned value; shift it to the
-       * DAC resolution. A left-shift by a negative amount is undefined
-       * behaviour, so right-shift when the DAC has fewer than 16 bits
-       * (e.g. the STM32U5 12-bit DAC => >> 4). */
-      uint32_t unsigned_sample = (uint32_t)(pcm_sample + 32768);
-      uint32_t dac_value =
-          (cfg->audio_out_resolution >= 16) ? (unsigned_sample << (cfg->audio_out_resolution - 16)) : (unsigned_sample >> (16 - cfg->audio_out_resolution));
-      dac_write_value(cfg->audio_out_dev, cfg->audio_out_channel, dac_value);
-    }
+  if (!tx_enabled || !ctx->callbacks.tx_request) {
+    return 0;
   }
-
-  /* RX is delivered asynchronously by the analog-audio-in module callback. */
-
-  /* Reschedule based on sample rate - check streaming flag again under mutex */
-  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
-  if (ctx->streaming) {
-    uint32_t period_us = 1000000 / ctx->format.sample_rate;
-    k_work_reschedule(&ctx->audio_work, K_USEC(period_us));
-  }
-  k_mutex_unlock(&audio_ctx_mutex);
+  size_t bytes = ctx->callbacks.tx_request(ctx->dev, reinterpret_cast<uint8_t *>(dst), max * SA818_AUDIO_SAMPLE_SIZE, ctx->callbacks.user_data);
+  return bytes / SA818_AUDIO_SAMPLE_SIZE;
 }
-
-/**
- * @brief Register audio streaming callbacks
- */
-sa818_result sa818_audio_stream_register(const struct device *dev, const struct sa818_audio_callbacks *callbacks) {
-  if (!dev || !callbacks) {
-    return SA818_ERROR_INVALID_PARAM;
-  }
-
-  audio_ctx.dev = dev;
-  audio_ctx.callbacks = *callbacks;
-
-  /* Initialize work queue once during registration */
-  k_work_init_delayable(&audio_ctx.audio_work, audio_stream_work_handler);
-
-  LOG_INF("Audio callbacks registered");
-  return SA818_OK;
-}
+#endif
 
 #ifdef SA818_HAVE_AAI
 /* Hardware-timed RX samples from the analog-audio-in module. Runs in the module's
@@ -159,6 +95,21 @@ static void sa818_aai_on_samples(const int16_t *samples, size_t count, void *use
   }
 }
 #endif
+
+/**
+ * @brief Register audio streaming callbacks
+ */
+sa818_result sa818_audio_stream_register(const struct device *dev, const struct sa818_audio_callbacks *callbacks) {
+  if (!dev || !callbacks) {
+    return SA818_ERROR_INVALID_PARAM;
+  }
+
+  audio_ctx.dev = dev;
+  audio_ctx.callbacks = *callbacks;
+
+  LOG_INF("Audio callbacks registered");
+  return SA818_OK;
+}
 
 /**
  * @brief Start audio streaming
@@ -177,12 +128,19 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
   audio_ctx.format = *format;
   audio_ctx.dev = dev;
 
-  /* Start streaming */
   k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = true;
   k_mutex_unlock(&audio_ctx_mutex);
 
-  k_work_reschedule(&audio_ctx.audio_work, K_MSEC(1));
+#ifdef SA818_HAVE_AAO
+  /* Start the hardware-timed TX playback module; it pulls PCM via the source
+   * callback. A failure only disables TX playback (RX still works), so surface
+   * it loudly rather than fail the whole stream. */
+  int aao_ret = analog_audio_out_start(DEVICE_DT_GET(DT_NODELABEL(audio_out)), sa818_aao_tx_src, &audio_ctx);
+  if (aao_ret < 0) {
+    LOG_ERR("analog-audio-out start failed: %d (TX playback unavailable)", aao_ret);
+  }
+#endif
 
 #ifdef SA818_HAVE_AAI
   /* Start the hardware-timed RX capture module; it delivers PCM via the callback.
@@ -211,13 +169,13 @@ sa818_result sa818_audio_stream_stop(const struct device *dev) {
   audio_ctx.streaming = false;
   k_mutex_unlock(&audio_ctx_mutex);
 
+#ifdef SA818_HAVE_AAO
+  (void)analog_audio_out_stop(DEVICE_DT_GET(DT_NODELABEL(audio_out)));
+#endif
+
 #ifdef SA818_HAVE_AAI
   (void)analog_audio_in_stop(DEVICE_DT_GET(DT_NODELABEL(audio_in)));
 #endif
-
-  /* Ensure work is fully stopped before returning */
-  struct k_work_sync sync;
-  k_work_cancel_delayable_sync(&audio_ctx.audio_work, &sync);
 
   LOG_INF("Audio streaming stopped");
   return SA818_OK;
