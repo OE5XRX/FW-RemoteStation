@@ -11,15 +11,24 @@ include: base.yaml
 
 properties:
   io-channels:
+    type: phandle-array
     required: true
     description: DAC instance + channel used for the audio output.
+  io-channel-names:
+    type: string-array
+    required: false
+    description: Optional names for io-channels (e.g. "audio_out").
   sampling-timer:
     type: phandle
     required: true
   dmas:
+    type: phandle-array
     required: true
+    description: TX DMA channel that moves DAC codes from the circular buffer.
   dma-names:
+    type: string-array
     required: true
+    description: Name for the TX DMA channel (must include "tx").
   sampling-frequency:
     type: int
     required: true

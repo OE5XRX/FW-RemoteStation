@@ -16,6 +16,7 @@
 #include <zephyr/drivers/dma.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 
 LOG_MODULE_REGISTER(analog_audio_out, CONFIG_ANALOG_AUDIO_OUT_LOG_LEVEL);
 
@@ -40,7 +41,7 @@ struct aao_data {
   const struct device *self;
   analog_audio_out_src src;
   void *user_data;
-  bool running;
+  atomic_t running;                    /* written from thread (start/stop), read from DMA ISR */
   uint16_t dma_buf[2 * AAO_MAX_BLOCK]; /* circular DAC codes: [0..block) | [block..2*block) */
   volatile uint8_t refill_half;        /* which half just finished playing (0/1) */
   struct k_work refill_work;
@@ -75,11 +76,19 @@ static void aao_dma_cb(const struct device *dma_dev, void *user, uint32_t channe
   ARG_UNUSED(dma_dev);
   ARG_UNUSED(channel);
 
-  if (!data->running || status < 0) {
+  if (!atomic_get(&data->running)) {
     return;
   }
-  /* DMA_STATUS_BLOCK = first half just played; COMPLETE = second half. Refill it. */
-  data->refill_half = (status == DMA_STATUS_BLOCK) ? 0 : 1;
+  /* Refill only on the expected half/full-transfer completions:
+   * DMA_STATUS_BLOCK = first half just played, DMA_STATUS_COMPLETE = second half.
+   * Ignore errors (status < 0) and any other/unexpected status. */
+  if (status == DMA_STATUS_BLOCK) {
+    data->refill_half = 0;
+  } else if (status == DMA_STATUS_COMPLETE) {
+    data->refill_half = 1;
+  } else {
+    return;
+  }
   k_work_submit(&data->refill_work);
 }
 
@@ -178,12 +187,28 @@ static int aao_timer_start(const struct device *dev) {
     return r < 0 ? r : -EINVAL;
   }
 
+  /* TIM7 is a 16-bit timer: ARR = tim_clk/fs - 1 must fit in [0, 0xFFFF]. Reject
+   * a sample rate the timer cannot produce; divider 0 (fs > tim_clk) would also
+   * underflow the subtraction. */
+  uint32_t div = tim_clk / cfg->sampling_frequency;
+  if (div == 0U || div > 0x10000U) {
+    LOG_ERR("sample rate %u Hz unattainable from tim_clk %u (divider %u)", cfg->sampling_frequency, tim_clk, div);
+    return -EINVAL;
+  }
   LL_TIM_SetPrescaler(cfg->tim, 0);
-  LL_TIM_SetAutoReload(cfg->tim, (tim_clk / cfg->sampling_frequency) - 1U);
+  LL_TIM_SetAutoReload(cfg->tim, div - 1U);
   LL_TIM_SetTriggerOutput(cfg->tim, LL_TIM_TRGO_UPDATE);
   LL_TIM_GenerateEvent_UPDATE(cfg->tim);
   LL_TIM_EnableCounter(cfg->tim);
   return 0;
+}
+
+/* Best-effort DAC power-down for start() error paths and stop(): stop the
+ * trigger + DMA request and disable the channel so nothing is left half-armed. */
+static void aao_dac_disable(DAC_TypeDef *dac, uint32_t ch) {
+  LL_DAC_DisableTrigger(dac, ch);
+  LL_DAC_DisableDMAReq(dac, ch);
+  LL_DAC_Disable(dac, ch);
 }
 
 int analog_audio_out_start(const struct device *dev, analog_audio_out_src src, void *user_data) {
@@ -191,33 +216,41 @@ int analog_audio_out_start(const struct device *dev, analog_audio_out_src src, v
   struct aao_data *data = dev->data;
   int r;
 
+  /* Guard against a never-initialised device (aao_init failed => not ready):
+   * refill_work would be uninitialised. */
+  if (!device_is_ready(dev)) {
+    return -ENODEV;
+  }
   if (src == NULL) {
     return -EINVAL;
   }
-  if (data->running) {
+  if (atomic_get(&data->running)) {
     return -EALREADY;
   }
   data->src = src;
   data->user_data = user_data;
-  data->running = true;
+  atomic_set(&data->running, 1);
 
   /* Arm the memory->DAC DMA FIRST so it is ready to service the DAC's first
    * request; only then enable the DAC (DMA request + trigger). Enabling the DAC
    * before the DMA is armed loses the first request and underruns immediately. */
   r = aao_dma_start(dev);
   if (r < 0) {
-    data->running = false;
+    atomic_set(&data->running, 0);
     return r;
   }
   r = aao_dac_setup(dev);
   if (r < 0) {
-    data->running = false;
+    dma_stop(cfg->dma_dev, cfg->dma_channel);
+    aao_dac_disable(cfg->dac, aao_ll_channel(cfg->dac_channel_nb));
+    atomic_set(&data->running, 0);
     return r;
   }
   r = aao_timer_start(dev);
   if (r < 0) {
     dma_stop(cfg->dma_dev, cfg->dma_channel);
-    data->running = false;
+    aao_dac_disable(cfg->dac, aao_ll_channel(cfg->dac_channel_nb));
+    atomic_set(&data->running, 0);
     return r;
   }
   LOG_INF("playback started");
@@ -228,10 +261,22 @@ int analog_audio_out_stop(const struct device *dev) {
   const struct aao_config *cfg = dev->config;
   struct aao_data *data = dev->data;
 
-  data->running = false;
-  LL_TIM_DisableCounter(cfg->tim);
-  LL_DAC_DisableTrigger(cfg->dac, aao_ll_channel(cfg->dac_channel_nb));
-  dma_stop(cfg->dma_dev, cfg->dma_channel);
+  /* Guard against a never-initialised device: callers (SA818 stream stop) invoke
+   * this unconditionally. */
+  if (!device_is_ready(dev)) {
+    return -ENODEV;
+  }
+
+  /* Tear down the hardware only if playback was actually running: stop() can be
+   * called after a skipped/failed start, where touching the TIM/DAC/DMA
+   * registers would be wrong. Also power the DAC down (not just stop the
+   * trigger), mirroring the error-path teardown. */
+  if (atomic_get(&data->running)) {
+    atomic_set(&data->running, 0);
+    LL_TIM_DisableCounter(cfg->tim);
+    aao_dac_disable(cfg->dac, aao_ll_channel(cfg->dac_channel_nb));
+    dma_stop(cfg->dma_dev, cfg->dma_channel);
+  }
   return 0;
 }
 
@@ -240,8 +285,16 @@ static int aao_init(const struct device *dev) {
   struct aao_data *data = dev->data;
 
   LOG_INF("init: %u Hz, %u-bit, block=%u", cfg->sampling_frequency, cfg->resolution, cfg->block_samples);
-  if (cfg->block_samples > AAO_MAX_BLOCK) {
-    LOG_ERR("block-samples %u exceeds max %u", cfg->block_samples, AAO_MAX_BLOCK);
+  if (cfg->block_samples == 0 || cfg->block_samples > AAO_MAX_BLOCK) {
+    LOG_ERR("block-samples %u out of range (1..%u)", cfg->block_samples, AAO_MAX_BLOCK);
+    return -EINVAL;
+  }
+  if (cfg->sampling_frequency == 0) {
+    LOG_ERR("sampling-frequency must be non-zero");
+    return -EINVAL;
+  }
+  if (cfg->resolution == 0 || cfg->resolution > 16) {
+    LOG_ERR("resolution %u out of range (1..16)", cfg->resolution);
     return -EINVAL;
   }
   if (!device_is_ready(cfg->dma_dev)) {
@@ -254,6 +307,12 @@ static int aao_init(const struct device *dev) {
 }
 
 #define AAO_INIT(inst)                                                                                                                                         \
+  /* The DAC trigger is hardcoded to TIM7-TRGO (aao_dac_setup), so the DT-selected                                                                             \
+   * sampling-timer must be TIM7. Enforce at build time via node identity                                                                                      \
+   * (security-agnostic; a runtime base-address compare is unreliable because TIM7                                                                             \
+   * aliases to different secure/non-secure addresses on STM32U5). */                                                                                          \
+  BUILD_ASSERT(DT_SAME_NODE(DT_INST_PHANDLE(inst, sampling_timer), DT_NODELABEL(timers7)),                                                                     \
+               "analog-audio-out sampling-timer must be TIM7 (DAC trigger is hardcoded to TIM7-TRGO)");                                                        \
   static const struct stm32_pclken aao_tim_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_PHANDLE(inst, sampling_timer));                                           \
   static const struct stm32_pclken aao_dac_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_IO_CHANNELS_CTLR(inst));                                                  \
   static const struct aao_config aao_cfg_##inst = {                                                                                                            \
