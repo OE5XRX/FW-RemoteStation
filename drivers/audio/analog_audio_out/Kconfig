@@ -15,6 +15,7 @@ config ANALOG_AUDIO_OUT_INIT_PRIORITY
 	default 90
 	help
 	  Device init priority. Must be after the DMA and DAC drivers.
+
 module = ANALOG_AUDIO_OUT
 module-str = analog_audio_out
 source "subsys/logging/Kconfig.template.log_config"

@@ -1,1 +1,2 @@
+oe5xrx	OE5XRX (amateur radio remote station project)
 sa	NiceRF
