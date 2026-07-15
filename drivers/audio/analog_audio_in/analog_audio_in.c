@@ -73,6 +73,12 @@ static void aai_drain_work(struct k_work *work) {
   int16_t block[AAI_MAX_BLOCK];
 
   while (k_msgq_get(&data->rx_msgq, block, K_NO_WAIT) == 0) {
+    /* Stop delivering as soon as stop() clears running, so at most the block
+     * already dequeued here can reach the consumer after stop() (not the whole
+     * backlog). */
+    if (!atomic_get(&data->running)) {
+      break;
+    }
     /* Snapshot cb/user_data once: stop() may clear them concurrently, so a
      * check-then-call directly on data->cb could dereference a NULL that was
      * cleared between the test and the call. */
@@ -316,15 +322,19 @@ int analog_audio_in_stop(const struct device *dev) {
 
   /* Tear down the hardware only if capture was actually running: stop() can be
    * called after a skipped/failed start (e.g. device not ready), where touching
-   * the TIM/ADC/DMA registers would be wrong. */
+   * the TIM/ADC/DMA registers would be wrong. Also power the ADC down (not just
+   * stop conversions) so the peripheral/regulator isn't left drawing current
+   * while stopped, mirroring the error-path teardown. */
   if (atomic_get(&data->running)) {
     atomic_set(&data->running, 0);
     LL_TIM_DisableCounter(cfg->tim);
     LL_ADC_REG_StopConversion(cfg->adc);
     dma_stop(cfg->dma_dev, cfg->dma_channel);
+    aai_adc_disable(cfg->adc);
   }
-  /* Always drop queued blocks and clear the callback (even if never started) so
-   * a drain_work item that was already submitted cannot deliver stale samples. */
+  /* Drop queued blocks and clear the callback (even if never started). Combined
+   * with the running check in aai_drain_work, at most one already-dequeued block
+   * can still reach the consumer after this returns. */
   k_msgq_purge(&data->rx_msgq);
   data->cb = NULL;
   data->user_data = NULL;
