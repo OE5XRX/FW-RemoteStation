@@ -95,6 +95,21 @@ The firmware describes itself (identity + capabilities as machine-readable JSON 
 
 ## 3. Build & Test
 
+### Downstream Zephyr patches (run after `west update`)
+
+This repo carries downstream fixes to west modules under `zephyr/patches/` (indexed by
+`zephyr/patches.yml`), applied with:
+
+```
+west patch apply
+```
+
+Currently one patch: the STM32 UDC isochronous-incomplete recovery
+(`HAL_PCD_ISO{OUT,IN}IncompleteCallback` in `drivers/usb/udc/udc_stm32.c`) — **required for
+UAC2 host→device playback (TX audio) on fm_board**; without it iso-OUT reception stalls after
+a few frames. `west update` resets the module, so re-run `west patch apply` afterwards (CI does
+this automatically after `action-zephyr-setup`). Upstream: zephyr#102720.
+
 ### Build commands
 
 ```

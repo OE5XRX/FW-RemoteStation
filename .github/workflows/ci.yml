@@ -56,6 +56,15 @@ jobs:
           west --version
           west list
 
+      - name: Apply downstream Zephyr patches
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Carries our downstream fixes to west modules (see zephyr/patches.yml),
+          # e.g. the STM32 UDC isochronous-incomplete recovery needed for UAC2 playback.
+          west patch apply
+
       - name: Build native_sim
         working-directory: fw
         shell: bash

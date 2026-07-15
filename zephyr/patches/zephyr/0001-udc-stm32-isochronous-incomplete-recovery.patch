@@ -1,0 +1,62 @@
+diff --git a/drivers/usb/udc/udc_stm32.c b/drivers/usb/udc/udc_stm32.c
+index 2885fcb59f2..194a64b657b 100644
+--- a/drivers/usb/udc/udc_stm32.c
++++ b/drivers/usb/udc/udc_stm32.c
+@@ -614,6 +614,57 @@ void HAL_PCD_DataOutStageCallback(stm32_pcd_handle_t *hpcd, uint8_t epnum)
+ 	}
+ }
+ 
++/*
++ * Isochronous "incomplete transfer" recovery.
++ *
++ * When an isochronous endpoint misses its (micro)frame (e.g. the re-arm landed
++ * a frame late, so the host's token found the endpoint armed for the wrong
++ * even/odd frame), the OTG core drops the packet, raises the incomplete-iso
++ * interrupt and disables the endpoint. The HAL then calls these callbacks from
++ * the ISR. We must re-arm the pending transfer here: HAL_PCD_EP_Receive/Transmit
++ * re-select the correct even/odd frame at arm time, resynchronising the endpoint.
++ *
++ * Without this, iso OUT reception (e.g. UAC2 playback) stalls permanently after
++ * the first missed frame. (iso IN like a UAC2 mic degrades gracefully, so it
++ * "works" even without this, which is why only playback was affected.)
++ */
++void HAL_PCD_ISOOUTIncompleteCallback(stm32_pcd_handle_t *hpcd, uint8_t epnum)
++{
++	struct udc_stm32_data *priv = hpcd2data(hpcd);
++	uint8_t ep = epnum | USB_EP_DIR_OUT;
++	struct udc_ep_config *ep_cfg;
++	struct net_buf *buf;
++
++	ep_cfg = udc_get_ep_cfg(priv->dev, ep);
++	if (ep_cfg == NULL) {
++		return;
++	}
++
++	buf = udc_buf_peek(ep_cfg);
++	if (buf != NULL) {
++		(void)hal_udc_set_endpoint_receive(&priv->pcd, ep, buf->data, buf->size);
++	}
++}
++
++void HAL_PCD_ISOINIncompleteCallback(stm32_pcd_handle_t *hpcd, uint8_t epnum)
++{
++	struct udc_stm32_data *priv = hpcd2data(hpcd);
++	uint8_t ep = epnum | USB_EP_DIR_IN;
++	struct udc_ep_config *ep_cfg;
++	struct net_buf *buf;
++
++	ep_cfg = udc_get_ep_cfg(priv->dev, ep);
++	if (ep_cfg == NULL) {
++		return;
++	}
++
++	buf = udc_buf_peek(ep_cfg);
++	if (buf != NULL) {
++		/* HAL flushed the TX FIFO before this callback; re-arm the transmit. */
++		(void)hal_udc_set_endpoint_transmit(&priv->pcd, ep, buf->data, buf->len);
++	}
++}
++
+ static void handle_msg_data_out(struct udc_stm32_data *priv, uint8_t epnum, uint16_t rx_count)
+ {
+ 	const struct device *dev = priv->dev;

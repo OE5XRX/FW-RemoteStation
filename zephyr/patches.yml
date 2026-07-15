@@ -1,0 +1,16 @@
+# Downstream patches applied to west modules via 'west patch apply'.
+# Keep this list minimal; each entry should be upstreamable and tracked.
+patches:
+  - path: zephyr/0001-udc-stm32-isochronous-incomplete-recovery.patch
+    sha256sum: e2dbeaa17d9d013a630bdb94466a9ffc65dee62974b87ec99835d16b54ab998d
+    module: zephyr
+    author: Peter Buchegger
+    email: peter.buchegger7@gmail.com
+    date: 2026-07-15
+    upstreamable: true
+    issue: https://github.com/zephyrproject-rtos/zephyr/issues/102720
+    comments: >
+      STM32 OTG-FS UDC never implemented HAL_PCD_ISO{OUT,IN}IncompleteCallback, so
+      isochronous OUT reception (UAC2 host->device playback) stalls permanently after
+      the first missed frame. Re-arm the pending transfer to resync even/odd frame
+      parity. Fixes UAC2 playback on fm_board (STM32U575). Submit upstream.
