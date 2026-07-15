@@ -1,2 +1,2 @@
-oe5xrx	OE5XRX (amateur radio remote station project)
+oe5xrx	OE5XRX
 sa	NiceRF

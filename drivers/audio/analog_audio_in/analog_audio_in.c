@@ -15,6 +15,7 @@
 #include <zephyr/drivers/dma.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 
 LOG_MODULE_REGISTER(analog_audio_in, CONFIG_ANALOG_AUDIO_IN_LOG_LEVEL);
 
@@ -41,13 +42,13 @@ struct aai_data {
   const struct device *self;
   analog_audio_in_cb cb;
   void *user_data;
-  bool running;
+  atomic_t running;                    /* written from thread (start/stop), read from DMA ISR */
   uint16_t dma_buf[2 * AAI_MAX_BLOCK]; /* circular: [0..block) | [block..2*block) */
   /* ISR -> thread hand-off: the DMA callback runs in ISR context but the
    * consumer callback may block (e.g. take a mutex), so blocks of converted PCM
    * are queued here and delivered from the system workqueue thread. */
   struct k_msgq rx_msgq;
-  char msgq_buf[AAI_MSGQ_BLOCKS * AAI_MAX_BLOCK * sizeof(int16_t)];
+  char msgq_buf[AAI_MSGQ_BLOCKS * AAI_MAX_BLOCK * sizeof(int16_t)] __aligned(sizeof(void *));
   struct k_work drain_work;
   struct dma_config dma_cfg;
   struct dma_block_config blk;
@@ -72,8 +73,19 @@ static void aai_drain_work(struct k_work *work) {
   int16_t block[AAI_MAX_BLOCK];
 
   while (k_msgq_get(&data->rx_msgq, block, K_NO_WAIT) == 0) {
-    if (data->cb != NULL) {
-      data->cb(block, cfg->block_samples, data->user_data);
+    /* Stop delivering as soon as stop() clears running, so at most the block
+     * already dequeued here can reach the consumer after stop() (not the whole
+     * backlog). */
+    if (!atomic_get(&data->running)) {
+      break;
+    }
+    /* Snapshot cb/user_data once: stop() may clear them concurrently, so a
+     * check-then-call directly on data->cb could dereference a NULL that was
+     * cleared between the test and the call. */
+    analog_audio_in_cb cb = data->cb;
+    void *user = data->user_data;
+    if (cb != NULL) {
+      cb(block, cfg->block_samples, user);
     }
   }
 }
@@ -87,11 +99,21 @@ static void aai_dma_cb(const struct device *dma_dev, void *user, uint32_t channe
   ARG_UNUSED(dma_dev);
   ARG_UNUSED(channel);
 
-  if (!data->running || status < 0) {
+  if (!atomic_get(&data->running)) {
     return;
   }
-  /* DMA_STATUS_BLOCK = half-transfer (first half ready); COMPLETE = second half. */
-  const uint16_t *src = (status == DMA_STATUS_BLOCK) ? &data->dma_buf[0] : &data->dma_buf[cfg->block_samples];
+  /* Only the half/full-transfer completions carry a ready buffer half.
+   * DMA_STATUS_BLOCK = first half ready, DMA_STATUS_COMPLETE = second half.
+   * Ignore errors (status < 0) and any other/unexpected status so we never
+   * read from the wrong half and enqueue corrupted samples. */
+  const uint16_t *src;
+  if (status == DMA_STATUS_BLOCK) {
+    src = &data->dma_buf[0];
+  } else if (status == DMA_STATUS_COMPLETE) {
+    src = &data->dma_buf[cfg->block_samples];
+  } else {
+    return;
+  }
   for (uint16_t i = 0; i < cfg->block_samples; i++) {
     block[i] = adc_to_pcm16(src[i], cfg->resolution);
   }
@@ -219,46 +241,70 @@ static int aai_timer_start(const struct device *dev) {
     return r < 0 ? r : -EINVAL;
   }
 
+  /* TIM6 is a 16-bit timer: ARR = tim_clk/fs - 1 must fit in [0, 0xFFFF]. Reject
+   * a sample rate the timer cannot produce; divider 0 (fs > tim_clk) would also
+   * underflow the subtraction. */
+  uint32_t div = tim_clk / cfg->sampling_frequency;
+  if (div == 0U || div > 0x10000U) {
+    LOG_ERR("sample rate %u Hz unattainable from tim_clk %u (divider %u)", cfg->sampling_frequency, tim_clk, div);
+    return -EINVAL;
+  }
   LL_TIM_SetPrescaler(cfg->tim, 0);
-  LL_TIM_SetAutoReload(cfg->tim, (tim_clk / cfg->sampling_frequency) - 1U);
+  LL_TIM_SetAutoReload(cfg->tim, div - 1U);
   LL_TIM_SetTriggerOutput(cfg->tim, LL_TIM_TRGO_UPDATE);
   LL_TIM_GenerateEvent_UPDATE(cfg->tim);
   LL_TIM_EnableCounter(cfg->tim);
   return 0;
 }
 
+/* Best-effort ADC power-down for start() error paths (leaves no ADC enabled/
+ * calibrated/clocked behind after a partial bring-up). */
+static void aai_adc_disable(ADC_TypeDef *adc) {
+  LL_ADC_Disable(adc);
+  LL_ADC_DisableInternalRegulator(adc);
+}
+
 int analog_audio_in_start(const struct device *dev, analog_audio_in_cb cb, void *user_data) {
+  const struct aai_config *cfg = dev->config;
   struct aai_data *data = dev->data;
   int r;
 
+  /* Guard against a never-initialised device (aai_init failed => not ready):
+   * rx_msgq/drain_work would be uninitialised and purging them is UB. */
+  if (!device_is_ready(dev)) {
+    return -ENODEV;
+  }
   if (cb == NULL) {
     return -EINVAL;
   }
-  if (data->running) {
+  if (atomic_get(&data->running)) {
     return -EALREADY;
   }
   data->cb = cb;
   data->user_data = user_data;
   k_msgq_purge(&data->rx_msgq);
-  data->running = true;
+  atomic_set(&data->running, 1);
 
   r = aai_adc_setup(dev);
   if (r < 0) {
-    data->running = false;
+    aai_adc_disable(cfg->adc);
+    atomic_set(&data->running, 0);
     return r;
   }
   r = aai_dma_start(dev);
   if (r < 0) {
-    data->running = false;
+    aai_adc_disable(cfg->adc);
+    atomic_set(&data->running, 0);
     return r;
   }
   r = aai_timer_start(dev);
   if (r < 0) {
-    dma_stop(((const struct aai_config *)dev->config)->dma_dev, ((const struct aai_config *)dev->config)->dma_channel);
-    data->running = false;
+    dma_stop(cfg->dma_dev, cfg->dma_channel);
+    aai_adc_disable(cfg->adc);
+    atomic_set(&data->running, 0);
     return r;
   }
-  LL_ADC_REG_StartConversion(((const struct aai_config *)dev->config)->adc);
+  LL_ADC_REG_StartConversion(cfg->adc);
   LOG_INF("capture started");
   return 0;
 }
@@ -267,10 +313,31 @@ int analog_audio_in_stop(const struct device *dev) {
   const struct aai_config *cfg = dev->config;
   struct aai_data *data = dev->data;
 
-  data->running = false;
-  LL_TIM_DisableCounter(cfg->tim);
-  LL_ADC_REG_StopConversion(cfg->adc);
-  dma_stop(cfg->dma_dev, cfg->dma_channel);
+  /* Guard against a never-initialised device: rx_msgq is only valid once
+   * aai_init() succeeded, and callers (SA818 stream stop) invoke this
+   * unconditionally, so purging an uninitialised msgq would be UB. */
+  if (!device_is_ready(dev)) {
+    return -ENODEV;
+  }
+
+  /* Tear down the hardware only if capture was actually running: stop() can be
+   * called after a skipped/failed start (e.g. device not ready), where touching
+   * the TIM/ADC/DMA registers would be wrong. Also power the ADC down (not just
+   * stop conversions) so the peripheral/regulator isn't left drawing current
+   * while stopped, mirroring the error-path teardown. */
+  if (atomic_get(&data->running)) {
+    atomic_set(&data->running, 0);
+    LL_TIM_DisableCounter(cfg->tim);
+    LL_ADC_REG_StopConversion(cfg->adc);
+    dma_stop(cfg->dma_dev, cfg->dma_channel);
+    aai_adc_disable(cfg->adc);
+  }
+  /* Drop queued blocks and clear the callback (even if never started). Combined
+   * with the running check in aai_drain_work, at most one already-dequeued block
+   * can still reach the consumer after this returns. */
+  k_msgq_purge(&data->rx_msgq);
+  data->cb = NULL;
+  data->user_data = NULL;
   return 0;
 }
 
@@ -279,8 +346,23 @@ static int aai_init(const struct device *dev) {
   struct aai_data *data = dev->data;
 
   LOG_INF("init: %u Hz, %u-bit, block=%u", cfg->sampling_frequency, cfg->resolution, cfg->block_samples);
-  if (cfg->block_samples > AAI_MAX_BLOCK) {
-    LOG_ERR("block-samples %u exceeds max %u", cfg->block_samples, AAI_MAX_BLOCK);
+  if (cfg->block_samples == 0 || cfg->block_samples > AAI_MAX_BLOCK) {
+    LOG_ERR("block-samples %u out of range (1..%u)", cfg->block_samples, AAI_MAX_BLOCK);
+    return -EINVAL;
+  }
+  if (cfg->sampling_frequency == 0) {
+    LOG_ERR("sampling-frequency must be non-zero");
+    return -EINVAL;
+  }
+  switch (cfg->resolution) {
+  case 6:
+  case 8:
+  case 10:
+  case 12:
+  case 14:
+    break;
+  default:
+    LOG_ERR("unsupported resolution %u (need 6/8/10/12/14)", cfg->resolution);
     return -EINVAL;
   }
   if (!device_is_ready(cfg->dma_dev)) {
@@ -288,12 +370,20 @@ static int aai_init(const struct device *dev) {
     return -ENODEV;
   }
   data->self = dev;
-  k_msgq_init(&data->rx_msgq, data->msgq_buf, AAI_MAX_BLOCK * sizeof(int16_t), AAI_MSGQ_BLOCKS);
+  /* Size the queue element to the configured block so put()/get() copy exactly
+   * block_samples and never carry uninitialized tail bytes of the ISR buffer. */
+  k_msgq_init(&data->rx_msgq, data->msgq_buf, cfg->block_samples * sizeof(int16_t), AAI_MSGQ_BLOCKS);
   k_work_init(&data->drain_work, aai_drain_work);
   return 0;
 }
 
 #define AAI_INIT(inst)                                                                                                                                         \
+  /* The ADC regular trigger is hardcoded to TIM6-TRGO (aai_adc_setup), so the                                                                                 \
+   * DT-selected sampling-timer must be TIM6. Enforce at build time via node                                                                                   \
+   * identity (security-agnostic; a runtime base-address compare is unreliable                                                                                 \
+   * because TIM6 aliases to different secure/non-secure addresses on STM32U5). */                                                                             \
+  BUILD_ASSERT(DT_SAME_NODE(DT_INST_PHANDLE(inst, sampling_timer), DT_NODELABEL(timers6)),                                                                     \
+               "analog-audio-in sampling-timer must be TIM6 (ADC trigger is hardcoded to TIM6-TRGO)");                                                         \
   static const struct stm32_pclken aai_tim_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_PHANDLE(inst, sampling_timer));                                           \
   static const struct stm32_pclken aai_adc_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_IO_CHANNELS_CTLR(inst));                                                  \
   static const struct aai_config aai_cfg_##inst = {                                                                                                            \

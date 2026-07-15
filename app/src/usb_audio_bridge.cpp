@@ -16,6 +16,7 @@
 #include <sa818/sa818.h>
 #include <sa818/sa818_audio.h>
 #include <sa818/sa818_audio_stream.h>
+#include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -138,8 +139,13 @@ static size_t sa818_tx_request_cb(const struct device *dev, uint8_t *buffer, siz
     if (ring_buf_size_get(&ctx->tx_ring) >= TX_PREBUFFER_BYTES) {
       ctx->tx_prebuffered = true;
     } else {
+      /* Emit real PCM silence (zero samples) rather than a 0-length return:
+       * the SA818 stream handler writes one DAC value per returned sample, so
+       * returning 0 would leave the DAC holding its last value (a DC level)
+       * instead of silence. Leave the ring untouched so it keeps prebuffering. */
+      memset(buffer, 0, size);
       k_mutex_unlock(&ctx->lock);
-      return 0;
+      return size;
     }
   }
 
