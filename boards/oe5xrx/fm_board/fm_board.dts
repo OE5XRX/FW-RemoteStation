@@ -285,33 +285,23 @@ zephyr_udc0: &usbotg_fs {
 
 		boot_partition: partition@0 {
 			label = "mcuboot";
-			reg = <0x00000000 0x00010000>;
+			reg = <0x00000000 0x00020000>;	/* 128 KB, Bank 1 */
 			read-only;
 		};
 
-		/*
-		 * The flash starting at 0x00010000 and ending at
-		 * 0x0001ffff (sectors 16-31) is reserved for use
-		 * by the application.
-		 */
 		slot0_partition: partition@20000 {
 			label = "image-0";
-			reg = <0x00020000 0x00008000>;
+			reg = <0x00020000 0x000E0000>;	/* 896 KB, ends at 0x100000 (Bank 1) */
 		};
 
-		slot1_partition: partition@28000 {
+		slot1_partition: partition@100000 {
 			label = "image-1";
-			reg = <0x00028000 0x00008000>;
+			reg = <0x00100000 0x000E0000>;	/* 896 KB, Bank 2 */
 		};
 
-		storage_partition: partition@30000 {
+		storage_partition: partition@1e0000 {
 			label = "storage";
-			reg = <0x00030000 0x00002000>;
-		};
-
-		scratch_partition: partition@32000 {
-			label = "image-scratch";
-			reg = <0x00032000 0x00008000>;
+			reg = <0x001E0000 0x00020000>;	/* 128 KB, Bank 2 */
 		};
 	};
 };
