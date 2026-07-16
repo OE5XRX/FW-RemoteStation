@@ -120,13 +120,20 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
   /* Serialize the check + state update so two racing callers cannot both
    * observe streaming == false and start the hardware modules twice. */
   k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+  if (audio_ctx.dev != dev) {
+    /* start must run against the context bound by audio_stream_register();
+     * a mismatch (or a start without a prior register, dev == NULL) would
+     * later trip the dev checks in stop()/get_format(). */
+    k_mutex_unlock(&audio_stream_mutex);
+    LOG_ERR("audio_stream_start dev does not match registered context");
+    return -EINVAL;
+  }
   if (audio_ctx.streaming) {
     k_mutex_unlock(&audio_stream_mutex);
     LOG_WRN("Audio streaming already active");
     return 0;
   }
   audio_ctx.format = *format;
-  audio_ctx.dev = dev;
   audio_ctx.streaming = true;
   k_mutex_unlock(&audio_stream_mutex);
 
