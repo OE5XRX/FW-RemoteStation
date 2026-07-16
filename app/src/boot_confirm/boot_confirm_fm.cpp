@@ -16,8 +16,18 @@
  * IWDG / task_wdt: task_wdt is initialised with the hardware IWDG as its
  * fallback.  The gate thread registers one channel with a period of
  * GATE_POLL_MS * 4, and feeds it on every probe sweep.  If the gate thread
- * stalls (e.g. blocked in sa818_at_connect) the task_wdt fires its callback
- * which logs an error; the hw IWDG then triggers a cold reboot shortly after.
+ * stalls (e.g. blocked in sa818_at_connect), the task_wdt kernel-timer fires
+ * wdt_cb, which calls sys_reboot(SYS_REBOOT_COLD) directly.  On the next boot
+ * MCUboot detects the image was never confirmed and reverts to the previous
+ * slot.  The software deadline in run_health_gate (h_reboot) is the other
+ * backstop: it fires when the gate is schedulable but all probes stay unhealthy
+ * past the deadline.
+ *
+ * task_wdt is compiled in only when CONFIG_TASK_WDT is set (prod/sysbuild
+ * build).  In the bare build CONFIG_TASK_WDT is not set, so the watchdog block
+ * compiles out; this is safe because in bare CONFIG_BOOTLOADER_MCUBOOT is also
+ * not set, so h_confd() returns true and the gate exits immediately via the
+ * AlreadyConfirmed path without needing watchdog protection.
  *
  * Confirm-failure handling: boot_write_img_confirmed() can transiently fail
  * (e.g. flash busy).  The confirm hook returns the rc; health_gate.cpp treats
@@ -36,8 +46,11 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
-#include <zephyr/task_wdt/task_wdt.h>
 #include <zephyr/usb/usbd.h>
+
+#if defined(CONFIG_TASK_WDT)
+#include <zephyr/task_wdt/task_wdt.h>
+#endif
 
 #if defined(CONFIG_BOOTLOADER_MCUBOOT)
 #include <zephyr/dfu/mcuboot.h>
@@ -50,18 +63,23 @@ static constexpr int64_t GATE_DEADLINE_MS = 30000; /* revert if not healthy with
 static constexpr int64_t GATE_DWELL_MS = 3000;     /* require 3 s continuous health */
 static constexpr int32_t GATE_POLL_MS = 250;       /* probe sweep interval */
 
+#if defined(CONFIG_TASK_WDT)
 /* task_wdt channel period: 4x poll so one missed sweep is not fatal */
 static constexpr uint32_t WDT_PERIOD_MS = static_cast<uint32_t>(GATE_POLL_MS) * 4u;
+#endif
 
 namespace {
 
 struct Env {
   const struct device *sa818;
-  volatile bool usb_configured; /* set from USBD message callback (ISR context) */
+  volatile bool usb_configured; /* set from USBD message callback (workqueue thread context) */
 };
 
 Env g_env;
+
+#if defined(CONFIG_TASK_WDT)
 static int g_wdt_channel = -1; /* task_wdt channel id; -1 = not initialised */
+#endif
 
 /* ---- probes ---------------------------------------------------------------- */
 
@@ -72,7 +90,9 @@ bool probe_usb(void *c) {
 bool probe_shell(void *c) {
   /* Shell transport ready == USB composite configured (CDC-ACM is part of it)
    * AND the shell backend is initialised by SYS_INIT at boot.
-   * This is a compile-time constant — see file-level comment for rationale. */
+   * This returns a compile-time constant (IS_ENABLED(CONFIG_SHELL)) and
+   * contributes no runtime signal — USB-configured probe covers the transport.
+   * See file-level comment for rationale. */
   (void)c;
   return IS_ENABLED(CONFIG_SHELL);
 }
@@ -94,12 +114,14 @@ int64_t h_now(void *) {
 }
 
 void h_sleep(void *, int64_t ms) {
+#if defined(CONFIG_TASK_WDT)
   /* Feed the task_wdt on every sleep (i.e., every poll interval) to prove the
    * gate thread is alive.  If g_wdt_channel is not yet initialised (race at
    * startup) the feed is a no-op. */
   if (g_wdt_channel >= 0) {
     (void)task_wdt_feed(g_wdt_channel);
   }
+#endif
   k_msleep(static_cast<int32_t>(ms));
 }
 
@@ -128,17 +150,27 @@ int h_confirm(void *) {
 void h_reboot(void *) {
   LOG_WRN("health-gate deadline exceeded — rebooting for MCUboot revert");
   sys_reboot(SYS_REBOOT_COLD);
+  k_sleep(K_FOREVER); /* prevent thread from touching state during reset window */
 }
 
 /* ---- task_wdt callback ----------------------------------------------------- */
 
+#if defined(CONFIG_TASK_WDT)
 static void wdt_cb(int channel_id, void *user_data) {
   (void)channel_id;
   (void)user_data;
-  /* Called from the task_wdt timer ISR when the channel has not been fed in
-   * time.  Log and let the hw IWDG trigger the actual reboot. */
-  LOG_ERR("task_wdt timeout on boot-confirm gate thread — hw IWDG will reboot");
+  /* Called from the task_wdt kernel-timer context when the channel has not
+   * been fed in time (gate thread stalled, e.g. hung inside sa818_at_connect).
+   * Real reboot path: task_wdt channel timeout → wdt_cb → sys_reboot(COLD) →
+   * MCUboot reverts on next boot (image was never confirmed).
+   * We must reboot here directly; relying on the hw IWDG alone would require
+   * the IWDG to be independently armed, which is only guaranteed when
+   * task_wdt_init() succeeds with a non-NULL hw_wdt.  Calling sys_reboot()
+   * unconditionally closes the gap. */
+  LOG_ERR("task_wdt timeout on boot-confirm gate thread — rebooting for MCUboot revert");
+  sys_reboot(SYS_REBOOT_COLD);
 }
+#endif
 
 /* ---- thread ---------------------------------------------------------------- */
 
@@ -146,6 +178,7 @@ K_THREAD_STACK_DEFINE(g_stack, 2048);
 struct k_thread g_thread;
 
 void gate_thread(void *, void *, void *) {
+#if defined(CONFIG_TASK_WDT)
   /* Initialise task_wdt with the hw IWDG as fallback so it actually resets
    * the chip if we stall.  The IWDG node must have status = "okay" in the
    * board DTS (fm_board.dts already does this). */
@@ -171,6 +204,7 @@ void gate_thread(void *, void *, void *) {
       g_wdt_channel = -1;
     }
   }
+#endif /* CONFIG_TASK_WDT */
 
   using namespace boot;
   static HealthCriterion crit[] = {
@@ -183,11 +217,13 @@ void gate_thread(void *, void *, void *) {
 
   GateOutcome outcome = boot::run_health_gate(cfg, hooks, crit, ARRAY_SIZE(crit));
 
+#if defined(CONFIG_TASK_WDT)
   /* Delete the watchdog channel — image is confirmed (or reboot was called). */
   if (g_wdt_channel >= 0) {
     (void)task_wdt_delete(g_wdt_channel);
     g_wdt_channel = -1;
   }
+#endif
 
   switch (outcome) {
   case GateOutcome::AlreadyConfirmed:
