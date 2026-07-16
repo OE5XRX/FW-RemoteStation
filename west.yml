@@ -16,6 +16,7 @@ manifest:
         name-allowlist:
           - cmsis_6
           - hal_stm32
+          - mcuboot
     - name: etl
       remote: etlcpp
       revision: 20.48.0
