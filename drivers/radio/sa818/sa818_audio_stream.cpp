@@ -130,16 +130,16 @@ sa818_result sa818_audio_stream_start(const struct device *dev, const struct sa8
     return SA818_ERROR_INVALID_PARAM;
   }
 
+  /* Serialize the check + state update so two racing callers cannot both
+   * observe streaming == false and start the hardware modules twice. */
+  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   if (audio_ctx.streaming) {
+    k_mutex_unlock(&audio_ctx_mutex);
     LOG_WRN("Audio streaming already active");
     return SA818_OK;
   }
-
-  /* Store format */
   audio_ctx.format = *format;
   audio_ctx.dev = dev;
-
-  k_mutex_lock(&audio_ctx_mutex, K_FOREVER);
   audio_ctx.streaming = true;
   k_mutex_unlock(&audio_ctx_mutex);
 

@@ -345,6 +345,10 @@ static int aao_init(const struct device *dev) {
    * must be GPDMA1. Enforce at build time. */                                                                                                                 \
   BUILD_ASSERT(DT_SAME_NODE(DT_INST_DMAS_CTLR_BY_NAME(inst, tx), DT_NODELABEL(gpdma1)),                                                                        \
                "analog-audio-out tx DMA controller must be GPDMA1 (LL dest-width override is GPDMA1-specific)");                                               \
+  /* aao_ll_channel() only maps 1/2; a DAC has exactly channels 1 and 2, so reject                                                                             \
+   * any other io-channels output cell at build time instead of silently using                                                                                 \
+   * channel 1. */                                                                                                                                             \
+  BUILD_ASSERT(DT_INST_IO_CHANNELS_OUTPUT(inst) == 1 || DT_INST_IO_CHANNELS_OUTPUT(inst) == 2, "analog-audio-out io-channels DAC channel must be 1 or 2");     \
   static const struct stm32_pclken aao_tim_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_PHANDLE(inst, sampling_timer));                                           \
   static const struct stm32_pclken aao_dac_pclken_##inst[] = STM32_DT_CLOCKS(DT_INST_IO_CHANNELS_CTLR(inst));                                                  \
   static const struct aao_config aao_cfg_##inst = {                                                                                                            \
