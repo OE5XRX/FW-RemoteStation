@@ -439,7 +439,7 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
     k_mutex_lock(&ctx->lock, K_FOREVER);
     ctx->sa818_dev = NULL;
     k_mutex_unlock(&ctx->lock);
-    return -EIO;
+    return ret;
   }
 
   /* Start audio streaming */
@@ -455,7 +455,7 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
     k_mutex_lock(&ctx->lock, K_FOREVER);
     ctx->sa818_dev = NULL;
     k_mutex_unlock(&ctx->lock);
-    return -EIO;
+    return ret;
   }
 
   LOG_INF("USB Audio Bridge started (8kHz, 16-bit, mono)");

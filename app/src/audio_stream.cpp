@@ -70,6 +70,11 @@ static size_t audio_stream_tx_src(int16_t *dst, size_t max, void *user) {
     return 0;
   }
   size_t bytes = ctx->callbacks.tx_request(ctx->dev, reinterpret_cast<uint8_t *>(dst), max * AUDIO_STREAM_SAMPLE_SIZE, ctx->callbacks.user_data);
+  /* Defend against a callback that returns more than requested; the division to
+   * whole samples already rounds a stray odd byte down. */
+  if (bytes > max * AUDIO_STREAM_SAMPLE_SIZE) {
+    bytes = max * AUDIO_STREAM_SAMPLE_SIZE;
+  }
   return bytes / AUDIO_STREAM_SAMPLE_SIZE;
 }
 #endif
@@ -92,8 +97,16 @@ int audio_stream_register(const struct device *dev, const struct audio_stream_ca
     return -EINVAL;
   }
 
+  /* Guard the shared context and refuse to swap callbacks under a running
+   * stream (the backend threads read ctx->callbacks/ctx->dev while active). */
+  k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+  if (audio_ctx.streaming) {
+    k_mutex_unlock(&audio_stream_mutex);
+    return -EBUSY;
+  }
   audio_ctx.dev = dev;
   audio_ctx.callbacks = *callbacks;
+  k_mutex_unlock(&audio_stream_mutex);
 
   LOG_INF("Audio callbacks registered");
   return 0;
@@ -160,6 +173,11 @@ int audio_stream_stop(const struct device *dev) {
   }
 
   k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+  if (audio_ctx.dev != dev) {
+    /* Not the registered/active context — refuse to stop someone else's stream. */
+    k_mutex_unlock(&audio_stream_mutex);
+    return -EINVAL;
+  }
   audio_ctx.streaming = false;
   k_mutex_unlock(&audio_stream_mutex);
 
@@ -188,6 +206,12 @@ int audio_stream_get_format(const struct device *dev, struct audio_format *forma
     return -EINVAL;
   }
 
+  k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+  if (audio_ctx.dev != dev) {
+    k_mutex_unlock(&audio_stream_mutex);
+    return -EINVAL;
+  }
   *format = audio_ctx.format;
+  k_mutex_unlock(&audio_stream_mutex);
   return 0;
 }
