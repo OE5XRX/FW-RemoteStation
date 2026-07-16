@@ -15,7 +15,6 @@
 
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
-#include <sa818/sa818_audio.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
@@ -68,18 +67,6 @@ static int sa818_init(const struct device *dev) {
     LOG_WRN("UART configure failed: %d", uart_ret);
   }
 
-  /* Verify ADC is ready */
-  if (!adc_is_ready_dt(&cfg->audio_in)) {
-    LOG_ERR("ADC not ready");
-    return -ENODEV;
-  }
-
-  /* Verify DAC is ready */
-  if (!device_is_ready(cfg->audio_out_dev)) {
-    LOG_ERR("DAC not ready");
-    return -ENODEV;
-  }
-
   /* Initialize GPIO pins */
   int ret = sa818_gpio_init(cfg);
   if (ret != 0) {
@@ -97,8 +84,6 @@ static int sa818_init(const struct device *dev) {
   data->ptt_state = SA818_PTT_OFF;
   data->power_level = SA818_POWER_LOW;
   data->squelch = false;
-  data->audio_rx_enabled = false;
-  data->audio_tx_enabled = false;
   data->current_volume = 4; // Default mid-level
   data->at_rx_overrun = false;
 
@@ -110,13 +95,6 @@ static int sa818_init(const struct device *dev) {
 
   /* Give hardware time to stabilize */
   k_msleep(SA818_INIT_DELAY_MS);
-
-  /* Initialize audio subsystem */
-  ret = sa818_audio_init(dev);
-  if (ret != 0) {
-    LOG_WRN("Audio init failed: %d", ret);
-    // Non-fatal, continue
-  }
 
   LOG_INF("SA818 initialized");
   return 0;
@@ -214,20 +192,11 @@ sa818_status sa818_get_status(const struct device *dev) {
 /* Device Definition Macro */
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
-/* DAC (audio output) is required - io-channels[1] must be present */
-#define SA818_AUDIO_OUT_DEV(node_id) DEVICE_DT_GET(DT_IO_CHANNELS_CTLR_BY_IDX(node_id, 1))
-
-#define SA818_AUDIO_OUT_CHANNEL(node_id) DT_PHA_BY_IDX(node_id, io_channels, 1, output)
-
 #define SA818_DEFINE(node_id)                                                                                                                                  \
   static struct sa818_data sa818_data_##node_id;                                                                                                               \
                                                                                                                                                                \
   static const struct sa818_config sa818_config_##node_id = {                                                                                                  \
       .uart = DEVICE_DT_GET(DT_PHANDLE(node_id, uart)),                                                                                                        \
-      .audio_in = ADC_DT_SPEC_GET_BY_IDX(node_id, 0),                                                                                                          \
-      .audio_out_dev = SA818_AUDIO_OUT_DEV(node_id),                                                                                                           \
-      .audio_out_channel = SA818_AUDIO_OUT_CHANNEL(node_id),                                                                                                   \
-      .audio_out_resolution = 12,                                                                                                                              \
       .h_l_power = GPIO_DT_SPEC_GET(node_id, h_l_power_gpios),                                                                                                 \
       .nptt = GPIO_DT_SPEC_GET(node_id, nptt_gpios),                                                                                                           \
       .npower_down = GPIO_DT_SPEC_GET(node_id, npower_down_gpios),                                                                                             \

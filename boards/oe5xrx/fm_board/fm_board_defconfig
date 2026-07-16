@@ -14,10 +14,7 @@ CONFIG_UART_CONSOLE=y
 # enable GPIO
 CONFIG_GPIO=y
 
-# enable DAC
-CONFIG_DAC=y
-
-# enable DMA
+# enable DMA (used by the analog-audio-in/out LL+DMA capture/playback drivers)
 CONFIG_DMA=y
 
 # enable hardware-timed analog audio capture (TIM+ADC+DMA)

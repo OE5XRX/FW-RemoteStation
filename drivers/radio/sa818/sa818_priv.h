@@ -14,8 +14,6 @@
 #define ZEPHYR_DRIVERS_SA818_SRC_SA818_PRIV_H_
 
 #include <sa818/sa818.h>
-#include <zephyr/drivers/adc.h>
-#include <zephyr/drivers/dac.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/ring_buffer.h>
@@ -52,10 +50,6 @@ extern "C" {
  */
 struct sa818_config {
   const struct device *uart;
-  struct adc_dt_spec audio_in;
-  const struct device *audio_out_dev; /* DAC device (optional) */
-  uint8_t audio_out_channel;
-  uint8_t audio_out_resolution;
 
   struct gpio_dt_spec h_l_power;
   struct gpio_dt_spec nptt;
@@ -83,26 +77,8 @@ struct sa818_data {
   struct k_sem at_rx_sem; /* "data available", binary (max count 1) */
   bool at_rx_overrun;     /* ISR sets on ring-buffer overflow */
 
-  /* Audio state */
-  bool audio_rx_enabled;
-  bool audio_tx_enabled;
+  /* SA818 AT volume setting (AT+DMOSETVOLUME), reported in sa818_status */
   uint8_t current_volume;
-
-  /* Test tone state */
-  struct k_work_delayable test_tone_work;
-  const struct device *test_tone_dev; /* Device pointer for work handler */
-  bool test_tone_active;
-  uint16_t test_tone_freq;
-  uint8_t test_tone_amplitude;
-  float test_tone_phase;
-  int64_t test_tone_end_time;
-
-  /* Frequency sweep state (rides on the test-tone generator) */
-  bool sweep_active;
-  uint16_t sweep_start_freq;
-  uint16_t sweep_end_freq;
-  uint32_t sweep_duration_ms;
-  int64_t sweep_start_time;
 };
 
 /**

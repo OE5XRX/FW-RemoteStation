@@ -6,8 +6,12 @@ config ANALOG_AUDIO_OUT
 	default y
 	depends on DT_HAS_OE5XRX_ANALOG_AUDIO_OUT_ENABLED
 	select DMA
+	select DAC
 	help
 	  Timer-TRGO-triggered DAC + circular DMA analog audio playback driver.
+	  Requires the Zephyr DAC driver: this driver runs the timed playback via
+	  LL + DMA but relies on the dac_stm32 binding for the DAC pinctrl (analog
+	  mode) and peripheral bring-up it layers on top of.
 
 if ANALOG_AUDIO_OUT
 config ANALOG_AUDIO_OUT_INIT_PRIORITY

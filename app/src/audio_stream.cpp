@@ -1,0 +1,193 @@
+/**
+ * @file audio_stream.cpp
+ * @brief Generic hardware-timed audio streaming bridge. See audio_stream.h.
+ *
+ * Bridges application audio callbacks to the hardware-timed capture/playback
+ * backend (the analog-audio-in / analog-audio-out TIM+ADC/DAC+DMA modules). It
+ * is radio-agnostic: the @p dev handle is opaque and only passed back to the
+ * callbacks as context.
+ *
+ * @copyright Copyright (c) 2026 OE5XRX
+ * @spdx-license-identifier LGPL-3.0-or-later
+ */
+
+#include "audio_stream.h"
+
+#include <errno.h>
+#include <zephyr/device.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+/* Require the DT node to be status=okay AND the driver Kconfig on. The device
+ * is only instantiated via DT_INST_FOREACH_STATUS_OKAY, so an existing-but-
+ * disabled node (or CONFIG_ANALOG_AUDIO_{IN,OUT}=n) has no device symbol and
+ * DEVICE_DT_GET() would fail to link. Use HAS_STATUS(okay), not NODE_EXISTS. */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(audio_in), okay) && IS_ENABLED(CONFIG_ANALOG_AUDIO_IN)
+#include <oe5xrx/audio/analog_audio_in.h>
+#define AUDIO_STREAM_HAVE_AAI 1
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(audio_out), okay) && IS_ENABLED(CONFIG_ANALOG_AUDIO_OUT)
+#include <oe5xrx/audio/analog_audio_out.h>
+#define AUDIO_STREAM_HAVE_AAO 1
+#endif
+
+LOG_MODULE_REGISTER(audio_stream, LOG_LEVEL_INF);
+
+#define AUDIO_STREAM_SAMPLE_SIZE 2 /* 16-bit = 2 bytes */
+
+/** Audio streaming context. */
+struct audio_stream_ctx {
+  const struct device *dev;
+  struct audio_stream_callbacks callbacks;
+  struct audio_format format;
+  bool streaming;
+};
+
+/*
+ * DESIGN NOTE: single global streaming context — only one audio stream can be
+ * active at a time, which fits the single-radio system. Storing the context per
+ * device would be needed to support several concurrent streams.
+ */
+
+/* Static mutex for the streaming context - initialized at compile time */
+K_MUTEX_DEFINE(audio_stream_mutex);
+
+static struct audio_stream_ctx audio_ctx;
+
+#ifdef AUDIO_STREAM_HAVE_AAO
+/* Hardware-timed TX playback pull-source for the analog-audio-out module. Runs
+ * in that module's workqueue thread (thread context, may take a mutex). Sources
+ * signed 16-bit PCM from the application via the tx_request callback. Returning
+ * fewer than @p max samples (or 0 when there is no data) makes the module emit
+ * mid-scale silence for the shortfall; the consumer gates whether any data is
+ * available. Host PCM is little-endian, matching the Cortex-M, so the byte
+ * buffer maps directly onto int16 samples with no swap. */
+static size_t audio_stream_tx_src(int16_t *dst, size_t max, void *user) {
+  struct audio_stream_ctx *ctx = static_cast<struct audio_stream_ctx *>(user);
+
+  if (!ctx->callbacks.tx_request) {
+    return 0;
+  }
+  size_t bytes = ctx->callbacks.tx_request(ctx->dev, reinterpret_cast<uint8_t *>(dst), max * AUDIO_STREAM_SAMPLE_SIZE, ctx->callbacks.user_data);
+  return bytes / AUDIO_STREAM_SAMPLE_SIZE;
+}
+#endif
+
+#ifdef AUDIO_STREAM_HAVE_AAI
+/* Hardware-timed RX samples from the analog-audio-in module. Runs in the module's
+ * workqueue thread (not an ISR), so forwarding through rx_data (which may take a
+ * mutex) is safe. */
+static void audio_stream_on_rx_samples(const int16_t *samples, size_t count, void *user) {
+  struct audio_stream_ctx *ctx = static_cast<struct audio_stream_ctx *>(user);
+
+  if (ctx->callbacks.rx_data) {
+    ctx->callbacks.rx_data(ctx->dev, reinterpret_cast<const uint8_t *>(samples), count * AUDIO_STREAM_SAMPLE_SIZE, ctx->callbacks.user_data);
+  }
+}
+#endif
+
+int audio_stream_register(const struct device *dev, const struct audio_stream_callbacks *callbacks) {
+  if (!dev || !callbacks) {
+    return -EINVAL;
+  }
+
+  audio_ctx.dev = dev;
+  audio_ctx.callbacks = *callbacks;
+
+  LOG_INF("Audio callbacks registered");
+  return 0;
+}
+
+int audio_stream_start(const struct device *dev, const struct audio_format *format) {
+  if (!dev || !format) {
+    return -EINVAL;
+  }
+
+  /* Serialize the check + state update so two racing callers cannot both
+   * observe streaming == false and start the hardware modules twice. */
+  k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+  if (audio_ctx.streaming) {
+    k_mutex_unlock(&audio_stream_mutex);
+    LOG_WRN("Audio streaming already active");
+    return 0;
+  }
+  audio_ctx.format = *format;
+  audio_ctx.dev = dev;
+  audio_ctx.streaming = true;
+  k_mutex_unlock(&audio_stream_mutex);
+
+#ifdef AUDIO_STREAM_HAVE_AAO
+  /* Start the hardware-timed TX playback module; it pulls PCM via the source
+   * callback. A failure only disables TX playback (RX still works), so surface
+   * it loudly rather than fail the whole stream. */
+  const struct device *aao_dev = DEVICE_DT_GET(DT_NODELABEL(audio_out));
+  if (!device_is_ready(aao_dev)) {
+    LOG_ERR("analog-audio-out device not ready (TX playback unavailable)");
+  } else {
+    int aao_ret = analog_audio_out_start(aao_dev, audio_stream_tx_src, &audio_ctx);
+    if (aao_ret < 0) {
+      LOG_ERR("analog-audio-out start failed: %d (TX playback unavailable)", aao_ret);
+    }
+  }
+#endif
+
+#ifdef AUDIO_STREAM_HAVE_AAI
+  /* Start the hardware-timed RX capture module; it delivers PCM via the callback.
+   * A failure only disables RX capture (TX still works), so surface it loudly
+   * rather than fail the whole stream. Verify the device initialised before use
+   * (per the driver-layer device_is_ready() convention) so a failed init cannot
+   * leave analog_audio_in_start() operating on uninitialised runtime state. */
+  const struct device *aai_dev = DEVICE_DT_GET(DT_NODELABEL(audio_in));
+  if (!device_is_ready(aai_dev)) {
+    LOG_ERR("analog-audio-in device not ready (RX capture unavailable)");
+  } else {
+    int aai_ret = analog_audio_in_start(aai_dev, audio_stream_on_rx_samples, &audio_ctx);
+    if (aai_ret < 0) {
+      LOG_ERR("analog-audio-in start failed: %d (RX capture unavailable)", aai_ret);
+    }
+  }
+#endif
+
+  LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);
+
+  return 0;
+}
+
+int audio_stream_stop(const struct device *dev) {
+  if (!dev) {
+    return -EINVAL;
+  }
+
+  k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+  audio_ctx.streaming = false;
+  k_mutex_unlock(&audio_stream_mutex);
+
+#ifdef AUDIO_STREAM_HAVE_AAO
+  /* Consume the result: the analog_audio_* stop functions are warn_unused_result,
+   * and GCC's attribute (unlike [[nodiscard]]) is NOT silenced by a (void) cast. */
+  int aao_stop_ret = analog_audio_out_stop(DEVICE_DT_GET(DT_NODELABEL(audio_out)));
+  if (aao_stop_ret < 0) {
+    LOG_WRN("analog-audio-out stop returned %d", aao_stop_ret);
+  }
+#endif
+
+#ifdef AUDIO_STREAM_HAVE_AAI
+  int aai_stop_ret = analog_audio_in_stop(DEVICE_DT_GET(DT_NODELABEL(audio_in)));
+  if (aai_stop_ret < 0) {
+    LOG_WRN("analog-audio-in stop returned %d", aai_stop_ret);
+  }
+#endif
+
+  LOG_INF("Audio streaming stopped");
+  return 0;
+}
+
+int audio_stream_get_format(const struct device *dev, struct audio_format *format) {
+  if (!dev || !format) {
+    return -EINVAL;
+  }
+
+  *format = audio_ctx.format;
+  return 0;
+}

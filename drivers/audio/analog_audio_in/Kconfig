@@ -6,8 +6,12 @@ config ANALOG_AUDIO_IN
 	default y
 	depends on DT_HAS_OE5XRX_ANALOG_AUDIO_IN_ENABLED
 	select DMA
+	select ADC
 	help
 	  Timer-TRGO-triggered ADC + circular DMA analog audio capture driver.
+	  Requires the Zephyr ADC driver: this driver runs the timed capture via
+	  LL + DMA but relies on the adc_stm32 binding for the ADC pinctrl (analog
+	  mode) and peripheral bring-up it layers on top of.
 
 if ANALOG_AUDIO_IN
 

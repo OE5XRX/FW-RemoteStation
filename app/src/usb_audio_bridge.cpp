@@ -11,11 +11,9 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
+#include "audio_stream.h"
 #include "feedback.h"
 
-#include <sa818/sa818.h>
-#include <sa818/sa818_audio.h>
-#include <sa818/sa818_audio_stream.h>
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
@@ -258,19 +256,11 @@ static void uac2_terminal_update_cb(const struct device *dev, uint8_t terminal, 
     }
   }
 
-  bool rx = ctx->rx_enabled;
-  bool tx = ctx->tx_enabled;
-  const struct device *sa818 = ctx->sa818_dev;
-
   k_mutex_unlock(&ctx->lock);
 
-  /* Enable/disable the SA818 ADC(RX)/DAC(TX) audio paths to match the active
-   * USB streams. Without this the ADC is never sampled, so rx_ring stays empty
-   * and no capture data ever reaches the host. Called outside ctx->lock to keep
-   * a consistent lock order with the SA818 driver's own lock. */
-  if (sa818 != NULL) {
-    (void)sa818_audio_enable_path(sa818, rx, tx);
-  }
+  /* The tx_enabled/rx_enabled flags above gate the bridge's own OUT/IN callbacks
+   * (get_recv_buf/data_recv and the SOF IN send); the SA818 capture/playback
+   * modules run for the lifetime of the stream and need no per-terminal toggle. */
 }
 
 /**
@@ -435,48 +425,38 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
   ctx->sa818_dev = sa818_dev;
   k_mutex_unlock(&ctx->lock);
 
-  /* Register SA818 audio callbacks */
-  struct sa818_audio_callbacks sa818_cbs = {
+  /* Register the audio-stream callbacks. The SA818 device is passed as the
+   * opaque context handle; the audio-stream bridge is radio-agnostic. */
+  struct audio_stream_callbacks cbs = {
       .tx_request = sa818_tx_request_cb,
       .rx_data = sa818_rx_data_cb,
       .user_data = ctx,
   };
 
-  sa818_result ret = sa818_audio_stream_register(sa818_dev, &sa818_cbs);
-  if (ret != SA818_OK) {
-    LOG_ERR("Failed to register SA818 audio callbacks: %d", ret);
+  int ret = audio_stream_register(sa818_dev, &cbs);
+  if (ret != 0) {
+    LOG_ERR("Failed to register audio callbacks: %d", ret);
     k_mutex_lock(&ctx->lock, K_FOREVER);
     ctx->sa818_dev = NULL;
     k_mutex_unlock(&ctx->lock);
     return -EIO;
   }
 
-  /* Start SA818 audio streaming */
-  struct sa818_audio_format format = {
+  /* Start audio streaming */
+  struct audio_format format = {
       .sample_rate = AUDIO_SAMPLE_RATE_HZ,
       .bit_depth = 16,
       .channels = 1,
   };
 
-  ret = sa818_audio_stream_start(sa818_dev, &format);
-  if (ret != SA818_OK) {
-    LOG_ERR("Failed to start SA818 audio streaming: %d", ret);
+  ret = audio_stream_start(sa818_dev, &format);
+  if (ret != 0) {
+    LOG_ERR("Failed to start audio streaming: %d", ret);
     k_mutex_lock(&ctx->lock, K_FOREVER);
     ctx->sa818_dev = NULL;
     k_mutex_unlock(&ctx->lock);
     return -EIO;
   }
-
-  /* The host may have enabled AudioStreaming alt-settings before the bridge was
-   * started (uac2_terminal_update_cb then ran with ctx->sa818_dev == NULL and
-   * skipped the path enable). Now that sa818_dev is set, sync the SA818 RX/TX
-   * audio paths to the already-observed USB stream state so the ADC/DAC get
-   * enabled without waiting for the host to toggle streaming again. */
-  k_mutex_lock(&ctx->lock, K_FOREVER);
-  bool rx_now = ctx->rx_enabled;
-  bool tx_now = ctx->tx_enabled;
-  k_mutex_unlock(&ctx->lock);
-  (void)sa818_audio_enable_path(sa818_dev, rx_now, tx_now);
 
   LOG_INF("USB Audio Bridge started (8kHz, 16-bit, mono)");
   LOG_INF("  USB OUT -> TX Ring (%u bytes) -> SA818 TX", TX_RING_SIZE);
