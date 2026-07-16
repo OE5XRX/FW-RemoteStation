@@ -1,0 +1,6 @@
+tests:
+  boot_confirm.health_gate:
+    platform_allow:
+      - native_sim/native/64
+    tags: boot_confirm mcuboot
+    harness: ztest
