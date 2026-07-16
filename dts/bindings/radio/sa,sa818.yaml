@@ -26,21 +26,6 @@ properties:
     required: true
     description: UART interface used for SA818 control commands
 
-  io-channels:
-    type: phandle-array
-    required: true
-    description: >
-      IO channels used by SA818. Must contain exactly two entries:
-      First entry is ADC for audio input (required),
-      second entry is DAC for audio output (required).
-      Example: <&adc0 0>, <&wav_dac 0>
-      Use wav-dac on native_sim or real hardware DAC on embedded targets.
-
-  io-channel-names:
-    type: string-array
-    required: false
-    description: Optional names for io-channels (e.g. "audio_in", "audio_out")
-
   h-l-power-gpios:
     type: phandle-array
     required: true

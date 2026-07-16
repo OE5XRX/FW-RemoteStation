@@ -9,8 +9,6 @@ config SA818
   default n
   depends on SERIAL
   depends on GPIO
-  depends on ADC
-  depends on DAC
   select UART_INTERRUPT_DRIVEN
   help
     Driver for SA818 / SA818S UART-controlled FM transceiver modules.
