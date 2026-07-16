@@ -152,11 +152,22 @@ void gate_thread(void *, void *, void *) {
   const struct device *hw_wdt = DEVICE_DT_GET(DT_NODELABEL(iwdg));
   int init_rc = task_wdt_init(device_is_ready(hw_wdt) ? hw_wdt : NULL);
   if (init_rc != 0) {
-    LOG_WRN("task_wdt_init rc=%d; watchdog feeding disabled", init_rc);
+    /* RESIDUAL RISK: with task_wdt_init failed, the hardware IWDG is NOT armed.
+     * If a probe (e.g. sa818_at_connect) then hangs, there is no watchdog to
+     * reset the chip; only the gate's best-effort software deadline applies,
+     * and that deadline itself cannot fire while the thread is blocked inside a
+     * hung probe. The image can therefore stay unconfirmed AND un-reverted. We
+     * do NOT abort/reboot here (that would be its own failure mode); we surface
+     * the loss of hardware protection at ERROR severity so it is not silent. */
+    LOG_ERR("task_wdt_init rc=%d; HW watchdog NOT armed — no reset backstop if a "
+            "probe hangs, only the best-effort software deadline applies",
+            init_rc);
   } else {
     g_wdt_channel = task_wdt_add(WDT_PERIOD_MS, wdt_cb, NULL);
     if (g_wdt_channel < 0) {
-      LOG_WRN("task_wdt_add failed (rc=%d); watchdog feeding disabled", g_wdt_channel);
+      LOG_ERR("task_wdt_add rc=%d; HW watchdog NOT armed — no reset backstop if a "
+              "probe hangs, only the best-effort software deadline applies",
+              g_wdt_channel);
       g_wdt_channel = -1;
     }
   }
