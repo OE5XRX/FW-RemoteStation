@@ -117,8 +117,12 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
     return -EINVAL;
   }
 
-  /* Serialize the check + state update so two racing callers cannot both
-   * observe streaming == false and start the hardware modules twice. */
+  /* Hold the stream mutex across the whole start sequence — the state flip AND
+   * the backend bring-up. Releasing it before starting the backends would open
+   * a window where a concurrent stop() clears streaming while we are still
+   * bringing hardware up, leaving the backends running with streaming == false.
+   * The backend callbacks (tx_src / on_rx_samples) do not take this mutex, so
+   * holding it across analog_audio_*_start() cannot deadlock. */
   k_mutex_lock(&audio_stream_mutex, K_FOREVER);
   if (audio_ctx.dev != dev) {
     /* start must run against the context bound by audio_stream_register();
@@ -135,7 +139,6 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
   }
   audio_ctx.format = *format;
   audio_ctx.streaming = true;
-  k_mutex_unlock(&audio_stream_mutex);
 
   /* Count backends that actually came up. A single backend failing only
    * degrades that direction (RX-only or TX-only is still useful), so we keep
@@ -182,13 +185,13 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
 #endif
 
   if (started == 0) {
-    LOG_ERR("No audio backend available; not streaming");
-    k_mutex_lock(&audio_stream_mutex, K_FOREVER);
     audio_ctx.streaming = false;
     k_mutex_unlock(&audio_stream_mutex);
+    LOG_ERR("No audio backend available; not streaming");
     return -ENODEV;
   }
 
+  k_mutex_unlock(&audio_stream_mutex);
   LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);
 
   return 0;
@@ -199,6 +202,9 @@ int audio_stream_stop(const struct device *dev) {
     return -EINVAL;
   }
 
+  /* Hold the mutex across the state flip AND the backend teardown so stop() is
+   * fully serialized against start() (see the note there) — otherwise the two
+   * could interleave and leave a backend running with streaming == false. */
   k_mutex_lock(&audio_stream_mutex, K_FOREVER);
   if (audio_ctx.dev != dev) {
     /* Not the registered/active context — refuse to stop someone else's stream. */
@@ -206,7 +212,6 @@ int audio_stream_stop(const struct device *dev) {
     return -EINVAL;
   }
   audio_ctx.streaming = false;
-  k_mutex_unlock(&audio_stream_mutex);
 
 #ifdef AUDIO_STREAM_HAVE_AAO
   /* Consume the result: the analog_audio_* stop functions are warn_unused_result,
@@ -224,6 +229,7 @@ int audio_stream_stop(const struct device *dev) {
   }
 #endif
 
+  k_mutex_unlock(&audio_stream_mutex);
   LOG_INF("Audio streaming stopped");
   return 0;
 }
