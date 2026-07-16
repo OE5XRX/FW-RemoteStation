@@ -130,6 +130,14 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
   audio_ctx.streaming = true;
   k_mutex_unlock(&audio_stream_mutex);
 
+  /* Count backends that actually came up. A single backend failing only
+   * degrades that direction (RX-only or TX-only is still useful), so we keep
+   * streaming. But if *no* backend is driving the callbacks — none compiled in,
+   * or every one failed — then reporting success would be a lie: the rings
+   * would never be drained/filled. In that case roll back and fail with
+   * -ENODEV. */
+  int started = 0;
+
 #ifdef AUDIO_STREAM_HAVE_AAO
   /* Start the hardware-timed TX playback module; it pulls PCM via the source
    * callback. A failure only disables TX playback (RX still works), so surface
@@ -141,6 +149,8 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
     int aao_ret = analog_audio_out_start(aao_dev, audio_stream_tx_src, &audio_ctx);
     if (aao_ret < 0) {
       LOG_ERR("analog-audio-out start failed: %d (TX playback unavailable)", aao_ret);
+    } else {
+      started++;
     }
   }
 #endif
@@ -158,9 +168,19 @@ int audio_stream_start(const struct device *dev, const struct audio_format *form
     int aai_ret = analog_audio_in_start(aai_dev, audio_stream_on_rx_samples, &audio_ctx);
     if (aai_ret < 0) {
       LOG_ERR("analog-audio-in start failed: %d (RX capture unavailable)", aai_ret);
+    } else {
+      started++;
     }
   }
 #endif
+
+  if (started == 0) {
+    LOG_ERR("No audio backend available; not streaming");
+    k_mutex_lock(&audio_stream_mutex, K_FOREVER);
+    audio_ctx.streaming = false;
+    k_mutex_unlock(&audio_stream_mutex);
+    return -ENODEV;
+  }
 
   LOG_INF("Audio streaming started: %u Hz, %u-bit, %u ch", format->sample_rate, format->bit_depth, format->channels);
 
