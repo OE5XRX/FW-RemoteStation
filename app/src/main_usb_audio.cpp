@@ -16,9 +16,20 @@
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/usb/usbd.h>
 
 extern "C" {
 #include "sample_usbd.h"
+}
+
+/* Boot-confirm gate: records USB-configured events and starts the gate thread. */
+extern "C" void boot_confirm_fm_usb_configured(void);
+extern "C" void boot_confirm_fm_start(const struct device *sa818);
+
+static void usbd_msg_cb(struct usbd_context *const, const struct usbd_msg *const msg) {
+  if (msg->type == USBD_MSG_CONFIGURATION) {
+    boot_confirm_fm_usb_configured();
+  }
 }
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -62,8 +73,10 @@ int main(void) {
   LOG_WRN("USB Audio not configured in device tree");
 #endif
 
-  /* Initialize USB device (provided by common sample code) */
-  struct usbd_context *sample_usbd = sample_usbd_init_device(NULL);
+  /* Initialize USB device (provided by common sample code).
+   * Pass usbd_msg_cb so USBD_MSG_CONFIGURATION events are forwarded to the
+   * boot-confirm gate before usbd_enable() is called. */
+  struct usbd_context *sample_usbd = sample_usbd_init_device(usbd_msg_cb);
   if (sample_usbd == NULL) {
     LOG_ERR("Failed to initialize USB device");
     return -ENODEV;
@@ -105,6 +118,12 @@ int main(void) {
     return -EIO;
   }
   LOG_INF("SA818 powered on");
+
+  /* Start the health-gate confirm thread. It probes USB configured, shell
+   * transport (compile-time), and the SA818 AT handshake; then calls
+   * boot_write_img_confirmed() once all criteria hold for the dwell period.
+   * If the deadline expires first, it calls sys_reboot() so MCUboot reverts. */
+  boot_confirm_fm_start(sa818);
 
   /* Main loop - shell handles commands */
   LOG_INF("System ready. Use shell commands to control SA818.");

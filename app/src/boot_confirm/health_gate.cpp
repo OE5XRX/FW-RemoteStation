@@ -27,8 +27,12 @@ GateOutcome run_health_gate(const GateConfig &cfg, const GateHooks &hooks, const
         healthy_since = now;
       }
       if (now - healthy_since >= cfg.dwell_ms) {
-        hooks.confirm(hooks.ctx);
-        return GateOutcome::Confirmed;
+        if (hooks.confirm(hooks.ctx) == 0) {
+          return GateOutcome::Confirmed;
+        }
+        // Confirm write failed; reset the dwell streak so the next healthy
+        // period triggers another attempt before the deadline fires.
+        healthy_since = -1;
       }
     } else {
       healthy_since = -1; // streak broken -> restart dwell

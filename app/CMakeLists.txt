@@ -34,7 +34,10 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
         src/main_usb_audio.cpp
         src/usb_audio_bridge.cpp
         src/feedback.cpp
+        src/boot_confirm/health_gate.cpp
+        src/boot_confirm/boot_confirm_fm.cpp
     )
+    target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/boot_confirm)
 else()
     target_sources(app PRIVATE src/main.cpp)
 endif()
