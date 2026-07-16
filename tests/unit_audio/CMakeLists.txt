@@ -8,9 +8,11 @@ project(unit_audio)
 
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../app/src)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../drivers/audio/analog_audio_in)
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../drivers/audio/analog_audio_out)
 
 target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/feedback.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../drivers/audio/analog_audio_in/adc_pcm.c
+  ${CMAKE_CURRENT_LIST_DIR}/../../drivers/audio/analog_audio_out/dac_pcm.c
 )

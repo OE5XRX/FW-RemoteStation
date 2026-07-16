@@ -1,0 +1,22 @@
+# Copyright (c) 2026 OE5XRX
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+config ANALOG_AUDIO_OUT
+	bool "Hardware-timed analog audio playback (TIM+DAC+DMA)"
+	default y
+	depends on DT_HAS_OE5XRX_ANALOG_AUDIO_OUT_ENABLED
+	select DMA
+	help
+	  Timer-TRGO-triggered DAC + circular DMA analog audio playback driver.
+
+if ANALOG_AUDIO_OUT
+config ANALOG_AUDIO_OUT_INIT_PRIORITY
+	int "Init priority"
+	default 90
+	help
+	  Device init priority. Must be after the DMA and DAC drivers.
+
+module = ANALOG_AUDIO_OUT
+module-str = analog_audio_out
+source "subsys/logging/Kconfig.template.log_config"
+endif

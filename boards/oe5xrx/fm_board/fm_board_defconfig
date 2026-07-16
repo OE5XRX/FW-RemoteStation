@@ -23,6 +23,9 @@ CONFIG_DMA=y
 # enable hardware-timed analog audio capture (TIM+ADC+DMA)
 CONFIG_ANALOG_AUDIO_IN=y
 
+# enable hardware-timed analog audio playback (TIM+DAC+DMA)
+CONFIG_ANALOG_AUDIO_OUT=y
+
 # enable regulators
 CONFIG_REGULATOR=y
 

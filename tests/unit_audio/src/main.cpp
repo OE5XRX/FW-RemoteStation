@@ -5,6 +5,7 @@
  * Unit tests for the UAC2 explicit-feedback regulator (native_sim).
  */
 #include "adc_pcm.h"
+#include "dac_pcm.h"
 #include "feedback.h"
 
 #include <zephyr/ztest.h>
@@ -124,4 +125,26 @@ ZTEST(adc_pcm, test_16bit_is_identity_offset) {
   zassert_equal(adc_to_pcm16(0, 16), -32768, "got %d", adc_to_pcm16(0, 16));
   zassert_equal(adc_to_pcm16(32768, 16), 0, "got %d", adc_to_pcm16(32768, 16));
   zassert_equal(adc_to_pcm16(65535, 16), 32767, "got %d", adc_to_pcm16(65535, 16));
+}
+
+ZTEST_SUITE(dac_pcm, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(dac_pcm, test_midpoint_is_dac_midscale) {
+  /* 12-bit: PCM 0 -> (0+32768)>>4 = 2048 (mid-scale). */
+  zassert_equal(pcm16_to_dac(0, 12), 2048, "got %u", pcm16_to_dac(0, 12));
+}
+
+ZTEST(dac_pcm, test_full_scale_extremes) {
+  /* 12-bit: -32768 -> 0; 32767 -> (65535)>>4 = 4095. */
+  zassert_equal(pcm16_to_dac(-32768, 12), 0, "got %u", pcm16_to_dac(-32768, 12));
+  zassert_equal(pcm16_to_dac(32767, 12), 4095, "got %u", pcm16_to_dac(32767, 12));
+}
+
+ZTEST(dac_pcm, test_roundtrip_with_adc) {
+  /* adc_to_pcm16 and pcm16_to_dac are inverses up to resolution truncation:
+   * a DAC code fed back as an ADC reading returns the same PCM (12-bit). */
+  for (uint16_t code = 0; code < 4096; code += 337) {
+    int16_t pcm = adc_to_pcm16(code, 12);
+    zassert_equal(pcm16_to_dac(pcm, 12), code, "code %u -> pcm %d -> %u", code, pcm, pcm16_to_dac(pcm, 12));
+  }
 }
