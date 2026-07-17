@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
  * Native Simulator Device Tree Overlay
- * Configures GPIO and ADC emulators for SA818 driver testing
+ * Configures GPIO emulators for SA818 driver testing. The SA818 driver only
+ * does AT/UART + control GPIOs; the hardware-timed audio path (analog-audio-in /
+ * analog-audio-out) is STM32-only and is not instantiated on native_sim.
  */
 
 / {
@@ -28,10 +30,6 @@
     band = "vhf";
     uart = <&uart1>;
 
-    /* Audio input via ADC channel 0 */
-    io-channels = <&adc0 0>, <&wav_dac 0>;
-    io-channel-names = "audio_in", "audio_out";
-
     h-l-power-gpios   = <&gpio_sa818 0 GPIO_ACTIVE_HIGH>;
     nptt-gpios        = <&gpio_sa818 1 GPIO_ACTIVE_LOW>;
     npower-down-gpios = <&gpio_sa818 2 GPIO_ACTIVE_LOW>;
@@ -39,35 +37,6 @@
 
     tx-enable-delay-ms = <20>;
     rx-settle-time-ms  = <50>;
-  };
-  
-  /* WAV File DAC Emulator */
-  wav_dac: wav_dac {
-    compatible = "wav-dac";
-    status = "okay";
-    #io-channel-cells = <1>;
-    
-    output-file = "sa818_audio_output.wav";
-    channels = <1>;
-    resolution = <16>;
-  };
-};
-
-&adc0 {
-  status = "okay";
-
-  nchannels = <2>;
-  #address-cells = <1>;
-  #size-cells = <0>;
-  ref-internal-mv = <3300>;
-  ref-external1-mv = <5000>;
-
-  channel@0 {
-    reg = <0>;
-    zephyr,gain = "ADC_GAIN_1";
-    zephyr,reference = "ADC_REF_INTERNAL";
-    zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-    zephyr,resolution = <12>;
   };
 };
 

@@ -21,5 +21,6 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/main_usb_audio.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/usb_audio_bridge.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/../../app/src/audio_stream.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/feedback.cpp
 )

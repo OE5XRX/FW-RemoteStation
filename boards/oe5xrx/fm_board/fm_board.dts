@@ -145,18 +145,10 @@
 		band = "vhf";
 		uart = <&usart1>;
 
-		/* &adc1 5 is intentionally kept here alongside the analog-audio-in
-		 * node below, which also references &adc1 5. The RX streaming path no
-		 * longer uses this io-channel (RX capture now comes from the
-		 * analog_audio_in driver); the only remaining adc_read_dt() user is
-		 * sa818_audio_get_rx_level(), which currently has NO callers. The DAC
-		 * (idx 1, audio_out) is still live for TX. So there is no active runtime
-		 * contention today -- but do NOT call sa818_audio_get_rx_level() while
-		 * analog-audio-in capture is running (it would contend on ADC1 ch5).
-		 * Fully removing the sa818 audio_in ADC channel is a follow-up that must
-		 * be HW-validated because it reindexes the still-used audio_out DAC. */
-		io-channels = <&adc1 5>, <&dac1 1>;
-		io-channel-names = "audio_in", "audio_out";
+		/* Audio no longer goes through this driver: the ADC1-ch5 capture and
+		 * DAC1-ch1 playback are owned by the dedicated analog-audio-in /
+		 * analog-audio-out nodes below. The SA818 driver only does AT/UART +
+		 * control GPIOs, so it holds no io-channels. */
 
 		/* Control lines per FMTransceiver schematic (U201 STM32U575 -> U101 SA818).
 		 * H_L_Power / nPTT / nPOWER_DOWN are driven through INVERTING buffer

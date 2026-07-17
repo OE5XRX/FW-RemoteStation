@@ -10,16 +10,9 @@ if (CONFIG_ETL)
 endif()
 
 if (CONFIG_BOARD_NATIVE_SIM)
-    # native_sim has no USB; audio is exercised via emulated ADC/DAC.
-    target_sources(app PRIVATE
-        src/main.cpp
-        src/sim_audio/sample_clock.cpp
-        src/sim_audio/adc_sink.cpp
-        src/sim_audio/sine_source.cpp
-        src/sim_audio/wav_source.cpp
-        src/sim_audio/audio_pipeline.cpp
-        src/sim_audio/shell_wav.cpp
-    )
+    # native_sim has no USB and no hardware-timed audio (analog-audio-in/out are
+    # STM32-only); the SA818 driver runs AT/UART + control GPIOs only.
+    target_sources(app PRIVATE src/main.cpp)
 elseif (CONFIG_USB_DEVICE_STACK_NEXT)
     # Real hardware: 3-class USB composite (CDC-ACM + UAC2 + DFU).
     include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
@@ -33,6 +26,7 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
     target_sources(app PRIVATE
         src/main_usb_audio.cpp
         src/usb_audio_bridge.cpp
+        src/audio_stream.cpp
         src/feedback.cpp
         src/boot_confirm/health_gate.cpp
         src/boot_confirm/boot_confirm_fm.cpp
