@@ -91,6 +91,19 @@ jobs:
           app-path: fw
           toolchains: arm-zephyr-eabi
 
+      - name: Apply downstream Zephyr patches
+        working-directory: fw
+        # action-zephyr-setup runs `west update`, which resets modules and drops
+        # any patches. Re-apply them (e.g. the STM32 UDC iso-OUT recovery patch
+        # required for UAC2 TX audio on fm_board) before building release images.
+        run: west patch apply
+
+      - name: Install MCUboot signing deps (imgtool)
+        working-directory: fw
+        # Needed for the --sysbuild (MCUboot) firmware build to sign images.
+        # action-zephyr-setup does not install MCUboot's pip requirements.
+        run: west packages pip --install
+
       - name: Install static link deps
         run: sudo apt-get update && sudo apt-get install -y libc6-dev
 
@@ -135,11 +148,23 @@ jobs:
 
             for art in $arts; do
               if [ "$art" = "firmware" ]; then
+                # --- Debug / bare build (linked @0x0, no bootloader, unsigned) ---
                 # tee the build so we can lift Zephyr's FLASH/RAM memory report.
                 west build -b "$board" app -p always -- -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
                   2>&1 | tee "/tmp/build-${name}.log"
                 cp build/zephyr/zephyr.bin "release/out/${name}.bin"
                 cp build/zephyr/zephyr.elf "release/out/${name}.elf"
+
+                # --- Production DFU build: MCUboot + signed app ---
+                # Signed with MCUboot's built-in DEV key for now (no
+                # SB_CONFIG_BOOT_SIGNATURE_KEY_FILE). Switch to the OE5XRX key
+                # later by materializing it from a secret and adding
+                # -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=... below. The band overlay
+                # must target the app image under sysbuild (app_ prefix).
+                west build -b "$board" --sysbuild app -p always -d build-signed -- \
+                  -Dapp_EXTRA_DTC_OVERLAY_FILE="$overlay"
+                cp build-signed/app/zephyr/zephyr.signed.bin "release/out/${name}.signed.bin"
+                cp build-signed/mcuboot/zephyr/zephyr.hex     "release/out/${name}.mcuboot.hex"
                 # Memory-usage overview: the "Memory region" table (FLASH/RAM/...)
                 # Zephyr prints on link. ANSI-stripped; header through first blank.
                 {
@@ -174,7 +199,7 @@ jobs:
           # Collect whatever assets were actually produced. A future target may
           # emit only a subset (e.g. native_sim-only), so an unmatched glob must
           # vanish (nullglob) rather than survive literally and break sha256sum.
-          assets=( *.bin *.elf *.native_sim )
+          assets=( *.bin *.elf *.hex *.native_sim )
           if [ ${#assets[@]} -eq 0 ]; then
             echo "::error::no release assets were produced" >&2
             exit 1
@@ -190,7 +215,7 @@ jobs:
           shopt -s nullglob
           # nullglob drops any artifact class a future target didn't emit;
           # SHA256SUMS is a literal (always present) so it is always signed.
-          for f in *.bin *.elf *.native_sim SHA256SUMS; do
+          for f in *.bin *.elf *.hex *.native_sim SHA256SUMS; do
             cosign sign-blob --yes --bundle "${f}.bundle" "${f}"
           done
           ls -lh
@@ -229,10 +254,12 @@ jobs:
           body: |
             ## FW-RemoteStation ${{ steps.ver.outputs.version }}
 
-            | Target | Real (DFU) | Debug | Sim (static) |
-            |---|---|---|---|
-            | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
-            | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
+            | Target | DFU update (signed) | Provisioning (SWD) | Debug (bare) | Debug ELF | Sim (static) |
+            |---|---|---|---|---|---|
+            | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.signed.bin` | `fm-sa818-2m.mcuboot.hex` | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
+            | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.signed.bin` | `fm-sa818-70cm.mcuboot.hex` | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
 
+            **`.signed.bin`** = DFU update image (MCUboot, currently signed with the MCUboot **dev key** — not yet an OE5XRX production key);
+            `.mcuboot.hex` = bootloader for one-time SWD provisioning; `.bin`/`.elf` = bare debug build.
             Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers the build artifacts.
             The firmware reports this version at runtime via the `version` shell command.
