@@ -30,6 +30,7 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
         src/feedback.cpp
         src/boot_confirm/health_gate.cpp
         src/boot_confirm/boot_confirm_fm.cpp
+        src/dfu_mode.cpp
     )
     target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/boot_confirm)
 else()

@@ -12,6 +12,10 @@
 
 #include "usb_audio_bridge.h"
 
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+#include "dfu_mode.h"
+#endif
+
 #include <sa818/sa818.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
@@ -26,10 +30,18 @@ extern "C" {
 extern "C" void boot_confirm_fm_usb_configured(void);
 extern "C" void boot_confirm_fm_start(const struct device *sa818);
 
-static void usbd_msg_cb(struct usbd_context *const, const struct usbd_msg *const msg) {
+static void usbd_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *const msg) {
   if (msg->type == USBD_MSG_CONFIGURATION) {
     boot_confirm_fm_usb_configured();
   }
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+  if (msg->type == USBD_MSG_DFU_APP_DETACH) {
+    dfu_mode_switch_to_dfu(ctx);
+  }
+  if (msg->type == USBD_MSG_DFU_DOWNLOAD_COMPLETED) {
+    dfu_mode_download_completed();
+  }
+#endif
 }
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
