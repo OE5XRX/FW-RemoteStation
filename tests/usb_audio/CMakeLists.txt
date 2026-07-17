@@ -15,12 +15,19 @@ target_include_directories(app PRIVATE
 
 target_include_directories(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src
+  ${CMAKE_CURRENT_LIST_DIR}/../../app/src/boot_confirm
 )
 
-# Application sources
+# Application sources. main_usb_audio.cpp unconditionally calls the health-gate
+# entry points (boot_confirm_fm_start / boot_confirm_fm_usb_configured), so the
+# boot_confirm sources must be compiled here too. dfu_mode.cpp is NOT needed:
+# main only references it under CONFIG_BOOTLOADER_MCUBOOT, which this bare test
+# build does not set.
 target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/main_usb_audio.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/usb_audio_bridge.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/audio_stream.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../app/src/feedback.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/../../app/src/boot_confirm/health_gate.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/../../app/src/boot_confirm/boot_confirm_fm.cpp
 )

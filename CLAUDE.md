@@ -118,6 +118,39 @@ west build -b fm_board app
 west build -b native_sim/native/64 app
 ```
 
+### Firmware update / MCUboot
+
+**Two build variants:**
+
+| Variant | Command | Output | Use |
+|---------|---------|--------|-----|
+| Bare / debug | `west build -b fm_board app` | `build/zephyr/zephyr.bin` (linked @0x0, no bootloader) | Dev/debug; flash directly via SWD |
+| Prod / signed | `west build -b fm_board --sysbuild app` | `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` | Production; MCUboot in the boot partition; app signed into slot0 for swap-using-offset |
+
+**DFU update flow:**
+
+```
+dfu-util --alt <slot1-alt> --download build/app/zephyr/zephyr.signed.bin
+# reset the board — MCUboot detects pending image in slot1 and swaps
+```
+
+MCUboot performs a trial boot. If the application does not confirm itself within the watchdog window, IWDG fires, the board reboots, and MCUboot reverts to the previous image in slot0.
+
+**Health-gated self-confirm:**
+
+The application confirms the new image only after all three health checks pass:
+1. USB enumerated (device configured by host)
+2. Shell transport active (CDC-ACM shell responding)
+3. SA818 AT handshake succeeded (`AT+DMOCONNECT` → `+DMOCONNECT:0`)
+
+Until all three pass, the image remains unconfirmed. IWDG expiry causes automatic revert to the previous firmware.
+
+**Signing key handling:**
+
+- CI and development use MCUboot's built-in dev key — `app/sysbuild.conf` sets `SB_CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256=y` without specifying `SB_CONFIG_BOOT_SIGNATURE_KEY_FILE`, so the MCUboot tree's own `root-ec-p256.pem` is used automatically.
+- The production signing key lives **outside the repo** in a git-ignored location (added in a later hardware task). Never commit the production key.
+- `west packages pip --install` must be run before a `--sysbuild` build to install `imgtool` (provided via `bootloader/mcuboot/zephyr/requirements.txt`). The CI `prod_build` job does this explicitly; `action-zephyr-setup` does not do it automatically.
+
 ### Test commands
 
 ```
@@ -132,9 +165,10 @@ west twister -T tests/etl -p native_sim/native/64 -v
 
 ### CI gates
 
-Two jobs must be green for every PR and push to `main`:
+Three jobs must be green for every PR and push to `main`:
 - **`clang_format`** — clang-format-18 over `app/`, `boards/`, `tests/`; fails on any diff.
-- **`build_and_tests`** — builds `native_sim`, then runs Twister on `app --integration`, `tests/sim_shell`, and `tests/etl`.
+- **`build_and_tests`** — builds `native_sim`, then runs Twister on `app --integration`, `tests/sim_shell`, `tests/etl`, `tests/boot_confirm`, `tests/usb_audio` (build-only), and `tests/unit_audio`.
+- **`prod_build`** — installs MCUboot pip requirements, applies patches, builds `fm_board --sysbuild app` (dev key), and asserts `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` exist.
 
 CI uses `zephyrproject-rtos/action-zephyr-setup@v1`, not the devcontainer.
 
@@ -166,4 +200,4 @@ No regressions. New code must include or reference tests.
 - **Driver result codes are `[[nodiscard]]`.** The compiler will warn if you discard the return value of any `sa818_*` function; treat the warning as an error.
 - **DT `band` is a build-time constant.** It selects the SA818 model string, the default frequency, and the valid frequency ranges at compile time via `DT_ENUM_IDX`. Do not attempt to change the band at runtime.
 - **Keep platform/access/persistence out of FW.** The firmware is thin by design. Do not add capability persistence, user/role models, or platform configuration to the firmware.
-- **Real test dirs are `tests/etl`, `tests/sim_shell`, `tests/usb_audio`.** Do not invent or reference test directory names not listed here. CI currently gates only `app --integration`, `tests/sim_shell`, and `tests/etl`; `tests/usb_audio` exists but is not wired into a CI Twister step yet — check `.github/workflows/ci.yml` for the exact set that runs.
+- **Real test dirs are `tests/boot_confirm`, `tests/etl`, `tests/sim_shell`, `tests/unit_audio`, `tests/usb_audio`.** Do not invent or reference test directory names not listed here. Check `.github/workflows/ci.yml` for the exact set wired into CI — all five directories are currently gated.

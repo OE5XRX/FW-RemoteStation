@@ -93,6 +93,13 @@ jobs:
           set -euo pipefail
           west twister -T tests/etl -p native_sim/native/64 -v --inline-logs
 
+      - name: Twister boot-confirm / health-gate (tests/boot_confirm)
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          west twister -T tests/boot_confirm -p native_sim/native/64 -v --inline-logs
+
       - name: Build fm_board (USB composite)
         working-directory: fw
         shell: bash
@@ -113,3 +120,57 @@ jobs:
         run: |
           set -euo pipefail
           west twister -T tests/unit_audio -p native_sim/native/64 -v --inline-logs
+
+  prod_build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: fw
+
+      - name: Setup Zephyr
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: fw
+          toolchains: arm-zephyr-eabi
+
+      - name: Install MCUboot pip requirements
+        # west packages pip --install refuses to run outside a virtual environment
+        # (a west-level guard, independent of pip's require-virtualenv setting) and
+        # the action-zephyr-setup venv does not set VIRTUAL_ENV, so west rejects it.
+        # Installing imgtool directly with python -m pip bypasses west's guard and
+        # lands imgtool (+ its deps: cryptography, cbor2, intelhex, click) in the
+        # same venv used by the sysbuild signing step.
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --break-system-packages imgtool
+
+      - name: Apply downstream Zephyr patches
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          west patch apply
+
+      - name: Build prod (MCUboot + signed app, dev key)
+        # sysbuild pulls in MCUboot and signs the application image.
+        # sysbuild.conf sets SB_CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256=y and does NOT
+        # set SB_CONFIG_BOOT_SIGNATURE_KEY_FILE, so MCUboot's built-in dev key is used —
+        # safe for CI; the production key lives outside the repo (git-ignored, injected
+        # only for release builds).
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          west build -b fm_board/stm32u575xx --sysbuild app
+
+      - name: Assert signed artifacts exist
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f build/app/zephyr/zephyr.signed.bin
+          test -f build/mcuboot/zephyr/zephyr.hex

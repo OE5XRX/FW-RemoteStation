@@ -23,3 +23,4 @@ _codeql_detected_source_root
 # implement later
 doc
 *.wav
+keys/
