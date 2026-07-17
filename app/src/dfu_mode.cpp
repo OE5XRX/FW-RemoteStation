@@ -19,6 +19,7 @@
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/usb/usbd.h>
 
 extern "C" {
@@ -90,21 +91,21 @@ void dfu_mode_switch_to_dfu(struct usbd_context *composite) {
 
   err = usbd_add_descriptor(&dfu_usbd, &dfu_lang);
   if (err) {
-    LOG_ERR("DFU: failed to add language descriptor (%d)", err);
-    return;
+    LOG_ERR("DFU: failed to add language descriptor (%d) — rebooting", err);
+    sys_reboot(SYS_REBOOT_COLD);
   }
 
   if (usbd_caps_speed(&dfu_usbd) == USBD_SPEED_HS) {
     err = usbd_add_configuration(&dfu_usbd, USBD_SPEED_HS, &dfu_hs_config);
     if (err) {
-      LOG_ERR("DFU: failed to add HS configuration (%d)", err);
-      return;
+      LOG_ERR("DFU: failed to add HS configuration (%d) — rebooting", err);
+      sys_reboot(SYS_REBOOT_COLD);
     }
 
     err = usbd_register_class(&dfu_usbd, "dfu_dfu", USBD_SPEED_HS, 1);
     if (err) {
-      LOG_ERR("DFU: failed to register dfu_dfu class (HS) (%d)", err);
-      return;
+      LOG_ERR("DFU: failed to register dfu_dfu class (HS) (%d) — rebooting", err);
+      sys_reboot(SYS_REBOOT_COLD);
     }
 
     usbd_device_set_code_triple(&dfu_usbd, USBD_SPEED_HS, 0, 0, 0);
@@ -112,34 +113,34 @@ void dfu_mode_switch_to_dfu(struct usbd_context *composite) {
 
   err = usbd_add_configuration(&dfu_usbd, USBD_SPEED_FS, &dfu_fs_config);
   if (err) {
-    LOG_ERR("DFU: failed to add FS configuration (%d)", err);
-    return;
+    LOG_ERR("DFU: failed to add FS configuration (%d) — rebooting", err);
+    sys_reboot(SYS_REBOOT_COLD);
   }
 
   err = usbd_register_class(&dfu_usbd, "dfu_dfu", USBD_SPEED_FS, 1);
   if (err) {
-    LOG_ERR("DFU: failed to register dfu_dfu class (FS) (%d)", err);
-    return;
+    LOG_ERR("DFU: failed to register dfu_dfu class (FS) (%d) — rebooting", err);
+    sys_reboot(SYS_REBOOT_COLD);
   }
 
   usbd_device_set_code_triple(&dfu_usbd, USBD_SPEED_FS, 0, 0, 0);
 
   err = usbd_init(&dfu_usbd);
   if (err) {
-    LOG_ERR("DFU: failed to initialize DFU-only USB device (%d)", err);
-    return;
+    LOG_ERR("DFU: failed to initialize DFU-only USB device (%d) — rebooting", err);
+    sys_reboot(SYS_REBOOT_COLD);
   }
 
   err = usbd_msg_register_cb(&dfu_usbd, dfu_msg_cb);
   if (err) {
-    LOG_ERR("DFU: failed to register DFU message callback (%d)", err);
-    return;
+    LOG_ERR("DFU: failed to register DFU message callback (%d) — rebooting", err);
+    sys_reboot(SYS_REBOOT_COLD);
   }
 
   err = usbd_enable(&dfu_usbd);
   if (err) {
-    LOG_ERR("DFU: failed to enable DFU-only USB device (%d)", err);
-    return;
+    LOG_ERR("DFU: failed to enable DFU-only USB device (%d) — rebooting", err);
+    sys_reboot(SYS_REBOOT_COLD);
   }
 
   LOG_INF("DFU mode active — waiting for download");

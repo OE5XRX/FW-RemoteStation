@@ -34,12 +34,13 @@
  * a non-zero return as "not yet confirmed" and resets the dwell streak so the
  * next healthy period retries the write before the deadline fires.
  *
- * @copyright Copyright (c) 2025 OE5XRX
+ * @copyright Copyright (c) 2026 OE5XRX
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
 #include "health_gate.h"
 
+#include <atomic>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
 #include <zephyr/device.h>
@@ -72,7 +73,7 @@ namespace {
 
 struct Env {
   const struct device *sa818;
-  volatile bool usb_configured; /* set from USBD message callback (workqueue thread context) */
+  std::atomic<bool> usb_configured{false}; /* written from USBD callback; read from gate thread */
 };
 
 Env g_env;
@@ -84,7 +85,7 @@ static int g_wdt_channel = -1; /* task_wdt channel id; -1 = not initialised */
 /* ---- probes ---------------------------------------------------------------- */
 
 bool probe_usb(void *c) {
-  return static_cast<Env *>(c)->usb_configured;
+  return static_cast<Env *>(c)->usb_configured.load();
 }
 
 bool probe_shell(void *c) {
@@ -185,22 +186,28 @@ void gate_thread(void *, void *, void *) {
   const struct device *hw_wdt = DEVICE_DT_GET(DT_NODELABEL(iwdg));
   int init_rc = task_wdt_init(device_is_ready(hw_wdt) ? hw_wdt : NULL);
   if (init_rc != 0) {
-    /* RESIDUAL RISK: with task_wdt_init failed, the hardware IWDG is NOT armed.
-     * If a probe (e.g. sa818_at_connect) then hangs, there is no watchdog to
-     * reset the chip; only the gate's best-effort software deadline applies,
-     * and that deadline itself cannot fire while the thread is blocked inside a
-     * hung probe. The image can therefore stay unconfirmed AND un-reverted. We
-     * do NOT abort/reboot here (that would be its own failure mode); we surface
-     * the loss of hardware protection at ERROR severity so it is not silent. */
-    LOG_ERR("task_wdt_init rc=%d; HW watchdog NOT armed — no reset backstop if a "
-            "probe hangs, only the best-effort software deadline applies",
-            init_rc);
+    LOG_ERR("task_wdt_init rc=%d; HW watchdog NOT armed", init_rc);
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+    /* On a trial boot the watchdog is the only backstop against a hung probe
+     * blocking the gate thread indefinitely.  Without it the image would stay
+     * unconfirmed with no deterministic revert path.  Reboot now so MCUboot
+     * reverts to the previous slot rather than leaving the device stranded. */
+    if (!boot_is_img_confirmed()) {
+      LOG_ERR("trial boot — rebooting for deterministic MCUboot revert");
+      sys_reboot(SYS_REBOOT_COLD);
+    }
+#endif
+    /* Already-confirmed image or bare build: no watchdog revert risk; keep running. */
   } else {
     g_wdt_channel = task_wdt_add(WDT_PERIOD_MS, wdt_cb, NULL);
     if (g_wdt_channel < 0) {
-      LOG_ERR("task_wdt_add rc=%d; HW watchdog NOT armed — no reset backstop if a "
-              "probe hangs, only the best-effort software deadline applies",
-              g_wdt_channel);
+      LOG_ERR("task_wdt_add rc=%d; HW watchdog NOT armed", g_wdt_channel);
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+      if (!boot_is_img_confirmed()) {
+        LOG_ERR("trial boot — rebooting for deterministic MCUboot revert");
+        sys_reboot(SYS_REBOOT_COLD);
+      }
+#endif
       g_wdt_channel = -1;
     }
   }
@@ -242,12 +249,12 @@ void gate_thread(void *, void *, void *) {
 } // namespace
 
 extern "C" void boot_confirm_fm_usb_configured(void) {
-  g_env.usb_configured = true;
+  g_env.usb_configured.store(true);
 }
 
 extern "C" void boot_confirm_fm_start(const struct device *sa818) {
   g_env.sa818 = sa818;
-  g_env.usb_configured = false;
+  g_env.usb_configured.store(false);
   k_thread_create(&g_thread, g_stack, K_THREAD_STACK_SIZEOF(g_stack), gate_thread, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
   k_thread_name_set(&g_thread, "boot_confirm");
 }

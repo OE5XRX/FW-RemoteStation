@@ -125,7 +125,7 @@ west build -b native_sim/native/64 app
 | Variant | Command | Output | Use |
 |---------|---------|--------|-----|
 | Bare / debug | `west build -b fm_board app` | `build/zephyr/zephyr.bin` (linked @0x0, no bootloader) | Dev/debug; flash directly via SWD |
-| Prod / signed | `west build -b fm_board --sysbuild app` | `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` | Production; MCUboot in slot0, app signed for swap-using-offset |
+| Prod / signed | `west build -b fm_board --sysbuild app` | `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` | Production; MCUboot in the boot partition; app signed into slot0 for swap-using-offset |
 
 **DFU update flow:**
 

@@ -136,22 +136,17 @@ jobs:
           toolchains: arm-zephyr-eabi
 
       - name: Install MCUboot pip requirements
-        # west packages pip lists all requirement files declared by west modules;
-        # bootloader/mcuboot/zephyr/requirements.txt is included and brings imgtool,
-        # which is required by the sysbuild signing step. The base action-zephyr-setup
-        # does not run this automatically, so we do it explicitly here.
+        # west packages pip --install refuses to run outside a virtual environment
+        # (a west-level guard, independent of pip's require-virtualenv setting) and
+        # the action-zephyr-setup venv does not set VIRTUAL_ENV, so west rejects it.
+        # Installing imgtool directly with python -m pip bypasses west's guard and
+        # lands imgtool (+ its deps: cryptography, cbor2, intelhex, click) in the
+        # same venv used by the sysbuild signing step.
         working-directory: fw
         shell: bash
-        # action-zephyr-setup puts its venv on PATH but does not set VIRTUAL_ENV,
-        # and the runner's pip has require-virtualenv enabled -> pip refuses with
-        # "Running pip install outside of a virtual environment". Disabling the
-        # guard for this step lets `west` (venv python) install into that venv,
-        # which is where the sysbuild signing step looks for imgtool.
-        env:
-          PIP_REQUIRE_VIRTUALENV: "false"
         run: |
           set -euo pipefail
-          west packages pip --install
+          python -m pip install --break-system-packages imgtool
 
       - name: Apply downstream Zephyr patches
         working-directory: fw
@@ -170,7 +165,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          west build -b fm_board --sysbuild app
+          west build -b fm_board/stm32u575xx --sysbuild app
 
       - name: Assert signed artifacts exist
         working-directory: fw

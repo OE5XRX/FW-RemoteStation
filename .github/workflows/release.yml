@@ -100,14 +100,13 @@ jobs:
 
       - name: Install MCUboot signing deps (imgtool)
         working-directory: fw
-        # Needed for the --sysbuild (MCUboot) firmware build to sign images.
-        # action-zephyr-setup does not install MCUboot's pip requirements.
-        # PIP_REQUIRE_VIRTUALENV=false: the runner's pip guards against installs
-        # outside a virtualenv; disabling it lets `west` (venv python) install
-        # imgtool into the venv the sysbuild signing step uses.
-        env:
-          PIP_REQUIRE_VIRTUALENV: "false"
-        run: west packages pip --install
+        # west packages pip --install refuses to run outside a virtual environment
+        # (a west-level guard, independent of pip's require-virtualenv setting) and
+        # the action-zephyr-setup venv does not set VIRTUAL_ENV, so west rejects it.
+        # Installing imgtool directly with python -m pip bypasses west's guard and
+        # lands imgtool (+ its deps: cryptography, cbor2, intelhex, click) in the
+        # same venv used by the sysbuild signing step.
+        run: python -m pip install --break-system-packages imgtool
 
       - name: Install static link deps
         run: sudo apt-get update && sudo apt-get install -y libc6-dev
