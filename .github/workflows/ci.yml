@@ -142,6 +142,13 @@ jobs:
         # does not run this automatically, so we do it explicitly here.
         working-directory: fw
         shell: bash
+        # action-zephyr-setup puts its venv on PATH but does not set VIRTUAL_ENV,
+        # and the runner's pip has require-virtualenv enabled -> pip refuses with
+        # "Running pip install outside of a virtual environment". Disabling the
+        # guard for this step lets `west` (venv python) install into that venv,
+        # which is where the sysbuild signing step looks for imgtool.
+        env:
+          PIP_REQUIRE_VIRTUALENV: "false"
         run: |
           set -euo pipefail
           west packages pip --install

@@ -102,6 +102,11 @@ jobs:
         working-directory: fw
         # Needed for the --sysbuild (MCUboot) firmware build to sign images.
         # action-zephyr-setup does not install MCUboot's pip requirements.
+        # PIP_REQUIRE_VIRTUALENV=false: the runner's pip guards against installs
+        # outside a virtualenv; disabling it lets `west` (venv python) install
+        # imgtool into the venv the sysbuild signing step uses.
+        env:
+          PIP_REQUIRE_VIRTUALENV: "false"
         run: west packages pip --install
 
       - name: Install static link deps
