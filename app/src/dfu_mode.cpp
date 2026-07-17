@@ -58,6 +58,7 @@ USBD_CONFIGURATION_DEFINE(dfu_hs_config, dfu_cfg_attributes, CONFIG_SAMPLE_USBD_
  * DFU-only message callback
  * --------------------------------------------------------------------------*/
 static void dfu_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *const msg) {
+  ARG_UNUSED(ctx);
   LOG_INF("DFU mode USBD message: %s", usbd_msg_type_string(msg->type));
 
   if (msg->type == USBD_MSG_DFU_DOWNLOAD_COMPLETED) {

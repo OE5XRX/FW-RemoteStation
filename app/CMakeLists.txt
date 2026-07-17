@@ -30,9 +30,12 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
         src/feedback.cpp
         src/boot_confirm/health_gate.cpp
         src/boot_confirm/boot_confirm_fm.cpp
-        src/dfu_mode.cpp
     )
     target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/boot_confirm)
+    # DFU runtime->DFU-mode switch is prod-only (MCUboot); guard so the bare build never compiles it.
+    if(CONFIG_BOOTLOADER_MCUBOOT)
+        target_sources(app PRIVATE src/dfu_mode.cpp)
+    endif()
 else()
     target_sources(app PRIVATE src/main.cpp)
 endif()
