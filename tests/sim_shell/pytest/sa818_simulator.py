@@ -11,7 +11,9 @@ Responds to AT commands over a PTY (pseudo-terminal) interface.
 import os
 import re
 import select
+import termios
 import threading
+import tty
 from dataclasses import dataclass
 from typing import Optional
 
@@ -56,7 +58,18 @@ class SA818Simulator:
         that processes AT commands.
         """
         self.master_fd = os.open(self.pty_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-        
+
+        # A real SA818 hangs off a RAW UART. If the pty is handed over in the
+        # default (cooked) line discipline, its echo would bounce every command
+        # the firmware sends back to the firmware, and canonical/CR-NL
+        # translation would reframe the byte stream — both desync the AT
+        # request/response pairing (a set-group read gets the RSSI reply and
+        # vice-versa). Force raw mode so the simulator behaves like the wire.
+        try:
+            tty.setraw(self.master_fd)
+        except termios.error:
+            pass  # not a tty (e.g. a plain pipe in a degenerate test) — nothing to do
+
         # Start background thread
         self.running = True
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
