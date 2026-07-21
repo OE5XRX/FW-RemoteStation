@@ -205,3 +205,42 @@ class SA818Simulator:
     def get_state(self) -> SA818State:
         """Get current simulator state."""
         return self.state
+
+
+def main(argv=None) -> int:
+    """Run the simulator standalone against a given pty until signalled.
+
+    Usage: python3 sa818_simulator.py <pty_path> [--rssi N]
+
+    This is what the linux-image sim-harness invokes to attach exactly one
+    SA818 emulator to native_sim's SA818 UART, with its lifecycle owned by the
+    harness (systemd) — so no stray/duplicate emulator can desync the AT stream.
+    """
+    import argparse
+    import signal
+    import threading
+
+    parser = argparse.ArgumentParser(description="SA818 AT-command simulator")
+    parser.add_argument("pty", help="pty path to attach to (native_sim's SA818 uart_1)")
+    parser.add_argument("--rssi", type=int, default=None, help="fixed RSSI value to report")
+    args = parser.parse_args(argv)
+
+    sim = SA818Simulator(pty_path=args.pty)
+    if args.rssi is not None:
+        sim.set_rssi(args.rssi)
+    sim.start()
+
+    done = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: done.set())
+    signal.signal(signal.SIGINT, lambda *_: done.set())
+    try:
+        done.wait()
+    finally:
+        sim.stop()
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
