@@ -184,6 +184,11 @@ jobs:
                   -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
                   -DEXTRA_CONF_FILE="$PWD/release/native_sim_static.conf"
                 cp build/zephyr/zephyr.exe "release/out/${name}.native_sim"
+                # Co-version the SA818 AT-emulator with the native_sim it
+                # emulates: the emulator speaks the AT protocol this firmware's
+                # driver expects, so it must ship from the SAME release. The
+                # linux-image sim-harness fetches it pinned alongside native_sim.
+                cp tests/sim_shell/pytest/sa818_simulator.py "release/out/${name}.sa818-sim.py"
                 ./scripts/release_smoke.sh "release/out/${name}.native_sim" "$VERSION" "$band"
                 # native_sim is a host binary (no MCU regions); record on-disk size.
                 printf '## %s.native_sim — host binary (static): %s\n\n' \
@@ -203,7 +208,7 @@ jobs:
           # Collect whatever assets were actually produced. A future target may
           # emit only a subset (e.g. native_sim-only), so an unmatched glob must
           # vanish (nullglob) rather than survive literally and break sha256sum.
-          assets=( *.bin *.elf *.hex *.native_sim )
+          assets=( *.bin *.elf *.hex *.native_sim *.sa818-sim.py )
           if [ ${#assets[@]} -eq 0 ]; then
             echo "::error::no release assets were produced" >&2
             exit 1
@@ -219,7 +224,7 @@ jobs:
           shopt -s nullglob
           # nullglob drops any artifact class a future target didn't emit;
           # SHA256SUMS is a literal (always present) so it is always signed.
-          for f in *.bin *.elf *.hex *.native_sim SHA256SUMS; do
+          for f in *.bin *.elf *.hex *.native_sim *.sa818-sim.py SHA256SUMS; do
             cosign sign-blob --yes --bundle "${f}.bundle" "${f}"
           done
           ls -lh

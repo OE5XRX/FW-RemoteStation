@@ -99,7 +99,11 @@ class SA818Simulator:
                 # Read data from master
                 data = os.read(self.master_fd, 256)
                 if not data:
-                    continue
+                    # EOF: the pty peer (native_sim) closed. A closed fd stays
+                    # perpetually readable, so `continue` here would spin the CPU
+                    # in a tight select()/read() loop. Stop the reader instead.
+                    self.running = False
+                    break
                 
                 self._rx_buffer += data
                 

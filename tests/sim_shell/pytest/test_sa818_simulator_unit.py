@@ -146,7 +146,9 @@ class Bridge:
 
     def close(self):
         self.sim.stop()
-        os.close(self.master_fd)
+        if self.master_fd >= 0:
+            os.close(self.master_fd)
+            self.master_fd = -1
 
 
 @pytest.fixture
@@ -200,6 +202,18 @@ def test_back_to_back_rssi_then_setgroup_stay_aligned(bridge):
     bridge.send_cmd("AT+DMOSETGROUP=0,145.5000,145.5000,0000,4,0000")
     assert bridge.read_line() == "+DMOSETGROUP:0"
     assert bridge.drain() == b"", "responses drifted out of alignment"
+
+
+def test_reader_stops_on_pty_eof(bridge):
+    """When the pty peer (native_sim) closes, os.read() returns b'' (EOF). The
+    reader must STOP, not `continue` on a perpetually-readable closed fd (which
+    pegs the CPU). Closing the master here simulates native_sim exiting."""
+    os.close(bridge.master_fd)
+    bridge.master_fd = -1  # prevent double-close in teardown
+    deadline = time.time() + 2.0
+    while time.time() < deadline and bridge.sim.thread.is_alive():
+        time.sleep(0.02)
+    assert not bridge.sim.thread.is_alive(), "reader thread did not stop on pty EOF"
 
 
 def test_rapid_interleaved_stream_stays_aligned(bridge):
