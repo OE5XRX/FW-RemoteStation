@@ -120,7 +120,17 @@ constexpr float BAND_DEFAULT_FREQ = 145.500f; // within 134-174 MHz (2m)
 const Range VOLUME_RANGES[] = {{nullptr, 1.0, 8.0}};
 const Range SQUELCH_RANGES[] = {{nullptr, 0.0, 8.0}};
 
-/* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side). */
+/* Output buffer sizes (bounded by CONFIG_SHELL_CMD_BUFF_SIZE on the input side).
+ *
+ * These back the command-response buffers below, which are `static` on purpose:
+ * DESCRIBE_BUF_SIZE alone (2048) equals the whole shell thread stack
+ * (CONFIG_SHELL_STACK_SIZE=2048), so putting it on the stack overflows it. On
+ * fm_board (Cortex-M33, CONFIG_HW_STACK_PROTECTION=y) that overflow is a hard
+ * fault that takes USB down with it — the shell just goes silent, which is
+ * exactly the on-hardware `module list`/`describe` hang. native_sim has a huge
+ * host stack and no guard, so the unit tests never see it. The Zephyr shell
+ * executes commands serially on a single thread, so a file-static buffer can
+ * never be reentered — it is the correct place for these, not the stack. */
 constexpr size_t RESULT_BUF_SIZE = 768;
 constexpr size_t DESCRIBE_BUF_SIZE = 2048;
 
@@ -574,7 +584,7 @@ Module *const g_modules[] = {&g_module};
 ModuleRegistry g_registry{g_modules};
 
 void emit_result(const struct shell *sh, const Result &r, const char *module, const char *cap, const char *op) {
-  char buf[RESULT_BUF_SIZE];
+  static char buf[RESULT_BUF_SIZE]; // static: single-threaded shell, keep off the 2K stack (see note at RESULT_BUF_SIZE)
   mod::JsonWriter w(buf, sizeof(buf));
   w.raw("MODULE-RESULT ");
   r.render(w, module, cap, op);
@@ -589,7 +599,7 @@ void emit_result(const struct shell *sh, const Result &r, const char *module, co
 
 int cmd_module(const struct shell *sh, size_t argc, char **argv) {
   if (argc >= 2 && !strcmp(argv[1], "list")) {
-    char buf[RESULT_BUF_SIZE];
+    static char buf[RESULT_BUF_SIZE]; // static: single-threaded shell, keep off the 2K stack (see note at RESULT_BUF_SIZE)
     mod::JsonWriter w(buf, sizeof(buf));
     w.raw("MODULE-LIST ");
     g_registry.list(w);
@@ -614,7 +624,7 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
       emit_result(sh, Result::err("unknown_module"), id, "", "describe");
       return 0;
     }
-    char buf[DESCRIBE_BUF_SIZE];
+    static char buf[DESCRIBE_BUF_SIZE]; // static: single-threaded shell, keep off the 2K stack (see note at DESCRIBE_BUF_SIZE)
     mod::JsonWriter w(buf, sizeof(buf));
     w.raw("MODULE-DESCRIBE ");
     m->describe(w);
