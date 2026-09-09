@@ -139,6 +139,7 @@ const Range SQUELCH_RANGES[] = {{nullptr, 0.0, 8.0}};
  * never be reentered — it is the correct place for these, not the stack. */
 constexpr size_t RESULT_BUF_SIZE = 768;
 constexpr size_t DESCRIBE_BUF_SIZE = 2048;
+constexpr size_t STATUS_BUF_SIZE = 768;
 
 /* Enum value strings: defined once, used for BOTH the descriptor tables below and the
  * parse/serialize logic in the capabilities, so the advertised enum and the accepted
@@ -685,6 +686,25 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     return 0;
   }
 
+  if (!strcmp(op, "status")) {
+    if (m == nullptr) {
+      emit_result(sh, Result::err("unknown_module"), id, "", "status");
+      return 0;
+    }
+    static char buf[STATUS_BUF_SIZE]; // static: single-threaded shell, keep off the 2K stack (see note at RESULT_BUF_SIZE)
+    mod::JsonWriter w(buf, sizeof(buf));
+    w.raw("MODULE-STATUS ");
+    m->snapshot(w);
+    if (w.truncated()) {
+      // Snapshot outgrew the buffer: emit a minimal valid frame rather than truncated
+      // (invalid) JSON. moduleId is a registered literal, so no escaping is needed.
+      shell_print(sh, "MODULE-STATUS {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", m->moduleId());
+      return 0;
+    }
+    shell_print(sh, "%s", w.c_str());
+    return 0;
+  }
+
   if (!strcmp(op, "set")) {
     if (argc < 5) {
       emit_result(sh, Result::err("usage"), id, argc >= 4 ? argv[3] : "", "set");
@@ -727,6 +747,6 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
 
 } // namespace
 
-SHELL_CMD_REGISTER(module, NULL, "module list | module <id> describe|set|get|do <cap> [value]", cmd_module);
+SHELL_CMD_REGISTER(module, NULL, "module list | module <id> describe|status|set|get|do <cap> [value]", cmd_module);
 
 #endif /* CONFIG_MODULE_SA818 */
