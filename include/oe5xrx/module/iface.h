@@ -253,6 +253,16 @@ public:
     w.ch('}');
   }
 
+  /** Render just the value arm as JSON (integer/float/bool/quoted string), or `null`
+   *  when this result is an error. Used by Module::snapshot for the aggregate status. */
+  void renderValueOnly(JsonWriter &w) const {
+    if (!ok_) {
+      w.raw("null");
+      return;
+    }
+    renderValue(w);
+  }
+
 private:
   static constexpr size_t kStrCap = 15;
 
@@ -512,6 +522,31 @@ public:
       c->describe(w);
     }
     w.ch(']');
+    w.ch('}');
+  }
+
+  /** Render `{"schema":1,"module":<id>,"values":{<cap>:<value>,…}}` — a live snapshot
+   *  of every capability's `get` value. A cap whose get errors renders as `null`, so one
+   *  unavailable cap never fails the whole snapshot. */
+  void snapshot(JsonWriter &w) const {
+    w.ch('{');
+    w.kvRaw("schema", "1");
+    w.ch(',');
+    w.kvStr("module", moduleId_);
+    w.ch(',');
+    w.key("values");
+    w.ch('{');
+    bool first = true;
+    for (Capability *c : caps_) {
+      if (!first) {
+        w.ch(',');
+      }
+      first = false;
+      w.key(c->name());
+      Result r = c->handle(Op::Get, "");
+      r.renderValueOnly(w);
+    }
+    w.ch('}');
     w.ch('}');
   }
 

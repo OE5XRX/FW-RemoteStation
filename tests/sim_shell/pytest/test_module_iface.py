@@ -374,3 +374,39 @@ def test_module_set_parse_edges(sa818_sim, shell):
     # Overflow of `long` is rejected at parse -> bad_value; intentional improvement
     # over the old strtol clamp -> out_of_range.
     assert result("module fm set volume 99999999999999999999")["error"] == "bad_value"
+
+
+def test_module_status_snapshot(sa818_sim, shell):
+    """`module fm status` returns one MODULE-STATUS line snapshotting every capability."""
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("module fm status")
+    d = _payload(out, "MODULE-STATUS")
+    assert d["schema"] == 1
+    assert d["module"] == "fm"
+    v = d["values"]
+    # every advertised capability appears in the snapshot
+    assert set(v) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level",
+                      "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone",
+                      "band", "audio"}
+    # types match the describe schema
+    assert isinstance(v["frequency"], float)
+    assert isinstance(v["ptt"], bool)
+    assert isinstance(v["volume"], int)
+    assert v["power_level"] in ("low", "high")
+    assert v["audio"] == "uac2"
+
+
+def test_module_status_reflects_live_state(sa818_sim, shell):
+    shell.exec_command("sa818 power on")
+    shell.exec_command("module fm set frequency 146.000")
+    shell.exec_command("module fm do ptt on")
+    d = _payload(shell.exec_command("module fm status"), "MODULE-STATUS")
+    assert d["values"]["frequency"] == 146.0
+    assert d["values"]["ptt"] is True
+
+
+def test_module_status_unknown_module(shell):
+    out = shell.exec_command("module nope status")
+    r = _payload(out, "MODULE-RESULT")
+    assert r["ok"] is False and r["error"] == "unknown_module"
+    assert r["op"] == "status"
