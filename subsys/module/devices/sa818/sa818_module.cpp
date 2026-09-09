@@ -134,7 +134,7 @@ const Range SQUELCH_RANGES[] = {{nullptr, 0.0, 8.0}};
  * never be reentered — it is the correct place for these, not the stack. */
 constexpr size_t RESULT_BUF_SIZE = 768;
 constexpr size_t DESCRIBE_BUF_SIZE = 2048;
-constexpr size_t STATUS_BUF_SIZE = 768;
+constexpr size_t STATUS_BUF_SIZE = 768; // ~13 caps x key+value (longest values are %.4f floats); same headroom as RESULT_BUF_SIZE
 
 /* Enum value strings: defined once, used for BOTH the descriptor tables below and the
  * parse/serialize logic in the capabilities, so the advertised enum and the accepted
