@@ -34,6 +34,7 @@
 namespace {
 
 using mod::Action;
+using mod::AudioInfo;
 using mod::Capability;
 using mod::FieldSpec;
 using mod::Identity;
@@ -162,6 +163,7 @@ const FieldSpec SQUELCH_SPEC{"squelch", ValueType::Int, nullptr, SQUELCH_RANGES,
 const FieldSpec TXTONE_SPEC{"tx_tone", ValueType::String};
 const FieldSpec RXTONE_SPEC{"rx_tone", ValueType::String};
 const FieldSpec BAND_SPEC{"band", ValueType::String, nullptr, nullptr, 0, nullptr, 0, /*readonly=*/true};
+const FieldSpec AUDIO_SPEC{"audio", ValueType::Stream};
 
 class FrequencyCap : public Setting {
 public:
@@ -452,6 +454,18 @@ private:
   Sa818Context &ctx_;
 };
 
+/* Declarative audio-path capability: the SA818 FM module streams RX/TX audio over the
+ * UAC2 USB interface. This carries no scalar value and no driver call -- it exists so the
+ * agent can derive "audio path present" from the capability schema (single source of
+ * truth). `get` returns the transport identifier; it is side-effect free. */
+class AudioCap : public AudioInfo {
+public:
+  const FieldSpec &spec() const override { return AUDIO_SPEC; }
+
+protected:
+  Result onGet() override { return Result::okStr("uac2"); }
+};
+
 /* "none"/"off" are the only strings that legitimately mean "no tone". Any other string
  * that parses to SA818_TONE_NONE is unrecognized (garbage / out-of-range code) and must be
  * rejected as bad_value rather than silently clearing the tone. */
@@ -581,8 +595,10 @@ SquelchCap g_squelch{g_ctx};
 TxToneCap g_txtone{g_ctx};
 RxToneCap g_rxtone{g_ctx};
 BandCap g_band{g_ctx};
+AudioCap g_audio;
 
-Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band};
+Capability *const g_caps[] = {&g_freq,      &g_txfreq,  &g_rxfreq, &g_ptt,    &g_power, &g_rssi, &g_volume,
+                              &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band,  &g_audio};
 
 /* Runtime identity fields. The Identity holds stable pointers into these static
  * buffers; Module snapshots the pointers at static-init while the buffers are

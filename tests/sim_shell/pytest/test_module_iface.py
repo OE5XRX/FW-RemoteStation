@@ -37,7 +37,16 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["uid_source"] == "synthetic"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band", "audio"}
+
+    # audio path is declared as a capability so the agent derives it from the schema
+    assert caps["audio"]["kind"] == "audio"
+    assert caps["audio"]["type"] == "stream"
+    assert caps["audio"]["access"] == "operator"
+    assert "unit" not in caps["audio"]
+    assert "ranges" not in caps["audio"]
+    assert "values" not in caps["audio"]
+    assert "readonly" not in caps["audio"]
 
     assert caps["frequency"]["kind"] == "setting"
     assert caps["frequency"]["type"] == "float"
