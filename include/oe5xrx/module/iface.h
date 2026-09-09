@@ -35,8 +35,8 @@
 
 namespace mod {
 
-enum class Kind { Setting, Action, Telemetry };
-enum class ValueType { Bool, Int, Float, Enum, String };
+enum class Kind { Setting, Action, Telemetry, Audio };
+enum class ValueType { Bool, Int, Float, Enum, String, Stream };
 enum class Op { Set, Get, Do };
 
 inline const char *kindStr(Kind k) {
@@ -47,6 +47,8 @@ inline const char *kindStr(Kind k) {
     return "action";
   case Kind::Telemetry:
     return "telemetry";
+  case Kind::Audio:
+    return "audio";
   }
   return "";
 }
@@ -63,6 +65,8 @@ inline const char *typeStr(ValueType t) {
     return "enum";
   case ValueType::String:
     return "string";
+  case ValueType::Stream:
+    return "stream";
   }
   return "";
 }
@@ -435,6 +439,24 @@ public:
       return onGet();
     case Op::Set:
       return Result::err("read_only");
+    case Op::Do:
+    default:
+      return Result::err("wrong_op");
+    }
+  }
+};
+
+/** @brief Kind mixin: an audio stream endpoint. Descriptor-only; `get`->onGet
+ *  (a declarative transport id), `set`/`do`->wrong_op. The agent keys off the
+ *  advertised `kind:"audio"` capability to derive that an audio path exists. */
+class AudioInfo : public Capability {
+public:
+  Kind kind() const override { return Kind::Audio; }
+  Result handle(Op op, const char *) override {
+    switch (op) {
+    case Op::Get:
+      return onGet();
+    case Op::Set:
     case Op::Do:
     default:
       return Result::err("wrong_op");
