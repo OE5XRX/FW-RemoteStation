@@ -614,6 +614,15 @@ void emit_result(const struct shell *sh, const Result &r, const char *module, co
   shell_print(sh, "%s", w.c_str());
 }
 
+// Guaranteed-valid short fallback for a "schema+module" framed response (MODULE-DESCRIBE /
+// MODULE-STATUS) whose body overflowed its buffer. Emitting a fixed minimal frame keeps the
+// output valid JSON instead of truncated garbage, and keeps the module field so the schema
+// stays stable vs the success path. The fallback is short enough that it can never itself
+// overflow. moduleId is a registered literal, so it needs no JSON escaping.
+void emit_too_long_frame(const struct shell *sh, const char *frame, const char *module) {
+  shell_print(sh, "%s {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", frame, module);
+}
+
 int cmd_module(const struct shell *sh, size_t argc, char **argv) {
   if (argc >= 2 && !strcmp(argv[1], "list")) {
     static char buf[RESULT_BUF_SIZE]; // static: single-threaded shell, keep off the 2K stack (see note at RESULT_BUF_SIZE)
@@ -646,10 +655,7 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     w.raw("MODULE-DESCRIBE ");
     m->describe(w);
     if (w.truncated()) {
-      // Descriptor outgrew the buffer: emit a minimal valid descriptor (keeping the
-      // module field so the schema is stable vs the success path) rather than truncated
-      // (invalid) JSON. moduleId is a registered literal, so no escaping is needed.
-      shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", m->moduleId());
+      emit_too_long_frame(sh, "MODULE-DESCRIBE", m->moduleId());
       return 0;
     }
     shell_print(sh, "%s", w.c_str());
@@ -666,9 +672,7 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     w.raw("MODULE-STATUS ");
     m->snapshot(w);
     if (w.truncated()) {
-      // Snapshot outgrew the buffer: emit a minimal valid frame rather than truncated
-      // (invalid) JSON. moduleId is a registered literal, so no escaping is needed.
-      shell_print(sh, "MODULE-STATUS {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", m->moduleId());
+      emit_too_long_frame(sh, "MODULE-STATUS", m->moduleId());
       return 0;
     }
     shell_print(sh, "%s", w.c_str());
