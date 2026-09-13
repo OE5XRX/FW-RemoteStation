@@ -227,6 +227,28 @@ jobs:
             shred -u "${SIGNING_KEY_FILE}" || rm -f "${SIGNING_KEY_FILE}"
           fi
 
+      - name: Verify artifacts are production-signed
+        if: ${{ !inputs.dry_run }}
+        working-directory: fw
+        run: |
+          set -euo pipefail
+          pub="release/signing/oe5xrx-fw-public.pem"
+          if [ ! -f "$pub" ]; then
+            echo "::error::$pub missing — commit the production public key (see key ceremony) before a real release." >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          imgs=( release/out/*.signed.bin )
+          if [ ${#imgs[@]} -eq 0 ]; then
+            echo "::error::no signed images to verify" >&2
+            exit 1
+          fi
+          for img in "${imgs[@]}"; do
+            echo "verify: $img"
+            imgtool verify -k "$pub" "$img"
+          done
+          echo "All signed images verified against the production key."
+
       - name: Generate SHA256SUMS
         working-directory: fw/release/out
         run: |
@@ -295,7 +317,7 @@ jobs:
             | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.signed.bin` | `fm-sa818-2m.mcuboot.hex` | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
             | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.signed.bin` | `fm-sa818-70cm.mcuboot.hex` | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
 
-            **`.signed.bin`** = DFU update image (MCUboot, currently signed with the MCUboot **dev key** — not yet an OE5XRX production key);
+            **`.signed.bin`** = DFU update image (MCUboot, signed with the OE5XRX **production key** (dev key only for dry-run builds));
             `.mcuboot.hex` = bootloader for one-time SWD provisioning; `.bin`/`.elf` = bare debug build.
             Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers the build artifacts.
             The firmware reports this version at runtime via the `version` shell command.
