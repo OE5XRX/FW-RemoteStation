@@ -34,15 +34,20 @@ here="$(cd "$(dirname "$0")" && pwd)"
 # Refuse to chip-erase + flash a non-production image: verify the app is signed
 # with the committed production public key BEFORE any destructive operation.
 pub="$here/../release/signing/oe5xrx-fw-public.pem"
-if command -v imgtool >/dev/null 2>&1 && [ -f "$pub" ]; then
-  echo "== Verifying production signature ($APP) =="
-  imgtool verify -k "$pub" "$APP" || {
-    echo "ERROR: $APP is NOT production-signed (imgtool verify failed) — refusing to flash." >&2
-    exit 1
-  }
-else
-  echo "WARN: skipping production-signature verify (imgtool or $pub missing) — flashing unverified image." >&2
+# Fail-closed: never flash unless we can POSITIVELY verify the app is production-signed.
+if ! command -v imgtool >/dev/null 2>&1; then
+  echo "ERROR: imgtool not found on PATH — cannot verify production signature. Refusing to flash." >&2
+  exit 1
 fi
+if [ ! -f "$pub" ]; then
+  echo "ERROR: production public key missing ($pub) — cannot verify production signature. Refusing to flash." >&2
+  exit 1
+fi
+echo "== Verifying production signature ($APP) =="
+imgtool verify -k "$pub" "$APP" || {
+  echo "ERROR: $APP is NOT production-signed (imgtool verify failed) — refusing to flash." >&2
+  exit 1
+}
 
 echo "== Flashing bootloader ($MCUBOOT) with chip erase =="
 pyocd flash --target "$TARGET" --erase chip "$MCUBOOT"
@@ -51,7 +56,16 @@ echo "== Flashing signed app ($APP) at $SLOT0 =="
 pyocd flash --target "$TARGET" --base-address "$SLOT0" "$APP"
 
 echo "== Reading UID =="
-uid="$(python3 "$here/read_uid.py" --target "$TARGET")"
+# read_uid.py needs the pyocd module; the supported env installs pyocd via pipx
+# (isolated venv), so the system python3 lacks it. Use pyocd's own interpreter,
+# derived from its console-script shebang, falling back to python3.
+pyocd_bin="$(command -v pyocd || true)"
+pyint="python3"
+if [ -n "$pyocd_bin" ]; then
+  shebang="$(sed -n '1s/^#!//p' "$pyocd_bin")"
+  [ -n "$shebang" ] && [ -x "${shebang%% *}" ] && pyint="${shebang%% *}"
+fi
+uid="$("$pyint" "$here/read_uid.py" --target "$TARGET")"
 echo "UID=$uid"
 
 out="provision-${uid}.json"
