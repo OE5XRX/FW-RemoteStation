@@ -29,6 +29,7 @@
 namespace {
 
 using mod::Action;
+using mod::AudioInfo;
 using mod::Capability;
 using mod::FieldSpec;
 using mod::Identity;
@@ -133,6 +134,7 @@ const Range SQUELCH_RANGES[] = {{nullptr, 0.0, 8.0}};
  * never be reentered — it is the correct place for these, not the stack. */
 constexpr size_t RESULT_BUF_SIZE = 768;
 constexpr size_t DESCRIBE_BUF_SIZE = 2048;
+constexpr size_t STATUS_BUF_SIZE = 768; // ~13 caps x key+value (longest values are %.4f floats); same headroom as RESULT_BUF_SIZE
 
 /* Enum value strings: defined once, used for BOTH the descriptor tables below and the
  * parse/serialize logic in the capabilities, so the advertised enum and the accepted
@@ -157,6 +159,7 @@ const FieldSpec SQUELCH_SPEC{"squelch", ValueType::Int, nullptr, SQUELCH_RANGES,
 const FieldSpec TXTONE_SPEC{"tx_tone", ValueType::String};
 const FieldSpec RXTONE_SPEC{"rx_tone", ValueType::String};
 const FieldSpec BAND_SPEC{"band", ValueType::String, nullptr, nullptr, 0, nullptr, 0, /*readonly=*/true};
+const FieldSpec AUDIO_SPEC{"audio", ValueType::Stream};
 
 class FrequencyCap : public Setting {
 public:
@@ -447,6 +450,18 @@ private:
   Sa818Context &ctx_;
 };
 
+/* Declarative audio-path capability: the SA818 FM module streams RX/TX audio over the
+ * UAC2 USB interface. This carries no scalar value and no driver call -- it exists so the
+ * agent can derive "audio path present" from the capability schema (single source of
+ * truth). `get` returns the transport identifier; it is side-effect free. */
+class AudioCap : public AudioInfo {
+public:
+  const FieldSpec &spec() const override { return AUDIO_SPEC; }
+
+protected:
+  Result onGet() override { return Result::okStr("uac2"); }
+};
+
 /* "none"/"off" are the only strings that legitimately mean "no tone". Any other string
  * that parses to SA818_TONE_NONE is unrecognized (garbage / out-of-range code) and must be
  * rejected as bad_value rather than silently clearing the tone. */
@@ -576,8 +591,10 @@ SquelchCap g_squelch{g_ctx};
 TxToneCap g_txtone{g_ctx};
 RxToneCap g_rxtone{g_ctx};
 BandCap g_band{g_ctx};
+AudioCap g_audio;
 
-Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band};
+Capability *const g_caps[] = {&g_freq,      &g_txfreq,  &g_rxfreq, &g_ptt,    &g_power, &g_rssi, &g_volume,
+                              &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band,  &g_audio};
 const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};
@@ -595,6 +612,15 @@ void emit_result(const struct shell *sh, const Result &r, const char *module, co
     return;
   }
   shell_print(sh, "%s", w.c_str());
+}
+
+// Guaranteed-valid short fallback for a "schema+module" framed response (MODULE-DESCRIBE /
+// MODULE-STATUS) whose body overflowed its buffer. Emitting a fixed minimal frame keeps the
+// output valid JSON instead of truncated garbage, and keeps the module field so the schema
+// stays stable vs the success path. The fallback is short enough that it can never itself
+// overflow. moduleId is a registered literal, so it needs no JSON escaping.
+void emit_too_long_frame(const struct shell *sh, const char *frame, const char *module) {
+  shell_print(sh, "%s {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", frame, module);
 }
 
 int cmd_module(const struct shell *sh, size_t argc, char **argv) {
@@ -629,10 +655,24 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
     w.raw("MODULE-DESCRIBE ");
     m->describe(w);
     if (w.truncated()) {
-      // Descriptor outgrew the buffer: emit a minimal valid descriptor (keeping the
-      // module field so the schema is stable vs the success path) rather than truncated
-      // (invalid) JSON. moduleId is a registered literal, so no escaping is needed.
-      shell_print(sh, "MODULE-DESCRIBE {\"schema\":1,\"module\":\"%s\",\"error\":\"too_long\"}", m->moduleId());
+      emit_too_long_frame(sh, "MODULE-DESCRIBE", m->moduleId());
+      return 0;
+    }
+    shell_print(sh, "%s", w.c_str());
+    return 0;
+  }
+
+  if (!strcmp(op, "status")) {
+    if (m == nullptr) {
+      emit_result(sh, Result::err("unknown_module"), id, "", "status");
+      return 0;
+    }
+    static char buf[STATUS_BUF_SIZE]; // static: single-threaded shell, keep off the 2K stack (see note at RESULT_BUF_SIZE)
+    mod::JsonWriter w(buf, sizeof(buf));
+    w.raw("MODULE-STATUS ");
+    m->snapshot(w);
+    if (w.truncated()) {
+      emit_too_long_frame(sh, "MODULE-STATUS", m->moduleId());
       return 0;
     }
     shell_print(sh, "%s", w.c_str());
@@ -681,6 +721,6 @@ int cmd_module(const struct shell *sh, size_t argc, char **argv) {
 
 } // namespace
 
-SHELL_CMD_REGISTER(module, NULL, "module list | module <id> describe|set|get|do <cap> [value]", cmd_module);
+SHELL_CMD_REGISTER(module, NULL, "module list | module <id> describe|status|set|get|do <cap> [value]", cmd_module);
 
 #endif /* CONFIG_MODULE_SA818 */
