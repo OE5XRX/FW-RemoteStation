@@ -303,7 +303,7 @@ def read_uid_from_target(target: str = "stm32u575citx") -> str:  # pragma: no co
     from pyocd.core.helpers import ConnectHelper
 
     with ConnectHelper.session_with_chosen_probe(target_override=target) as session:
-        t = session.target
+        t = session.board.target
         words = [t.read32(STM32U5_UID_BASE + i * 4) for i in range(3)]
     return format_uid(words)
 

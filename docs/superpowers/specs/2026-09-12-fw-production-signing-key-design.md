@@ -124,8 +124,8 @@ imgtool verify -k <prod-public.pem> "release/out/${name}.signed.bin"
 Ein Skript (z. B. `scripts/provision.sh`) für das **einmalige Bench-Provisioning** pro Board:
 1. Bootloader + erste signierte App per SWD flashen (wie Bringup-Spec):
    ```bash
-   pyocd flash --target stm32u575citx --erase chip "<name>.mcuboot.hex"
-   pyocd flash --target stm32u575citx --base-address 0x08020000 "<name>.signed.bin"
+   pyocd flash --target stm32u575citx -O connect_mode=under-reset --erase chip "<name>.mcuboot.hex"
+   pyocd flash --target stm32u575citx -O connect_mode=under-reset --base-address 0x08020000 "<name>.signed.bin"
    ```
 2. **STM32-UID auslesen** (96-bit Unique Device ID) via pyocd (`pyocd commander` / Register-
    Read am UID-Basisregister) und **ausgeben** (stdout + `provision-<uid>.json` mit

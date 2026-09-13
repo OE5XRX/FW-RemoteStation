@@ -195,7 +195,7 @@ Release-workflow changes (per real firmware target):
 # after "Setup Zephyr":
 - name: Install MCUboot signing deps
   working-directory: fw
-  run: west packages pip --install     # provides imgtool
+  run: python -m pip install --break-system-packages imgtool   # provides imgtool (west's venv guard rejects 'west packages pip' in CI)
 
 - name: Materialize signing key
   run: |
