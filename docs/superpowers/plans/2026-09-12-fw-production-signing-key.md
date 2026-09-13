@@ -332,6 +332,14 @@ git commit -m "feat: STM32U5 UID formatting helper with tests (Teilbereich E)"
 
 ### Task 5: `provision.sh` — Bench-Provisioning + UID-Report
 
+> **Historisch (nicht die Wahrheit über den Auslieferungsstand):** Der unten
+> gezeigte `provision.sh`-Codeblock ist der ursprüngliche Plan-Entwurf. Das real
+> ausgelieferte Skript wurde im Code-Review weiterentwickelt (fail-closed
+> Signatur-Guard vor dem Erase, JSON via Encoder, `connect_mode=under-reset`,
+> pyocd-Interpreter für `read_uid.py`). **Maßgeblich ist `scripts/provision.sh` im
+> Repo**, nicht dieser Entwurf.
+
+
 **Files:**
 - Create: `scripts/provision.sh`
 

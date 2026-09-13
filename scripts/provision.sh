@@ -14,12 +14,12 @@ SLOT0="0x08020000"   # slot0 base (see mcuboot-dfu-secure-bringup spec / fm_boar
 MCUBOOT="" APP="" MTYPE="" VERSION=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --mcuboot) MCUBOOT="$2"; shift 2;;
-    --app) APP="$2"; shift 2;;
-    --type) MTYPE="$2"; shift 2;;
-    --version) VERSION="$2"; shift 2;;
-    --target) TARGET="$2"; shift 2;;
-    --slot0) SLOT0="$2"; shift 2;;
+    --mcuboot) [ $# -ge 2 ] || usage; MCUBOOT="$2"; shift 2;;
+    --app) [ $# -ge 2 ] || usage; APP="$2"; shift 2;;
+    --type) [ $# -ge 2 ] || usage; MTYPE="$2"; shift 2;;
+    --version) [ $# -ge 2 ] || usage; VERSION="$2"; shift 2;;
+    --target) [ $# -ge 2 ] || usage; TARGET="$2"; shift 2;;
+    --slot0) [ $# -ge 2 ] || usage; SLOT0="$2"; shift 2;;
     *) usage;;
   esac
 done
@@ -49,11 +49,14 @@ imgtool verify -k "$pub" "$APP" || {
   exit 1
 }
 
+# connect_mode=under-reset matches the board's pyocd runner config
+# (boards/oe5xrx/fm_board/board.cmake) so chip-erase works on a blank or bricked
+# board — exactly the provisioning/recovery path this script serves.
 echo "== Flashing bootloader ($MCUBOOT) with chip erase =="
-pyocd flash --target "$TARGET" --erase chip "$MCUBOOT"
+pyocd flash --target "$TARGET" -O connect_mode=under-reset --erase chip "$MCUBOOT"
 
 echo "== Flashing signed app ($APP) at $SLOT0 =="
-pyocd flash --target "$TARGET" --base-address "$SLOT0" "$APP"
+pyocd flash --target "$TARGET" -O connect_mode=under-reset --base-address "$SLOT0" "$APP"
 
 echo "== Reading UID =="
 # read_uid.py needs the pyocd module; the supported env installs pyocd via pipx

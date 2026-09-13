@@ -1,7 +1,7 @@
 # Design: FW-Produktions-Signing-Key & Provisioning (Teilbereich E)
 
 **Datum:** 2026-09-12
-**Status:** Design in Review (vor Implementierungsplan)
+**Status:** Implementiert (PR #64) — Bench-Validierung (Task 7) ausstehend
 **Repo:** `FW-RemoteStation` (Release-Workflow, sysbuild-Config, Provisioning-Skript)
 **Bezug:**
 - Teilbereich **E** des übergeordneten Vorhabens *Modul-Firmware-Update* (Overview-Spec:
