@@ -132,6 +132,20 @@ jobs:
           fi
           yq --version
 
+      - name: Materialize production signing key
+        if: ${{ !inputs.dry_run }}
+        env:
+          SIGNING_KEY: ${{ secrets.MCUBOOT_SIGNING_KEY_ECDSA_P256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEY}" ]; then
+            echo "::error::MCUBOOT_SIGNING_KEY_ECDSA_P256 secret is empty — cannot sign a real release." >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "${SIGNING_KEY}" > "$RUNNER_TEMP/oe5xrx-fw.pem"
+          echo "SIGNING_KEY_FILE=$RUNNER_TEMP/oe5xrx-fw.pem" >> "$GITHUB_ENV"
+
       - name: Build all targets
         working-directory: fw
         env:
@@ -160,13 +174,18 @@ jobs:
                 cp build/zephyr/zephyr.elf "release/out/${name}.elf"
 
                 # --- Production DFU build: MCUboot + signed app ---
-                # Signed with MCUboot's built-in DEV key for now (no
-                # SB_CONFIG_BOOT_SIGNATURE_KEY_FILE). Switch to the OE5XRX key
-                # later by materializing it from a secret and adding
-                # -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=... below. The band overlay
-                # must target the app image under sysbuild (app_ prefix).
+                # dry_run → dev key (no SIGNING_KEY_FILE set, MCUboot's built-in
+                # root-ec-p256.pem is used automatically). Real release → the
+                # OE5XRX production key materialized above from the org secret.
+                # $keyarg is intentionally unquoted so it expands to nothing when
+                # empty (dry-run path) — word-splitting is the desired behaviour.
+                keyarg=""
+                if [ -n "${SIGNING_KEY_FILE:-}" ]; then
+                  keyarg="-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=${SIGNING_KEY_FILE}"
+                fi
+                # shellcheck disable=SC2086  # $keyarg intentionally unquoted: empty on dry-run → no extra arg
                 west build -b "$board" --sysbuild app -p always -d build-signed -- \
-                  -Dapp_EXTRA_DTC_OVERLAY_FILE="$overlay"
+                  -Dapp_EXTRA_DTC_OVERLAY_FILE="$overlay" $keyarg
                 cp build-signed/app/zephyr/zephyr.signed.bin "release/out/${name}.signed.bin"
                 cp build-signed/mcuboot/zephyr/zephyr.hex     "release/out/${name}.mcuboot.hex"
                 # Memory-usage overview: the "Memory region" table (FLASH/RAM/...)
@@ -199,6 +218,14 @@ jobs:
           ls -lh release/out/
           # Surface the overview on the run's summary page too.
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$mem" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Shred signing key
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SIGNING_KEY_FILE:-}" ] && [ -f "${SIGNING_KEY_FILE}" ]; then
+            shred -u "${SIGNING_KEY_FILE}" || rm -f "${SIGNING_KEY_FILE}"
+          fi
 
       - name: Generate SHA256SUMS
         working-directory: fw/release/out
