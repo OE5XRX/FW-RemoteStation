@@ -23,4 +23,9 @@ _codeql_detected_source_root
 # implement later
 doc
 *.wav
+
+# FW signing keys — NEVER commit the private key (Teilbereich E)
 keys/
+*-ecdsa-p256.pem
+oe5xrx-fw*.pem
+!release/signing/oe5xrx-fw-public.pem

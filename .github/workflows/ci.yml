@@ -121,6 +121,12 @@ jobs:
           set -euo pipefail
           west twister -T tests/unit_audio -p native_sim/native/64 -v --inline-logs
 
+      - name: Python unit tests (scripts/)
+        working-directory: fw
+        run: |
+          python3 -m pip install --break-system-packages pytest
+          python3 -m pytest scripts/tests -v
+
   prod_build:
     runs-on: ubuntu-latest
     steps:
