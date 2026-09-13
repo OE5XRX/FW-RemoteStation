@@ -23,6 +23,8 @@ while [ $# -gt 0 ]; do
     *) usage;;
   esac
 done
+# SC2015: intentional — usage() runs (and exits) if ANY arg is missing; no else-branch bug.
+# shellcheck disable=SC2015
 [ -n "$MCUBOOT" ] && [ -n "$APP" ] && [ -n "$MTYPE" ] && [ -n "$VERSION" ] || usage
 [ -f "$MCUBOOT" ] || { echo "no such file: $MCUBOOT" >&2; exit 1; }
 [ -f "$APP" ] || { echo "no such file: $APP" >&2; exit 1; }
