@@ -223,9 +223,13 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          if [ -n "${SIGNING_KEY_FILE:-}" ] && [ -f "${SIGNING_KEY_FILE}" ]; then
-            shred -u "${SIGNING_KEY_FILE}" || rm -f "${SIGNING_KEY_FILE}"
-          fi
+          # Cover both the exported path and the known materialization path, so the key
+          # is shredded even if the GITHUB_ENV export failed or the write was partial.
+          for f in "${SIGNING_KEY_FILE:-}" "$RUNNER_TEMP/oe5xrx-fw.pem"; do
+            if [ -n "$f" ] && [ -f "$f" ]; then
+              shred -u "$f" 2>/dev/null || rm -f "$f"
+            fi
+          done
 
       - name: Verify artifacts are production-signed
         if: ${{ !inputs.dry_run }}
