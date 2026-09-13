@@ -29,6 +29,21 @@ done
 [ -f "$MCUBOOT" ] || { echo "no such file: $MCUBOOT" >&2; exit 1; }
 [ -f "$APP" ] || { echo "no such file: $APP" >&2; exit 1; }
 
+here="$(cd "$(dirname "$0")" && pwd)"
+
+# Refuse to chip-erase + flash a non-production image: verify the app is signed
+# with the committed production public key BEFORE any destructive operation.
+pub="$here/../release/signing/oe5xrx-fw-public.pem"
+if command -v imgtool >/dev/null 2>&1 && [ -f "$pub" ]; then
+  echo "== Verifying production signature ($APP) =="
+  imgtool verify -k "$pub" "$APP" || {
+    echo "ERROR: $APP is NOT production-signed (imgtool verify failed) — refusing to flash." >&2
+    exit 1
+  }
+else
+  echo "WARN: skipping production-signature verify (imgtool or $pub missing) — flashing unverified image." >&2
+fi
+
 echo "== Flashing bootloader ($MCUBOOT) with chip erase =="
 pyocd flash --target "$TARGET" --erase chip "$MCUBOOT"
 
@@ -36,21 +51,10 @@ echo "== Flashing signed app ($APP) at $SLOT0 =="
 pyocd flash --target "$TARGET" --base-address "$SLOT0" "$APP"
 
 echo "== Reading UID =="
-here="$(cd "$(dirname "$0")" && pwd)"
 uid="$(python3 "$here/read_uid.py" --target "$TARGET")"
 echo "UID=$uid"
 
 out="provision-${uid}.json"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat > "$out" <<EOF
-{
-  "uid": "${uid}",
-  "module_type": "${MTYPE}",
-  "pyocd_target": "${TARGET}",
-  "firmware_version": "${VERSION}",
-  "signed_app": "$(basename "$APP")",
-  "mcuboot_hex": "$(basename "$MCUBOOT")",
-  "provisioned_at": "${ts}"
-}
-EOF
+python3 -c 'import json,sys; keys=["uid","module_type","pyocd_target","firmware_version","signed_app","mcuboot_hex","provisioned_at"]; print(json.dumps(dict(zip(keys,sys.argv[1:])), indent=2))' "$uid" "$MTYPE" "$TARGET" "$VERSION" "$(basename "$APP")" "$(basename "$MCUBOOT")" "$ts" > "$out"
 echo "Wrote $out — hand this to station-manager module registration (Teilbereich A)."
