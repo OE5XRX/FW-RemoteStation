@@ -152,7 +152,8 @@ Ein Skript (z. B. `scripts/provision.sh`) für das **einmalige Bench-Provisionin
   Verify-Guard, Temp-Key-Shred.
 - `app/sysbuild.conf` — Kommentar aktualisieren (Dev-Key = nur lokal/CI-Default).
 - `scripts/provision.sh` (neu) — SWD-Flash + UID-Auslesen.
-- `keys/.gitignore` bzw. `.gitignore` — sicherstellen, dass `keys/` / `*.pem` nie eingecheckt
+- `keys/.gitignore` bzw. `.gitignore` — sicherstellen, dass `keys/` und **private** PEMs nie eingecheckt (der Public Key
+  `release/signing/oe5xrx-fw-public.pem` bleibt via Negation ausdrücklich erlaubt)
   werden.
 - ggf. `docs/firmware-update.md` — Prod-Key-Realität nachziehen.
 - Public-Key-Datei (committed, nicht geheim) für den Verify-Guard — Ort im Plan festlegen.

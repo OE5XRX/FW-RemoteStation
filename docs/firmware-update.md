@@ -207,7 +207,7 @@ Release-workflow changes (per real firmware target):
   working-directory: fw
   run: |
     west build -b "$board" --sysbuild app -p always -- \
-      -DEXTRA_DTC_OVERLAY_FILE="$overlay" \
+      -Dapp_EXTRA_DTC_OVERLAY_FILE="$overlay" \
       -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE="$RUNNER_TEMP/oe5xrx-fw.pem"
     cp build/app/zephyr/zephyr.signed.bin   "release/out/${name}.signed.bin"   # DFU asset
     cp build/mcuboot/zephyr/zephyr.hex      "release/out/${name}.mcuboot.hex"  # provisioning

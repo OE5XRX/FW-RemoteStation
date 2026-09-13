@@ -321,7 +321,7 @@ jobs:
             | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.signed.bin` | `fm-sa818-2m.mcuboot.hex` | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
             | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.signed.bin` | `fm-sa818-70cm.mcuboot.hex` | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
 
-            **`.signed.bin`** = DFU update image (MCUboot, signed with the OE5XRX **production key** (dev key only for dry-run builds));
+            **`.signed.bin`** = DFU update image (MCUboot, signed with the OE5XRX **production key**; dev key only for dry-run builds);
             `.mcuboot.hex` = bootloader for one-time SWD provisioning; `.bin`/`.elf` = bare debug build.
             Each asset ships a cosign `.bundle` signature; `SHA256SUMS` covers the build artifacts.
             The firmware reports this version at runtime via the `version` shell command.
