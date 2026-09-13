@@ -66,7 +66,7 @@ Run:
 mkdir -p release/signing && touch release/signing/oe5xrx-fw-public.pem keys/oe5xrx-fw-ecdsa-p256.pem
 git check-ignore -v keys/oe5xrx-fw-ecdsa-p256.pem release/signing/oe5xrx-fw-public.pem || true
 ```
-Expected: `keys/oe5xrx-fw-ecdsa-p256.pem` wird ignoriert (Zeile matcht), `release/signing/oe5xrx-fw-public.pem` **nicht** (kein Output für diese Datei). Danach die Temp-Dateien wieder entfernen: `rm -rf keys release/signing/oe5xrx-fw-public.pem`.
+Expected: `keys/oe5xrx-fw-ecdsa-p256.pem` wird ignoriert (Zeile matcht), `release/signing/oe5xrx-fw-public.pem` **nicht** (kein Output für diese Datei). Danach nur den **untracked** Platzhalter entfernen: `rm -rf keys` — die committete `release/signing/oe5xrx-fw-public.pem` ist getrackt und **darf nicht** gelöscht werden.
 
 - [ ] **Step 3: Commit**
 

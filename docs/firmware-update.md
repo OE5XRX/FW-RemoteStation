@@ -180,10 +180,11 @@ python3 bootloader/mcuboot/scripts/imgtool.py keygen \
 
 ### 5.3 Binding it into the GitHub release flow
 
-**Current gap:** `.github/workflows/release.yml` builds the **bare** app
-(`west build -b "$board" app`, no `--sysbuild`) and ships `zephyr.bin` — unsigned and without a
-bootloader. That asset is **not** DFU-deployable. To ship secure DFU firmware the release must
-build the **`--sysbuild`** variant signed with the production key.
+**Status: implemented (PR #64).** `.github/workflows/release.yml` builds the **`--sysbuild`**
+variant and, on a real (non-dry-run) release, signs it with the OE5XRX production key
+materialized from the org secret; a Verify-Guard fails the release unless every `*.signed.bin`
+verifies against the committed public key (`release/signing/oe5xrx-fw-public.pem`). Dry-run
+builds stay dev-signed. The notes below document that wiring — it is already in place.
 
 Setup (once):
 1. Store the private key PEM as a secret — recommended at the **OE5XRX org** level so all release

@@ -175,9 +175,10 @@ Ein Skript (z. B. `scripts/provision.sh`) für das **einmalige Bench-Provisionin
 - **DFU-Update** mit prod-signiertem Image auf dem prod-provisionierten Board → bootet, meldet
   neue Version. Ein **dev-signiertes** Image → wird abgewiesen (Trust-Wurzel verifiziert).
 
-## 11. Offene Punkte (im Plan zu schließen)
+## 11. Offene Punkte
 
-1. Verify-Guard: committeter Public Key vs. abgeleiteter — Empfehlung (b), final im Plan.
-2. Exakte pyocd-UID-Leseform + korrektes Chip-Target (`stm32u575xi` vs. reale Variante).
-3. Genauer Ort der committeten Public-Key-Datei + der `provision.sh`-Ausgabestruktur (Schema
-   stimmt mit A's Registrierungs-Erwartung überein).
+1. **Bench-Validierung (Task 7):** exakte pyocd-UID-Leseform + Chip-Target auf realer
+   Chip-Variante bestätigen (`0x0BFA0700` gegen RM0456), plus DFU-Gegenprobe.
+
+Die übrigen ursprünglichen Punkte (committeter Public-Key-Pfad + Verify-Guard, `provision.sh`-
+JSON-Schema) sind **implementiert** (Abschnitte 5–6) und damit geschlossen.
