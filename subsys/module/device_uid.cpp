@@ -20,6 +20,20 @@ void mod_format_uid_bytes(const uint8_t buf[12], char out[25]) {
   }
 }
 
+bool mod_uid_is_valid_hex24(const char *s) {
+  if (s == NULL) {
+    return false;
+  }
+  for (int i = 0; i < 24; i++) {
+    char c = s[i];
+    bool hex = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
+    if (!hex) {
+      return false;
+    }
+  }
+  return s[24] == '\0';
+}
+
 #if defined(CONFIG_BOARD_NATIVE_SIM) || !defined(__ZEPHYR__)
 
 // native_sim: persist a once-generated synthetic UID to a host file so it is
@@ -28,6 +42,12 @@ void mod_format_uid_bytes(const uint8_t buf[12], char out[25]) {
 // the initial value comes from the host /dev/urandom -- native_sim runs on the
 // host, so this needs no Zephyr random subsystem (which would otherwise drag the
 // STM32 RNG into the fm_board build, where the hwinfo path is used instead).
+// Host I/O uses raw POSIX open/read/write (no heap-backed <stdio.h> FILE, per the
+// no-dynamic-allocation rule); native_sim maps these to the host libc.
+#include <fcntl.h>
+#include <unistd.h>
+#include <zephyr/sys/printk.h>
+
 static const char *SIM_UID_PATH = "oe5xrx_sim_uid.txt";
 
 static char s_uid[25];
@@ -40,36 +60,53 @@ static void make_synthetic_words(uint32_t w[3]) {
   w[0] = 0x5A5A0001u;
   w[1] = 0x5A5A0002u;
   w[2] = 0x5A5A0003u;
-  FILE *r = fopen("/dev/urandom", "rb");
-  if (r != NULL) {
-    size_t got = fread(w, sizeof(w[0]), 3, r);
-    if (got != 3) {
-      w[0] = 0x5A5A0001u;
-      w[1] = 0x5A5A0002u;
-      w[2] = 0x5A5A0003u;
+  int fd = open("/dev/urandom", O_RDONLY);
+  if (fd >= 0) {
+    uint8_t b[12];
+    ssize_t got = read(fd, b, sizeof(b));
+    close(fd);
+    if (got == (ssize_t)sizeof(b)) {
+      for (int i = 0; i < 3; i++) {
+        w[i] = (uint32_t)b[i * 4] | ((uint32_t)b[i * 4 + 1] << 8) | ((uint32_t)b[i * 4 + 2] << 16) | ((uint32_t)b[i * 4 + 3] << 24);
+      }
     }
-    fclose(r);
+  }
+}
+
+void mod_uid_sim_load_or_make(const char *path, char out[25]) {
+  int fd = open(path, O_RDONLY);
+  if (fd >= 0) {
+    char tmp[25] = {0};
+    ssize_t got = read(fd, tmp, 24);
+    close(fd);
+    if (got == 24) {
+      tmp[24] = '\0';
+      if (mod_uid_is_valid_hex24(tmp)) {
+        memcpy(out, tmp, 25);
+        return; // valid persisted UID -> reuse (stable across restarts)
+      }
+    }
+    // Fall through to regenerate: file was short, unreadable, or corrupt.
+  }
+  uint32_t w[3];
+  make_synthetic_words(w);
+  mod_format_uid(w, out);
+  int wfd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (wfd < 0) {
+    // Read-only CWD (or similar): do not fail. The UID stays stable within this
+    // boot; only cross-restart stability is lost. Make that explicit, not silent.
+    printk("device_uid: cannot persist synthetic UID to %s; stable per-boot only\n", path);
+    return;
+  }
+  ssize_t wr = write(wfd, out, 24);
+  close(wfd);
+  if (wr != 24) {
+    printk("device_uid: short write persisting synthetic UID to %s (%d/24)\n", path, (int)wr);
   }
 }
 
 static void load_or_make_synthetic(void) {
-  FILE *f = fopen(SIM_UID_PATH, "r");
-  if (f != NULL) {
-    if (fgets(s_uid, sizeof(s_uid), f) != NULL && strlen(s_uid) >= 24) {
-      s_uid[24] = '\0';
-      fclose(f);
-      return;
-    }
-    fclose(f);
-  }
-  uint32_t w[3];
-  make_synthetic_words(w);
-  mod_format_uid(w, s_uid);
-  f = fopen(SIM_UID_PATH, "w");
-  if (f != NULL) {
-    fputs(s_uid, f);
-    fclose(f);
-  }
+  mod_uid_sim_load_or_make(SIM_UID_PATH, s_uid);
 }
 
 const char *mod_device_uid(void) {
@@ -89,6 +126,7 @@ const char *mod_uid_source(void) {
 
 #include <sys/types.h>
 #include <zephyr/drivers/hwinfo.h>
+#include <zephyr/sys/printk.h>
 
 static char s_uid[25];
 static const char *s_uid_source = "stm32_uid";
@@ -99,14 +137,19 @@ static bool s_uid_ready;
 // (buf = be32(Word2), be32(Word1), be32(Word0)) -- already the canonical byte
 // sequence -- so mod_format_uid_bytes emits it verbatim. This matches the bench
 // provisioning UID (read_uid.py) so station-manager can match module<->heartbeat.
-// The byte/word order is per the Zephyr STM32 hwinfo driver; confirmed against
-// real silicon at the bench (HIL).
+// The byte/word order follows the Zephyr STM32 hwinfo driver; final confirmation
+// against real silicon at the bench (HIL) is still pending (deferred).
 static void load_hwinfo_uid(void) {
   uint8_t buf[12] = {0};
   ssize_t n = hwinfo_get_device_id(buf, sizeof(buf));
   if (n < (ssize_t)sizeof(buf)) {
-    // Fail-safe: no crash, definitively-invalid all-zero UID + log via caller.
-    strcpy(s_uid, "000000000000000000000000");
+    // No usable UID. Publish an explicitly EMPTY uid plus a distinct source
+    // ("unavailable") and log it -- never an all-zero string tagged stm32_uid,
+    // which every failed board would share and a consumer could merge into one
+    // device / mistake for a real identity.
+    s_uid[0] = '\0';
+    s_uid_source = "unavailable";
+    printk("device_uid: hwinfo_get_device_id failed (%d); reporting unavailable UID\n", (int)n);
     return;
   }
   mod_format_uid_bytes(buf, s_uid);

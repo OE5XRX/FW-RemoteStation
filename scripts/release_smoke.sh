@@ -35,7 +35,11 @@ desc=$(printf '%s\n' "$out" | grep -o 'MODULE-DESCRIBE {.*}' | head -1 || true)
 [ -n "$desc" ] || fail "no MODULE-DESCRIBE line. Got:${nl}${out}"
 printf '%s\n' "$desc" | grep -q '"type":"fm_transceiver"' \
 	|| fail "identity.type != fm_transceiver: ${desc}"
-printf '%s\n' "$desc" | grep -q "\"version\":\"${expected_band}\"" \
-	|| fail "identity.version != ${expected_band}: ${desc}"
+# schema 2: identity.version now carries the real firmware version (YY.MM.DD-NN)
+# and the band moved to identity.variant.
+printf '%s\n' "$desc" | grep -q "\"version\":\"${expected_ver}\"" \
+	|| fail "identity.version != ${expected_ver}: ${desc}"
+printf '%s\n' "$desc" | grep -q "\"variant\":\"${expected_band}\"" \
+	|| fail "identity.variant != ${expected_band}: ${desc}"
 
 echo "OK — ${bin}: static, version ${expected_ver}, band ${expected_band}"
