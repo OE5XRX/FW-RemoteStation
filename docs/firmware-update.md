@@ -82,7 +82,7 @@ dfu-util -e
 #    -> device re-enumerates; `dfu-util -l` now shows alt name="slot1_image".
 
 # 2. Download the SIGNED image to slot1 and reset:
-dfu-util -a 0 -D fm-sa818-2m.signed.bin
+dfu-util -a 0 -D fm-sa818-vhf.signed.bin
 
 # 3. Reset the board (power-cycle, or `kernel reboot` on the shell, or `dfu-util -R`).
 #    MCUboot swaps slot1 -> slot0 and boots the new image.

@@ -443,9 +443,12 @@ public:
 };
 
 struct Identity {
-  const char *type;
-  const char *model;
-  const char *version;
+  const char *type;       // stable compatibility anchor (e.g. "fm_transceiver")
+  const char *model;      // e.g. "SA818-V" / "SA818-U"
+  const char *version;    // real firmware version (APP_VERSION, YY.MM.DD-NN)
+  const char *variant;    // band variant: "vhf" / "uhf"
+  const char *uid;        // opaque device UID (24-hex real / synthetic sim)
+  const char *uid_source; // "stm32_uid" (real) / "synthetic" (native_sim)
 };
 
 /** @brief A module: identity + a fixed registry of capabilities, rendered as JSON. */
@@ -466,7 +469,7 @@ public:
 
   void describe(JsonWriter &w) const {
     w.ch('{');
-    w.kvRaw("schema", "1");
+    w.kvRaw("schema", "2");
     w.ch(',');
     w.kvStr("module", moduleId_);
     w.ch(',');
@@ -477,6 +480,12 @@ public:
     w.kvStr("model", id_.model);
     w.ch(',');
     w.kvStr("version", id_.version);
+    w.ch(',');
+    w.kvStr("variant", id_.variant);
+    w.ch(',');
+    w.kvStr("uid", id_.uid);
+    w.ch(',');
+    w.kvStr("uid_source", id_.uid_source);
     w.ch('}');
     w.ch(',');
     w.key("capabilities");

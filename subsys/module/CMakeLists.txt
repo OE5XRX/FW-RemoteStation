@@ -4,8 +4,13 @@
 zephyr_library()
 zephyr_library_include_directories_ifdef(
   CONFIG_MODULE_SA818
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../drivers/radio/sa818)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../drivers/radio/sa818
+  ${CMAKE_CURRENT_SOURCE_DIR})
 zephyr_library_sources_ifdef(CONFIG_MODULE_SA818 devices/sa818/sa818_module.cpp)
+
+# Reusable device-UID formatter + runtime provider (hwinfo real / synthetic sim).
+# Consumed by the SA818 module identity; kept module-agnostic for reuse.
+zephyr_library_sources_ifdef(CONFIG_MODULE_SA818 device_uid.cpp)
 
 # Compile-time stack-frame guard for the module shell handlers.
 #
