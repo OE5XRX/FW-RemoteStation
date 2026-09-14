@@ -143,13 +143,13 @@ static void load_hwinfo_uid(void) {
   uint8_t buf[12] = {0};
   ssize_t n = hwinfo_get_device_id(buf, sizeof(buf));
   if (n < (ssize_t)sizeof(buf)) {
-    // No usable UID. Publish an explicitly EMPTY uid plus a distinct source
-    // ("unavailable") and log it -- never an all-zero string tagged stm32_uid,
+    // No usable UID. Publish an explicitly EMPTY uid (never an all-zero string,
     // which every failed board would share and a consumer could merge into one
-    // device / mistake for a real identity.
+    // device / mistake for a real identity). uid_source stays "stm32_uid" -- the
+    // path that was attempted -- so the advertised {stm32_uid, synthetic} enum is
+    // unchanged; the empty uid is the unambiguous "no identity" signal.
     s_uid[0] = '\0';
-    s_uid_source = "unavailable";
-    printk("device_uid: hwinfo_get_device_id failed (%d); reporting unavailable UID\n", (int)n);
+    printk("device_uid: hwinfo_get_device_id failed (%d); reporting empty UID\n", (int)n);
     return;
   }
   mod_format_uid_bytes(buf, s_uid);

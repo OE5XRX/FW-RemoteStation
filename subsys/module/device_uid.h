@@ -31,7 +31,11 @@ void mod_format_uid_bytes(const uint8_t buf[12], char out[25]);
 /** Runtime device UID string (24 hex real / synthetic sim). Stable per boot. */
 const char *mod_device_uid(void);
 
-/** "stm32_uid" (real), "synthetic" (native_sim), or "unavailable" (hwinfo fail). */
+/**
+ * "stm32_uid" (real hwinfo) or "synthetic" (native_sim). On a real-HW hwinfo
+ * read failure the source stays "stm32_uid" and mod_device_uid() returns an
+ * empty string (the unambiguous "no identity" signal).
+ */
 const char *mod_uid_source(void);
 
 /** True iff @p s is exactly 24 upper-hex chars followed by a NUL. */
