@@ -35,13 +35,19 @@ static const char *s_uid_source = "synthetic";
 static bool s_uid_ready;
 
 static void make_synthetic_words(uint32_t w[3]) {
-  // Deterministic, obviously-synthetic fallback if /dev/urandom is unavailable.
+  // Deterministic, obviously-synthetic fallback if /dev/urandom is unavailable
+  // or a short read occurs.
   w[0] = 0x5A5A0001u;
   w[1] = 0x5A5A0002u;
   w[2] = 0x5A5A0003u;
   FILE *r = fopen("/dev/urandom", "rb");
   if (r != NULL) {
-    (void)fread(w, sizeof(w[0]), 3, r);
+    size_t got = fread(w, sizeof(w[0]), 3, r);
+    if (got != 3) {
+      w[0] = 0x5A5A0001u;
+      w[1] = 0x5A5A0002u;
+      w[2] = 0x5A5A0003u;
+    }
     fclose(r);
   }
 }
