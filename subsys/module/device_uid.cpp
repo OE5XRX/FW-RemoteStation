@@ -137,8 +137,9 @@ static bool s_uid_ready;
 // (buf = be32(Word2), be32(Word1), be32(Word0)) -- already the canonical byte
 // sequence -- so mod_format_uid_bytes emits it verbatim. This matches the bench
 // provisioning UID (read_uid.py) so station-manager can match module<->heartbeat.
-// The byte/word order follows the Zephyr STM32 hwinfo driver; final confirmation
-// against real silicon at the bench (HIL) is still pending (deferred).
+// ASSUMPTION: the byte/word order is taken from the Zephyr STM32 hwinfo driver
+// source; it is NOT yet confirmed on real silicon -- bench/HIL confirmation is
+// deferred (native_sim CI cannot exercise the hwinfo path).
 static void load_hwinfo_uid(void) {
   uint8_t buf[12] = {0};
   ssize_t n = hwinfo_get_device_id(buf, sizeof(buf));
