@@ -26,11 +26,15 @@ def test_module_describe_valid_json(shell):
     out = shell.exec_command("module fm describe")
     d = _payload(out, "MODULE-DESCRIBE")
 
-    assert d["schema"] == 1
+    assert d["schema"] == 2
     assert d["module"] == "fm"
     assert d["identity"]["type"] == "fm_transceiver"
     assert d["identity"]["model"] == "SA818-V"
-    assert d["identity"]["version"] == "vhf"
+    # version is now the firmware version (YY.MM.DD-NN), not the band.
+    assert re.fullmatch(r"\d{2}\.\d{2}\.\d{2}-\d{2}", d["identity"]["version"])
+    assert d["identity"]["variant"] == "vhf"
+    assert re.fullmatch(r"[0-9A-F]{24}", d["identity"]["uid"])
+    assert d["identity"]["uid_source"] == "synthetic"
 
     caps = {c["name"]: c for c in d["capabilities"]}
     assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band"}
@@ -60,6 +64,21 @@ def test_module_describe_valid_json(shell):
 
     assert caps["band"]["kind"] == "telemetry"
     assert caps["band"]["type"] == "string"
+
+
+def test_module_identity_uid_stable(shell):
+    """The synthetic native_sim UID is stable across repeated describes.
+
+    The provider generates the synthetic UID once and persists it (per boot it
+    is cached; across restarts it is reloaded from the host file). Within a run
+    two describes must therefore report byte-identical uid/uid_source. A real
+    cross-restart check is a bench/HIL concern for the stm32_uid path.
+    """
+    d1 = _payload(shell.exec_command("module fm describe"), "MODULE-DESCRIBE")
+    d2 = _payload(shell.exec_command("module fm describe"), "MODULE-DESCRIBE")
+    assert d1["identity"]["uid"] == d2["identity"]["uid"]
+    assert re.fullmatch(r"[0-9A-F]{24}", d1["identity"]["uid"])
+    assert d1["identity"]["uid_source"] == d2["identity"]["uid_source"] == "synthetic"
 
 
 def test_module_set_frequency_e2e(sa818_sim, shell):

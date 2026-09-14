@@ -14,6 +14,8 @@
 
 #ifdef CONFIG_MODULE_SA818
 
+#include "device_uid.h"
+
 #include <etl/string_view.h>
 #include <etl/to_arithmetic.h>
 #include <math.h>
@@ -21,8 +23,11 @@
 #include <optional>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
+#include <stdio.h>
 #include <string.h>
+#include <zephyr/app_version.h>
 #include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/sys/util.h>
 
@@ -578,7 +583,32 @@ RxToneCap g_rxtone{g_ctx};
 BandCap g_band{g_ctx};
 
 Capability *const g_caps[] = {&g_freq, &g_txfreq, &g_rxfreq, &g_ptt, &g_power, &g_rssi, &g_volume, &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band};
-const Identity g_identity{"fm_transceiver", BAND_MODEL, BAND_NAME};
+
+/* Runtime identity fields. The Identity holds stable pointers into these static
+ * buffers; Module snapshots the pointers at static-init while the buffers are
+ * still empty, and module_identity_init() fills them at APPLICATION init -- well
+ * before the shell can serve `module fm describe`. Filling in a SYS_INIT hook
+ * (rather than calling the providers in the aggregate initializer) keeps hwinfo
+ * / entropy access off the C++ static-init path, where driver readiness is not
+ * guaranteed. */
+char s_fw_version[16];
+char s_uid[25];
+char s_uid_source[16];
+
+int module_identity_init(void) {
+  // Mirror version_shell.cpp's APP-VERSION formatting exactly (YY.MM.DD-NN).
+  snprintf(s_fw_version, sizeof(s_fw_version), "%02u.%02u.%02u-%02u", APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_PATCHLEVEL, APP_TWEAK);
+  strncpy(s_uid, mod_device_uid(), sizeof(s_uid) - 1);
+  s_uid[sizeof(s_uid) - 1] = '\0';
+  strncpy(s_uid_source, mod_uid_source(), sizeof(s_uid_source) - 1);
+  s_uid_source[sizeof(s_uid_source) - 1] = '\0';
+  return 0;
+}
+SYS_INIT(module_identity_init, APPLICATION, 0);
+
+// variant == BAND_NAME ("vhf"/"uhf"); model == BAND_MODEL; version/uid/uid_source
+// point into the buffers filled by module_identity_init at APPLICATION init.
+const Identity g_identity{"fm_transceiver", BAND_MODEL, s_fw_version, BAND_NAME, s_uid, s_uid_source};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};
 ModuleRegistry g_registry{g_modules};
