@@ -5,5 +5,7 @@ tests:
   module.device_uid:
     platform_allow:
       - native_sim/native/64
-    tags: module uid
+    tags:
+      - module
+      - uid
     harness: ztest
