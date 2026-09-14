@@ -17,6 +17,16 @@ extern "C" {
 /** 3 words (ascending addresses) -> 24 upper-hex chars + NUL, high word first. */
 void mod_format_uid(const uint32_t words[3], char out[25]);
 
+/**
+ * Zephyr STM32 hwinfo device-id bytes -> 24 upper-hex chars + NUL.
+ *
+ * hwinfo_get_device_id() already returns the 96-bit UID as big-endian words in
+ * high-word-first order (buf = be32(Word2), be32(Word1), be32(Word0) on the
+ * 3-word STM32 families), which is exactly the canonical byte sequence, so the
+ * bytes are emitted verbatim as hex. The result matches read_uid.py::format_uid.
+ */
+void mod_format_uid_bytes(const uint8_t buf[12], char out[25]);
+
 /** Runtime device UID string (24 hex real / synthetic sim). Stable per boot. */
 const char *mod_device_uid(void);
 
