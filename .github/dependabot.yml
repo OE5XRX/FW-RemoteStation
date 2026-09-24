@@ -1,13 +1,12 @@
 version: 2
 
 # Zephyr/west + CMake are not supported by Dependabot; this covers the parts
-# that are: CI actions and the devcontainer base image.
+# that are: CI actions, the devcontainer base image, and devcontainer features.
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-      day: "monday"
       time: "04:00"
       timezone: "Europe/Vienna"
     open-pull-requests-limit: 5
@@ -15,14 +14,28 @@ updates:
       prefix: "ci"
       include: "scope"
 
+  # Devcontainer base image (Dockerfile FROM) — security-relevant, weekly.
   - package-ecosystem: "docker"
     directory: "/.devcontainer"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
       day: "monday"
       time: "04:00"
       timezone: "Europe/Vienna"
     open-pull-requests-limit: 3
     commit-message:
       prefix: "docker"
+      include: "scope"
+
+  # Dev Container Features + devcontainer-lock.json.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "devcontainer"
       include: "scope"
