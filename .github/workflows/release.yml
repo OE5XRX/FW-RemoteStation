@@ -38,7 +38,7 @@ jobs:
           echo "OK — releasing from default branch ${REF_NAME}"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: fw
           fetch-depth: 0        # need tags to compute NN
