@@ -11,6 +11,7 @@
 #ifndef USB_AUDIO_BRIDGE_H_
 #define USB_AUDIO_BRIDGE_H_
 
+#include <stdbool.h>
 #include <zephyr/device.h>
 
 #ifdef __cplusplus
@@ -41,6 +42,27 @@ int usb_audio_bridge_register_ops(const struct device *uac2_dev);
  * @return 0 on success, negative errno on failure
  */
 int usb_audio_bridge_start(const struct device *sa818_dev);
+
+#ifdef CONFIG_FM_TEST_LOOPBACK
+/**
+ * @brief Arm/disarm the test-only internal UAC2 loopback (SA818 bypass).
+ *
+ * When enabled, USB OUT (host -> device) PCM is routed straight into the RX
+ * ring (device -> USB host / USB IN) instead of the SA818 TX path, so the
+ * host-side audio path can be exercised on the bench without a working radio
+ * link. Both ring buffers are flushed on every state change. Only compiled when
+ * CONFIG_FM_TEST_LOOPBACK is set (default n).
+ *
+ * @param enable true to route OUT -> IN internally, false for normal operation.
+ */
+void usb_audio_bridge_set_loopback(bool enable);
+
+/**
+ * @brief Query the current test loopback state.
+ * @return true if the internal loopback is armed.
+ */
+bool usb_audio_bridge_get_loopback(void);
+#endif /* CONFIG_FM_TEST_LOOPBACK */
 
 #ifdef __cplusplus
 }
