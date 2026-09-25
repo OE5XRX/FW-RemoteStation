@@ -328,10 +328,15 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal, void *
    * bypassing the SA818 TX path entirely. This is the single gated hook of the
    * bench loopback mode; the production build (CONFIG_FM_TEST_LOOPBACK=n) compiles
    * it out and the normal SA818 path below is unchanged. The flag is read under
-   * the same lock as the ring op (shell thread writes it, usbd_thread reads it).
-   * Requires the USB IN terminal to be active for the SOF handler to drain the
-   * RX ring back out. */
+   * the same lock as the ring op (shell thread writes it, usbd_thread reads it). */
   if (ctx->loopback_enabled) {
+    /* Mirror the SA818 RX path: only buffer while the USB IN terminal is active.
+     * If the host opens OUT before IN, buffering here would fill the ring with
+     * stale audio that plays out (delayed) or overflows once IN comes up. */
+    if (!ctx->rx_enabled) {
+      k_mutex_unlock(&ctx->lock);
+      return;
+    }
     uint32_t looped = ring_buf_put(&ctx->rx_ring, (uint8_t *)buf, size);
     k_mutex_unlock(&ctx->lock);
 
@@ -377,6 +382,19 @@ static uint32_t uac2_feedback_cb(const struct device *dev, uint8_t terminal, voi
   if (terminal != USB_OUT_TERMINAL_ID) {
     return 0;
   }
+
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  /* In loopback the OUT PI update is skipped (the TX ring is bypassed), so
+   * value() would report a stale pre-loopback correction. Report nominal
+   * instead. nominal() is constant after init(), so this keeps every feedback
+   * access on the usbd_thread and avoids a shell-thread reset() race. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool loopback = ctx->loopback_enabled;
+  k_mutex_unlock(&ctx->lock);
+  if (loopback) {
+    return ctx->feedback.nominal();
+  }
+#endif
 
   return ctx->feedback.value();
 }
