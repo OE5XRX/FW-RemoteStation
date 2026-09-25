@@ -200,13 +200,22 @@ static void uac2_sof_cb(const struct device *dev, void *user_data) {
 
   ARG_UNUSED(dev);
 
-  /* OUT explicit feedback: keep the TX ring near half full. */
+  /* OUT explicit feedback: keep the TX ring near half full. In test loopback
+   * mode USB OUT bypasses the TX ring entirely, so hold feedback at nominal by
+   * skipping PI updates against that now-idle buffer. */
   k_mutex_lock(&ctx->lock, K_FOREVER);
   bool tx = ctx->tx_enabled;
   size_t tx_used = ring_buf_size_get(&ctx->tx_ring) / AUDIO_BYTES_PER_SAMPLE;
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  bool loopback = ctx->loopback_enabled;
+#endif
   k_mutex_unlock(&ctx->lock);
 
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  if (tx && !loopback) {
+#else
   if (tx) {
+#endif
     ctx->feedback.update(tx_used, TX_RING_SIZE / AUDIO_BYTES_PER_SAMPLE);
   }
 
