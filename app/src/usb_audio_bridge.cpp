@@ -173,6 +173,14 @@ static void sa818_rx_data_cb(const struct device *dev, const uint8_t *buffer, si
 
   /* Push audio to RX ring buffer (for USB IN) */
   k_mutex_lock(&ctx->lock, K_FOREVER);
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  /* SA818 bypass: while loopback is armed the RX ring carries the looped-back
+   * USB OUT audio, so drop the real SA818 capture to keep it from mixing in. */
+  if (ctx->loopback_enabled) {
+    k_mutex_unlock(&ctx->lock);
+    return;
+  }
+#endif
   uint32_t bytes_put = ring_buf_put(&ctx->rx_ring, buffer, size);
   k_mutex_unlock(&ctx->lock);
 
@@ -305,15 +313,18 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal, void *
     return;
   }
 
+  /* Push received USB audio to TX ring buffer */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
 #if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
   /* Test-only internal loopback: when armed, feed the just-received USB OUT
    * (host -> device) PCM straight into the RX ring (device -> host / USB IN),
    * bypassing the SA818 TX path entirely. This is the single gated hook of the
    * bench loopback mode; the production build (CONFIG_FM_TEST_LOOPBACK=n) compiles
-   * it out and the normal SA818 path below is unchanged. Requires the USB IN
-   * terminal to be active for the SOF handler to drain the RX ring back out. */
+   * it out and the normal SA818 path below is unchanged. The flag is read under
+   * the same lock as the ring op (shell thread writes it, usbd_thread reads it).
+   * Requires the USB IN terminal to be active for the SOF handler to drain the
+   * RX ring back out. */
   if (ctx->loopback_enabled) {
-    k_mutex_lock(&ctx->lock, K_FOREVER);
     uint32_t looped = ring_buf_put(&ctx->rx_ring, (uint8_t *)buf, size);
     k_mutex_unlock(&ctx->lock);
 
@@ -323,9 +334,6 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal, void *
     return;
   }
 #endif /* CONFIG_FM_TEST_LOOPBACK */
-
-  /* Push received USB audio to TX ring buffer */
-  k_mutex_lock(&ctx->lock, K_FOREVER);
   uint32_t bytes_put = ring_buf_put(&ctx->tx_ring, (uint8_t *)buf, size);
   k_mutex_unlock(&ctx->lock);
 
@@ -508,6 +516,12 @@ extern "C" void usb_audio_bridge_set_loopback(bool enable) {
 }
 
 extern "C" bool usb_audio_bridge_get_loopback(void) {
-  return bridge_ctx.loopback_enabled;
+  struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
+
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool enabled = ctx->loopback_enabled;
+  k_mutex_unlock(&ctx->lock);
+
+  return enabled;
 }
 #endif /* CONFIG_FM_TEST_LOOPBACK */
