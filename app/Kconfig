@@ -2,6 +2,18 @@ menu "Zephyr"
 source "Kconfig.zephyr"
 endmenu
 
+config FM_TEST_LOOPBACK
+	bool "Test-only internal UAC2 audio loopback (SA818 bypass)"
+	default n
+	depends on USB_DEVICE_STACK_NEXT && SHELL
+	help
+	  Bench test mode. When armed at runtime it bridges the UAC2 OUT stream
+	  (USB host -> device) straight back into the UAC2 IN stream
+	  (device -> USB host), bypassing the SA818 radio entirely. Adds a
+	  `loopback on|off|status` shell command to arm it. Intended for
+	  hardware-in-the-loop verification of the host-side audio path without a
+	  working radio link. Default n; never enable in a production build.
+
 module = APP
 module-str = APP
 source "subsys/logging/Kconfig.template.log_config"

@@ -111,6 +111,10 @@ struct usb_audio_bridge_ctx {
   bool rx_enabled;                    /* USB IN terminal active */
   bool tx_prebuffered;                /* TX ring reached the prebuffer threshold */
   usb_audio::BufferFeedback feedback; /* explicit feedback regulator (OUT) */
+
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  bool loopback_enabled; /* test-only: route USB OUT -> USB IN, SA818 bypassed */
+#endif
 };
 
 static struct usb_audio_bridge_ctx bridge_ctx;
@@ -169,6 +173,14 @@ static void sa818_rx_data_cb(const struct device *dev, const uint8_t *buffer, si
 
   /* Push audio to RX ring buffer (for USB IN) */
   k_mutex_lock(&ctx->lock, K_FOREVER);
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  /* SA818 bypass: while loopback is armed the RX ring carries the looped-back
+   * USB OUT audio, so drop the real SA818 capture to keep it from mixing in. */
+  if (ctx->loopback_enabled) {
+    k_mutex_unlock(&ctx->lock);
+    return;
+  }
+#endif
   uint32_t bytes_put = ring_buf_put(&ctx->rx_ring, buffer, size);
   k_mutex_unlock(&ctx->lock);
 
@@ -192,9 +204,16 @@ static void uac2_sof_cb(const struct device *dev, void *user_data) {
   k_mutex_lock(&ctx->lock, K_FOREVER);
   bool tx = ctx->tx_enabled;
   size_t tx_used = ring_buf_size_get(&ctx->tx_ring) / AUDIO_BYTES_PER_SAMPLE;
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  bool loopback = ctx->loopback_enabled;
+#else
+  const bool loopback = false;
+#endif
   k_mutex_unlock(&ctx->lock);
 
-  if (tx) {
+  /* Skip PI updates while loopback is armed: USB OUT bypasses the TX ring, so it
+   * stays idle and would otherwise drive the regulator to overdrive the host. */
+  if (tx && !loopback) {
     ctx->feedback.update(tx_used, TX_RING_SIZE / AUDIO_BYTES_PER_SAMPLE);
   }
 
@@ -303,6 +322,30 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal, void *
 
   /* Push received USB audio to TX ring buffer */
   k_mutex_lock(&ctx->lock, K_FOREVER);
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  /* Test-only internal loopback: when armed, feed the just-received USB OUT
+   * (host -> device) PCM straight into the RX ring (device -> host / USB IN),
+   * bypassing the SA818 TX path entirely. This is the single gated hook of the
+   * bench loopback mode; the production build (CONFIG_FM_TEST_LOOPBACK=n) compiles
+   * it out and the normal SA818 path below is unchanged. The flag is read under
+   * the same lock as the ring op (shell thread writes it, usbd_thread reads it). */
+  if (ctx->loopback_enabled) {
+    /* Mirror the SA818 RX path: only buffer while the USB IN terminal is active.
+     * If the host opens OUT before IN, buffering here would fill the ring with
+     * stale audio that plays out (delayed) or overflows once IN comes up. */
+    if (!ctx->rx_enabled) {
+      k_mutex_unlock(&ctx->lock);
+      return;
+    }
+    uint32_t looped = ring_buf_put(&ctx->rx_ring, (uint8_t *)buf, size);
+    k_mutex_unlock(&ctx->lock);
+
+    if (looped < size) {
+      LOG_WRN("Loopback RX ring overflow: %u/%u bytes dropped", size - looped, size);
+    }
+    return;
+  }
+#endif /* CONFIG_FM_TEST_LOOPBACK */
   uint32_t bytes_put = ring_buf_put(&ctx->tx_ring, (uint8_t *)buf, size);
   k_mutex_unlock(&ctx->lock);
 
@@ -339,6 +382,19 @@ static uint32_t uac2_feedback_cb(const struct device *dev, uint8_t terminal, voi
   if (terminal != USB_OUT_TERMINAL_ID) {
     return 0;
   }
+
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  /* In loopback the OUT PI update is skipped (the TX ring is bypassed), so
+   * value() would report a stale pre-loopback correction. Report nominal
+   * instead. nominal() is constant after init(), so this keeps every feedback
+   * access on the usbd_thread and avoids a shell-thread reset() race. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool loopback = ctx->loopback_enabled;
+  k_mutex_unlock(&ctx->lock);
+  if (loopback) {
+    return ctx->feedback.nominal();
+  }
+#endif
 
   return ctx->feedback.value();
 }
@@ -391,6 +447,9 @@ extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
   ctx->usb_in_buf_idx = 0;
   ctx->tx_prebuffered = false;
   ctx->feedback.init(USB_SAMPLES_PER_SOF);
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+  ctx->loopback_enabled = false;
+#endif
 
   /* Register UAC2 callbacks. This MUST happen before usbd_init(): the UAC2
    * class init hook returns -EINVAL ("Application did not register UAC2 ops")
@@ -464,3 +523,30 @@ extern "C" int usb_audio_bridge_start(const struct device *sa818_dev) {
 
   return 0;
 }
+
+#if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
+extern "C" void usb_audio_bridge_set_loopback(bool enable) {
+  struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
+
+  /* Flush both rings on every state change so audio queued for one route can
+   * never leak into the other when the routing flips. */
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  ctx->loopback_enabled = enable;
+  ring_buf_reset(&ctx->tx_ring);
+  ring_buf_reset(&ctx->rx_ring);
+  ctx->tx_prebuffered = false;
+  k_mutex_unlock(&ctx->lock);
+
+  LOG_INF("Test loopback %s", enable ? "ENABLED (USB OUT -> USB IN, SA818 bypassed)" : "disabled");
+}
+
+extern "C" bool usb_audio_bridge_get_loopback(void) {
+  struct usb_audio_bridge_ctx *ctx = &bridge_ctx;
+
+  k_mutex_lock(&ctx->lock, K_FOREVER);
+  bool enabled = ctx->loopback_enabled;
+  k_mutex_unlock(&ctx->lock);
+
+  return enabled;
+}
+#endif /* CONFIG_FM_TEST_LOOPBACK */
