@@ -29,6 +29,26 @@ extern "C" {
 LOG_MODULE_REGISTER(dfu_mode, LOG_LEVEL_INF);
 
 /* ---------------------------------------------------------------------------
+ * Deferred self-reboot after a completed DFU download.
+ *
+ * The remote station has no debugger/ST-Link, so the reset that triggers the
+ * MCUboot swap must originate from the firmware itself over the USB/DFU path.
+ * We must NOT reboot synchronously inside the USBD message callback: that would
+ * cut off dfu-util's final DFU status / manifestation phase and it would report
+ * an error instead of "Done".  Instead we schedule a short delayed cold reboot
+ * so the DFU manifestation and USB status complete cleanly first, then reset.
+ * --------------------------------------------------------------------------*/
+static constexpr uint32_t DFU_REBOOT_DELAY_MS = 500;
+
+static void dfu_reboot_work_handler(struct k_work *work) {
+  ARG_UNUSED(work);
+  LOG_INF("DFU: rebooting to let MCUboot swap in the new image");
+  sys_reboot(SYS_REBOOT_COLD);
+}
+
+static K_WORK_DELAYABLE_DEFINE(dfu_reboot_work, dfu_reboot_work_handler);
+
+/* ---------------------------------------------------------------------------
  * Static DFU-only USBD context.
  *
  * A separate USBD_DEVICE_DEFINE is required: the composite context is shut
@@ -147,11 +167,17 @@ void dfu_mode_switch_to_dfu(struct usbd_context *composite) {
 }
 
 void dfu_mode_download_completed(void) {
-  LOG_INF("DFU download completed — requesting upgrade (test mode)");
+  LOG_INF("DFU download completed — requesting upgrade and scheduling self-reboot");
   int err = boot_request_upgrade(false);
   if (err != 0) {
     LOG_ERR("boot_request_upgrade failed: %d", err);
+    return;
   }
+
+  /* Defer the reset so dfu-util's DFU manifestation/status phase completes
+   * cleanly before the USB link drops.  On reboot MCUboot swaps in slot1 and
+   * starts the trial boot; the health gate confirms or IWDG reverts. */
+  k_work_schedule(&dfu_reboot_work, K_MSEC(DFU_REBOOT_DELAY_MS));
 }
 
 #endif /* CONFIG_BOOTLOADER_MCUBOOT */
