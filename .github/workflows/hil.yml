@@ -1,0 +1,99 @@
+name: HIL Bench Gate
+
+# Runs the physical fm_board bench gate on the self-hosted HIL runner.
+# Safety: only executes when a trusted maintainer adds the 'hil-ok' label —
+# fork PRs never reach the bench without explicit human approval.
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+  workflow_dispatch:
+
+concurrency:
+  group: hil-bench
+  cancel-in-progress: false   # never interrupt a running bench cycle
+
+jobs:
+  hil_bench_gate:
+    name: HIL bench gate (fm_board)
+    # Label-gate: only fire when a maintainer has added 'hil-ok' to the PR.
+    # workflow_dispatch always runs (used for manual retriggers / smoke checks).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'hil-ok')
+    runs-on: [self-hosted, fm-board-bench]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Update the pre-installed west workspace on the bench to the exact commit
+      # under test. The workspace at /home/hil/zephyrproject already has the
+      # Zephyr kernel + modules; only the manifest repo (FW-RemoteStation) is
+      # updated, keeping rebuild cost low.
+      - name: Sync west workspace to PR commit
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          git fetch origin
+          git checkout ${{ github.sha }}
+          west patch apply
+
+      # Build baseline: SKIP_SA818=y so the health gate confirms without 12 V
+      # (the SA818 PA is not available on the bench without the 12 V rail).
+      - name: Build baseline firmware (SKIP_SA818=y, VERSION_TWEAK=0)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          west build -b fm_board/stm32u575xx --sysbuild app -p always -- \
+            -Dapp_CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y
+          cp build/app/zephyr/zephyr.signed.bin /tmp/hil-baseline.signed.bin
+
+      # Build update image: bump VERSION_TWEAK so the gate can distinguish
+      # "baseline" from "updated" by reading the version string over CDC.
+      - name: Build update firmware (SKIP_SA818=y, VERSION_TWEAK=1)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 1/' app/VERSION
+          west build -b fm_board/stm32u575xx --sysbuild app -- \
+            -Dapp_CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y
+          cp build/app/zephyr/zephyr.signed.bin /tmp/hil-update.signed.bin
+          git checkout app/VERSION
+
+      # Build unhealthy image: no SKIP_SA818 → health gate fails → MCUboot reverts.
+      # VERSION_TWEAK=2 ensures a distinct version the gate can assert against.
+      - name: Build unhealthy firmware (no SKIP_SA818, VERSION_TWEAK=2)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 2/' app/VERSION
+          west build -b fm_board/stm32u575xx --sysbuild app
+          cp build/app/zephyr/zephyr.signed.bin /tmp/hil-unhealthy.signed.bin
+          git checkout app/VERSION
+
+      # Run the bench gate: SWD baseline flash → DFU update cycle → DFU revert
+      # cycle → USB composite assert. fw_hil is pre-installed in /opt/fw-hil-venv
+      # by the Ansible playbook (FW-HIL ansible/site.yml).
+      #
+      # TODO: finalize once fw_hil exposes a dedicated bench-gate CLI entrypoint.
+      - name: HIL bench gate — flash → DFU update+revert → USB enum
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          python scripts/hil_bench_gate.py \
+            --fw-repo-dir /home/hil/zephyrproject/FW-RemoteStation \
+            --probe-serial 35FF70064D4D323837380843 \
+            --baseline-image /tmp/hil-baseline.signed.bin \
+            --new-image     /tmp/hil-update.signed.bin \
+            --unhealthy-image /tmp/hil-unhealthy.signed.bin
+
+      # ── Baustein 8.4: Audio loopback ─────────────────────────────────────────
+      # Disabled until the audio loopback test infrastructure is wired up.
+      # Requires: CONFIG_FM_TEST_LOOPBACK build + ALSA loopback cable on bench.
+      # See: feat/fw-test-loopback (FW-RemoteStation) + FW-HIL audio_analysis.py
+      - name: "[TODO Baustein 8.4] Audio loopback test"
+        if: false
+        run: |
+          echo "TODO: audio loopback (Baustein 8.4)"
+          echo "Needs: CONFIG_FM_TEST_LOOPBACK=y build + ALSA cable on bench"
