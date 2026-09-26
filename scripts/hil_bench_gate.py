@@ -7,7 +7,7 @@ Orchestrates the three-step bench gate:
   2. DFU update cycle      (baseline → update → healthy image sticks)
   3. DFU revert cycle      (baseline → unhealthy → MCUboot reverts to baseline)
 
-Called by .github/workflows/hil.yml on the [self-hosted, fm-board-bench] runner.
+Called by .github/workflows/hil.yml on the [self-hosted, hil, fm_board] runner.
 Requires fw_hil pre-installed in /opt/fw-hil-venv (FW-HIL ansible/site.yml).
 
 # TODO: finalize once fw_hil exposes a dedicated bench-gate CLI entrypoint.
@@ -47,29 +47,29 @@ def main() -> int:
         description="HIL bench gate: USB enum + DFU update/revert cycle"
     )
     ap.add_argument("--fw-repo-dir", required=True, help="FW-RemoteStation west workspace root")
+    ap.add_argument(
+        "--baseline-build-dir",
+        required=True,
+        help="west sysbuild output dir for the baseline image (passed to flash_baseline)",
+    )
     ap.add_argument("--probe-serial", required=True, help="ST-Link probe serial (pyocd --dev-id)")
     ap.add_argument("--cdc", default="/dev/fm-board-cdc", help="CDC ACM device path (udev symlink)")
     ap.add_argument(
-        "--baseline-image",
-        required=True,
-        help="Signed baseline .bin (SKIP_SA818=y, VERSION_TWEAK=0)",
-    )
-    ap.add_argument(
         "--new-image",
         required=True,
-        help="Signed update .bin (SKIP_SA818=y, VERSION_TWEAK=1)",
+        help="Signed update .bin (SKIP_SA818=y, VERSION_TWEAK=1) — passed to dfu_download",
     )
     ap.add_argument(
         "--unhealthy-image",
         required=True,
-        help="Signed unhealthy .bin (no SKIP_SA818, VERSION_TWEAK=2 — health gate fails → revert)",
+        help="Signed unhealthy .bin (no SKIP_SA818, VERSION_TWEAK=2) — health gate fails → revert",
     )
     args = ap.parse_args()
 
     # Derive expected version strings from the VERSION file in the workspace.
-    # Tweak values 0/1 map to the baseline and update builds made in CI; the
-    # unhealthy build's version is not needed (the gate only asserts the revert
-    # lands back on baseline_ver).
+    # Tweak 0 = baseline build, tweak 1 = update build (bumped in CI).
+    # The revert cycle only asserts the baseline version is restored; the
+    # unhealthy image's version is never read after a successful revert.
     baseline_ver = _parse_version(args.fw_repo_dir, tweak_override=0)
     new_ver = _parse_version(args.fw_repo_dir, tweak_override=1)
     print(f"Expected baseline version : {baseline_ver!r}")
@@ -97,11 +97,14 @@ def main() -> int:
         failures.append(f"usb-enum-pre: {exc}")
 
     # ── Step 2: DFU update cycle ──────────────────────────────────────────────
+    # flash_baseline expects a west sysbuild build directory (not a raw .bin);
+    # it calls 'west flash -r pyocd -d <dir>' which flashes both MCUboot and the
+    # signed app.  Pass args.baseline_build_dir directly.
     if not failures:
         print("\n=== Step 2: DFU update cycle ===")
         result = run_update_cycle(
             ops,
-            baseline_image=args.baseline_image,
+            baseline_image=args.baseline_build_dir,
             baseline_version=baseline_ver,
             new_image=args.new_image,
             new_version=new_ver,
@@ -118,7 +121,7 @@ def main() -> int:
         print("\n=== Step 3: DFU revert cycle ===")
         result = run_revert_cycle(
             ops,
-            baseline_image=args.baseline_image,
+            baseline_image=args.baseline_build_dir,
             baseline_version=baseline_ver,
             unhealthy_image=args.unhealthy_image,
         )

@@ -24,7 +24,7 @@ These steps require a GitHub PAT or admin access; they cannot be automated.
 4. Follow the GitHub-generated download + configure instructions.  
    When prompted for labels, enter exactly:
    ```
-   self-hosted,fm-board-bench
+   self-hosted,hil,fm_board
    ```
 5. Start the runner as a systemd service (the Ansible playbook already placed
    the unit at `/etc/systemd/system/gh-actions-runner.service`):
