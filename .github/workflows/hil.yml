@@ -1,0 +1,152 @@
+name: HIL Bench Gate
+
+# Runs the physical fm_board bench gate on the self-hosted HIL runner.
+#
+# pull_request_target is used instead of pull_request so the workflow runs
+# from the BASE branch (main), not from the PR's branch. This prevents a PR
+# that modifies this workflow file from executing arbitrary code on the
+# persistent self-hosted bench before a maintainer has reviewed it.
+# The firmware under test is still the PR's code — it is checked out
+# explicitly in the "Sync west workspace" step below.
+#
+# Safety: only executes when a trusted maintainer NEWLY adds the 'hil-ok'
+# label. The condition gates on github.event.label.name (the label being
+# added right now), not on the full label set, so adding any other label
+# to a PR that already carries 'hil-ok' does not re-trigger the bench.
+
+on:
+  pull_request_target:
+    types: [labeled]
+  workflow_dispatch:
+
+concurrency:
+  group: hil-bench
+  cancel-in-progress: false   # never interrupt a running bench cycle
+
+jobs:
+  hil_bench_gate:
+    name: HIL bench gate (fm_board)
+    # For labeled events: fire only when the label being added IS 'hil-ok'.
+    # workflow_dispatch always runs (used for manual retriggers / smoke checks).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'hil-ok'
+    runs-on: [self-hosted, hil, fm_board]
+
+    steps:
+      # persist-credentials: false prevents the GITHUB_TOKEN from being stored
+      # in .git/config. With pull_request_target the job has elevated token
+      # permissions; the subsequent build steps run PR-controlled code, so the
+      # token must not be readable from the workspace.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Update the pre-installed west workspace on the bench to the exact commit
+      # under test. The workspace at /home/hil/zephyrproject already has the
+      # Zephyr kernel + modules; only the manifest repo (FW-RemoteStation) is
+      # updated, keeping rebuild cost low.
+      #
+      # For pull_request_target events the PR head commit may be on a fork and
+      # is not part of the base repo's normal refspec. Fetch refs/pull/N/head
+      # to reach it reliably. For workflow_dispatch (no PR) fall back to the
+      # dispatched commit SHA which IS in the base repo.
+      - name: Sync west workspace to PR commit
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PR_NUMBER" ]; then
+            git fetch origin "refs/pull/$PR_NUMBER/head"
+            git checkout FETCH_HEAD
+          else
+            git fetch origin
+            git checkout "$DISPATCH_SHA"
+          fi
+          west patch apply
+
+      # imgtool is required by the MCUboot sysbuild signing step.
+      # It is not pre-installed in the bench venv; install it once here so all
+      # three --sysbuild builds below can sign images.
+      - name: Install imgtool
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          pip install --quiet imgtool
+
+      # Build baseline: SKIP_SA818=y so the health gate confirms without 12 V.
+      # VERSION_TWEAK is explicitly set to 0 so the gate's expected version string
+      # matches regardless of what the PR has in app/VERSION.
+      # Trap ensures app/VERSION is restored even if the build fails.
+      - name: Build baseline firmware (SKIP_SA818=y, VERSION_TWEAK=0)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          trap "git checkout app/VERSION" EXIT
+          sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 0/' app/VERSION
+          west build -b fm_board/stm32u575xx --sysbuild app \
+            -d build/baseline -p always -- \
+            -Dapp_CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y
+
+      # Build update image: bump VERSION_TWEAK to 1 so the gate can distinguish
+      # baseline from updated by reading the version string over CDC.
+      # -p always prevents a prior run's CMake/Kconfig cache from leaking
+      # stale config into this build (the bench workspace persists between runs).
+      - name: Build update firmware (SKIP_SA818=y, VERSION_TWEAK=1)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          trap "git checkout app/VERSION" EXIT
+          sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 1/' app/VERSION
+          west build -b fm_board/stm32u575xx --sysbuild app \
+            -d build/update -p always -- \
+            -Dapp_CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y
+          cp build/update/app/zephyr/zephyr.signed.bin /tmp/hil-update.signed.bin
+
+      # Build unhealthy image: no SKIP_SA818 → health gate fails → MCUboot reverts.
+      # -p always prevents the CMake/Kconfig cache from the update build
+      # (which had SKIP_SA818=y) from leaking into this build.
+      - name: Build unhealthy firmware (no SKIP_SA818, VERSION_TWEAK=2)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          trap "git checkout app/VERSION" EXIT
+          sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 2/' app/VERSION
+          west build -b fm_board/stm32u575xx --sysbuild app \
+            -d build/unhealthy -p always
+          cp build/unhealthy/app/zephyr/zephyr.signed.bin /tmp/hil-unhealthy.signed.bin
+
+      # Run the bench gate: SWD baseline flash → DFU update cycle → DFU revert
+      # cycle → USB composite assert. fw_hil is pre-installed in /opt/fw-hil-venv
+      # by the Ansible playbook (FW-HIL ansible/site.yml).
+      #
+      # flash_baseline expects a west sysbuild build directory, not a raw .bin;
+      # --baseline-build-dir points at the dedicated baseline build above.
+      #
+      # TODO: finalize once fw_hil exposes a dedicated bench-gate CLI entrypoint.
+      - name: HIL bench gate — flash → DFU update+revert → USB enum
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          python scripts/hil_bench_gate.py \
+            --fw-repo-dir     /home/hil/zephyrproject/FW-RemoteStation \
+            --baseline-build-dir /home/hil/zephyrproject/FW-RemoteStation/build/baseline \
+            --probe-serial    35FF70064D4D323837380843 \
+            --new-image       /tmp/hil-update.signed.bin \
+            --unhealthy-image /tmp/hil-unhealthy.signed.bin
+
+      # ── Baustein 8.4: Audio loopback ─────────────────────────────────────────
+      # Disabled until the audio loopback test infrastructure is wired up.
+      # Requires: CONFIG_FM_TEST_LOOPBACK build + ALSA loopback cable on bench.
+      # See: feat/fw-test-loopback (FW-RemoteStation) + FW-HIL audio_analysis.py
+      - name: "[TODO Baustein 8.4] Audio loopback test"
+        if: false
+        run: |
+          echo "TODO: audio loopback (Baustein 8.4)"
+          echo "Needs: CONFIG_FM_TEST_LOOPBACK=y build + ALSA cable on bench"
