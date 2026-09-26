@@ -300,7 +300,7 @@ putty -serial COM3 -sercfg 115200,8,n,1,N
 
 3. **USB Enumeration**:
    ```bash
-   lsusb -d 2fe3:0100 -v | grep -A5 "Audio"
+   lsusb -d 2fe3:0012 -v | grep -A5 "Audio"
    ```
 
 ### Audio-Qualität
