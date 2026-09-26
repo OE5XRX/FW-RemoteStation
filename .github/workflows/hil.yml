@@ -50,18 +50,34 @@ jobs:
       #
       # For pull_request_target events the PR head commit may be on a fork and
       # is not part of the base repo's normal refspec. Fetch refs/pull/N/head
-      # to reach it reliably. For workflow_dispatch (no PR) fall back to the
-      # dispatched commit SHA which IS in the base repo.
+      # to reach it reliably.
+      #
+      # After fetching, verify that the fetched commit matches the SHA captured
+      # at workflow-trigger time (github.event.pull_request.head.sha). A fork can
+      # be force-pushed between the label event and this step; if refs/pull/N/head
+      # no longer resolves to the approved commit, we abort rather than building
+      # and flashing an unreviewed commit on the bench.
+      #
+      # For workflow_dispatch (no PR) fall back to the dispatched commit SHA
+      # which IS in the base repo.
       - name: Sync west workspace to PR commit
         working-directory: /home/hil/zephyrproject/FW-RemoteStation
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           DISPATCH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [ -n "$PR_NUMBER" ]; then
             git fetch origin "refs/pull/$PR_NUMBER/head"
-            git checkout FETCH_HEAD
+            FETCHED_SHA=$(git rev-parse FETCH_HEAD)
+            if [ "$FETCHED_SHA" != "$PR_HEAD_SHA" ]; then
+              echo "::error::PR head was force-pushed after hil-ok was added." \
+                   "Expected $PR_HEAD_SHA, got $FETCHED_SHA." \
+                   "Aborting to prevent building an unreviewed commit."
+              exit 1
+            fi
+            git checkout "$PR_HEAD_SHA"
           else
             git fetch origin
             git checkout "$DISPATCH_SHA"
