@@ -127,6 +127,11 @@ jobs:
       # Build unhealthy image: no SKIP_SA818 → health gate fails → MCUboot reverts.
       # -p always prevents the CMake/Kconfig cache from the update build
       # (which had SKIP_SA818=y) from leaking into this build.
+      #
+      # The revert test is deterministic because the bench runs WITHOUT 12 V supply
+      # to the SA818 module. Without power the AT handshake in the health gate
+      # always fails, so this image never confirms itself and MCUboot reverts.
+      # Bench prerequisite: 12 V rail must remain off during the revert cycle.
       - name: Build unhealthy firmware (no SKIP_SA818, VERSION_TWEAK=2)
         working-directory: /home/hil/zephyrproject/FW-RemoteStation
         run: |
@@ -145,8 +150,13 @@ jobs:
       # flash_baseline expects a west sysbuild build directory, not a raw .bin;
       # --baseline-build-dir points at the dedicated baseline build above.
       #
+      # working-directory is the synced PR workspace (not $GITHUB_WORKSPACE which
+      # contains the base-branch checkout and does not have scripts/hil_bench_gate.py
+      # when this script is new in the PR under test).
+      #
       # TODO: finalize once fw_hil exposes a dedicated bench-gate CLI entrypoint.
       - name: HIL bench gate — flash → DFU update+revert → USB enum
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
         run: |
           set -euo pipefail
           source /opt/fw-hil-venv/bin/activate
