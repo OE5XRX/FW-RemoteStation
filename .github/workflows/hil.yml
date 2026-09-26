@@ -27,9 +27,13 @@ jobs:
   hil_bench_gate:
     name: HIL bench gate (fm_board)
     # For labeled events: fire only when the label being added IS 'hil-ok'.
-    # workflow_dispatch always runs (used for manual retriggers / smoke checks).
+    # workflow_dispatch is restricted to refs/heads/main: the pull_request_target
+    # trigger protects the workflow YAML by running from the base branch, but
+    # workflow_dispatch lets a caller select any branch — including a PR branch
+    # whose YAML is not yet merged and reviewed. Pinning to main ensures the
+    # trusted workflow definition is always what runs on the bench.
     if: >
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       github.event.label.name == 'hil-ok'
     runs-on: [self-hosted, hil, fm_board]
     # Zephyr SDK path — required when the SDK was not CMake-registered at install
@@ -82,10 +86,14 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           DISPATCH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [ -n "$PR_NUMBER" ]; then
+            # Fetch main so PR_BASE_SHA (a commit on main's history) is reachable
+            # for the west.yml change detection below.
+            git fetch origin main
             git fetch origin "refs/pull/$PR_NUMBER/head"
             FETCHED_SHA=$(git rev-parse FETCH_HEAD)
             if [ "$FETCHED_SHA" != "$PR_HEAD_SHA" ]; then
@@ -95,6 +103,13 @@ jobs:
               exit 1
             fi
             git checkout "$PR_HEAD_SHA"
+            # If west.yml changed the persistent workspace has stale modules —
+            # the bench result would be for the wrong module set. Fail fast.
+            if git diff "${PR_BASE_SHA}..${PR_HEAD_SHA}" -- west.yml | grep -q .; then
+              echo "::error::PR modifies west.yml — persistent workspace modules may be stale."
+              echo "::error::Run 'west update && west patch apply' on the bench, then re-trigger."
+              exit 1
+            fi
           else
             git fetch origin
             git checkout "$DISPATCH_SHA"
