@@ -13,33 +13,67 @@ These steps require a GitHub PAT or admin access; they cannot be automated.
 
 **Host:** `192.168.88.67`, user `hil`
 
+The Ansible playbook pre-creates the systemd unit and expects the runner at
+`/opt/actions-runner`. Use the Ansible path to keep them consistent.
+
+**Option A — Ansible (recommended):**
+```bash
+cd /home/pbuchegger/FW-HIL   # local control-node
+ansible-playbook ansible/site.yml -e gh_runner_token=<TOKEN>
+```
+This installs the runner to `/opt/actions-runner`, configures it with the
+correct labels, and enables `gh-actions-runner.service`.
+
+**Option B — manual (if Ansible is unavailable):**
+
 1. Go to **FW-RemoteStation → Settings → Actions → Runners → New self-hosted runner**.
 2. Choose **Linux / x64**.
-3. SSH to the bench as `pbuchegger` (or `hil`):
+3. SSH to the bench and install to `/opt/actions-runner` (must match the
+   pre-created service unit):
    ```bash
    ssh pbuchegger@192.168.88.67
+   sudo mkdir -p /opt/actions-runner && sudo chown hil:hil /opt/actions-runner
    sudo -u hil -i
-   cd /home/hil
+   cd /opt/actions-runner
    ```
 4. Follow the GitHub-generated download + configure instructions.  
    When prompted for labels, enter exactly:
    ```
    self-hosted,hil,fm_board
    ```
-5. Start the runner as a systemd service (the Ansible playbook already placed
-   the unit at `/etc/systemd/system/gh-actions-runner.service`):
+5. Start the runner via the pre-created systemd unit:
    ```bash
    sudo systemctl enable --now gh-actions-runner.service
-   ```
-   Alternatively, re-run the Ansible playbook with the token:
-   ```bash
-   cd /home/pbuchegger/FW-HIL   # local control-node
-   ansible-playbook ansible/site.yml -e gh_runner_token=<TOKEN>
    ```
 
 ---
 
-## 2 — Require approval for fork-PR workflows
+## 2 — Bootstrap the west workspace (one-time, as `hil`)
+
+The Ansible playbook provisions the SDK, venv, and `fw_hil`, but **does not**
+create the west workspace. This must be done once on a fresh bench before the
+runner can build firmware.
+
+```bash
+sudo -u hil -i
+west init -m https://github.com/OE5XRX/FW-RemoteStation /home/hil/zephyrproject
+cd /home/hil/zephyrproject
+west update
+```
+
+After `west update`, apply the downstream patches once to verify they apply
+cleanly:
+```bash
+west patch apply
+```
+
+The workspace persists between CI runs; subsequent runs only run `git fetch` +
+`git checkout` to sync the manifest repo to the PR commit (no `west update`
+needed unless the manifest's `west.yml` changes).
+
+---
+
+## 3 — Require approval for fork-PR workflows
 
 Prevents untrusted fork code from running on the physical board without human
 review.
@@ -51,7 +85,7 @@ review.
 
 ---
 
-## 3 — Create the `hil-ok` label
+## 4 — Create the `hil-ok` label
 
 The `hil.yml` workflow fires only when this label is present on a PR, giving
 maintainers an explicit gate before code touches the board.
@@ -64,7 +98,7 @@ maintainers an explicit gate before code touches the board.
 
 ---
 
-## 4 — Bench prerequisites (already provisioned)
+## 5 — Bench prerequisites (already provisioned)
 
 The following are already in place on `192.168.88.67` after the Ansible run.
 Listed here for reference / re-provisioning:
@@ -88,9 +122,9 @@ re-provisioning steps.
 
 ---
 
-## 5 — First run
+## 6 — First run
 
-After completing steps 1–3, trigger the gate manually:
+After completing steps 1–4, trigger the gate manually:
 
 1. Go to **FW-RemoteStation → Actions → HIL Bench Gate**.
 2. Click **Run workflow** → **Run**.

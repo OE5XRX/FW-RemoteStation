@@ -39,6 +39,18 @@ jobs:
       ZEPHYR_SDK_INSTALL_DIR: /opt/zephyr-sdk-1.0.1
 
     steps:
+      # Fail fast if the west workspace has not been bootstrapped on this runner.
+      # The Ansible playbook provisions SDK/venv/fw_hil but does NOT run west init;
+      # that one-time step must be done manually (see docs/hil-runner-setup.md §2).
+      - name: Assert west workspace is bootstrapped
+        run: |
+          set -euo pipefail
+          if [ ! -d /home/hil/zephyrproject/FW-RemoteStation ]; then
+            echo "::error::West workspace not found at /home/hil/zephyrproject/FW-RemoteStation."
+            echo "::error::Bootstrap it first: see docs/hil-runner-setup.md section 2."
+            exit 1
+          fi
+
       # persist-credentials: false prevents the GITHUB_TOKEN from being stored
       # in .git/config. With pull_request_target the job has elevated token
       # permissions; the subsequent build steps run PR-controlled code, so the
