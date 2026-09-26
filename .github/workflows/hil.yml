@@ -32,6 +32,11 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.label.name == 'hil-ok'
     runs-on: [self-hosted, hil, fm_board]
+    # Zephyr SDK path — required when the SDK was not CMake-registered at install
+    # time (e.g. setup.sh run as root, not as the hil user). West/CMake falls back
+    # to this env var before giving up on toolchain discovery.
+    env:
+      ZEPHYR_SDK_INSTALL_DIR: /opt/zephyr-sdk-1.0.1
 
     steps:
       # persist-credentials: false prevents the GITHUB_TOKEN from being stored
