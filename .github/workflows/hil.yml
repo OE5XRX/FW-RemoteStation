@@ -34,23 +34,38 @@ jobs:
     runs-on: [self-hosted, hil, fm_board]
 
     steps:
+      # persist-credentials: false prevents the GITHUB_TOKEN from being stored
+      # in .git/config. With pull_request_target the job has elevated token
+      # permissions; the subsequent build steps run PR-controlled code, so the
+      # token must not be readable from the workspace.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Update the pre-installed west workspace on the bench to the exact commit
       # under test. The workspace at /home/hil/zephyrproject already has the
       # Zephyr kernel + modules; only the manifest repo (FW-RemoteStation) is
       # updated, keeping rebuild cost low.
       #
-      # With pull_request_target, github.sha is the base-branch HEAD, not the
-      # PR head. Use github.event.pull_request.head.sha (the real PR head commit,
-      # reachable via a plain git fetch origin) for PR events.
+      # For pull_request_target events the PR head commit may be on a fork and
+      # is not part of the base repo's normal refspec. Fetch refs/pull/N/head
+      # to reach it reliably. For workflow_dispatch (no PR) fall back to the
+      # dispatched commit SHA which IS in the base repo.
       - name: Sync west workspace to PR commit
         working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISPATCH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          git fetch origin
-          git checkout ${{ github.event.pull_request.head.sha || github.sha }}
+          if [ -n "$PR_NUMBER" ]; then
+            git fetch origin "refs/pull/$PR_NUMBER/head"
+            git checkout FETCH_HEAD
+          else
+            git fetch origin
+            git checkout "$DISPATCH_SHA"
+          fi
           west patch apply
 
       # imgtool is required by the MCUboot sysbuild signing step.
