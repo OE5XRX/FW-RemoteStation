@@ -14,6 +14,9 @@
 __pycache__/
 eeprom.bin
 
+# native_sim runtime artifact: persisted synthetic device UID (device_uid.cpp)
+oe5xrx_sim_uid.txt
+
 # codeql
 _codeql_detected_source_root
 
