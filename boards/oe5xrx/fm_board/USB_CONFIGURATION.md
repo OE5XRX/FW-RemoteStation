@@ -55,7 +55,7 @@ Device Descriptor:
   bDeviceSubClass      2
   bDeviceProtocol      1
   idVendor         0x2fe3 (Zephyr Project)
-  idProduct        0x0100 (OE5XRX FM Remote Station)
+  idProduct        0x0012 (OE5XRX FM Remote Station)
   iManufacturer       1 (OE5XRX)
   iProduct            2 (OE5XRX FM Remote Station)
   
@@ -126,7 +126,7 @@ Die Integration von UAC2 mit SA818 erfordert:
 ### Enumeration testen
 ```bash
 # Linux
-lsusb -d 2fe3:0100 -v
+lsusb -d 2fe3:0012 -v
 
 # Alle drei Interfaces sollten sichtbar sein:
 # - ttyACM0 (CDC ACM)
