@@ -1,3 +1,14 @@
+config FM_BOOT_CONFIRM_SKIP_SA818
+	bool "Skip the SA818 handshake in the boot-confirm health gate"
+	default n
+	help
+	  Bench/HIL-only. Drops the SA818 AT-handshake criterion from the
+	  boot-confirm health gate, so a trial image can self-confirm on a
+	  bench that has no working SA818 (no radio / no 12 V rail) using
+	  only the USB-enumerated and shell-active criteria. Without this,
+	  the SA818 probe never succeeds and every trial image reverts.
+	  NEVER enable this in a production build.
+
 menu "Zephyr"
 source "Kconfig.zephyr"
 endmenu

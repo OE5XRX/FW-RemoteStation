@@ -11,7 +11,9 @@
  *     confirm on an operator plugging in a terminal, which is fragile on
  *     unattended stations. The constant IS_ENABLED(CONFIG_SHELL) is here to
  *     make the criterion explicit and searchable, not as a runtime signal).
- *   - SA818 AT handshake (sa818_at_connect round-trip over UART).
+ *   - SA818 AT handshake (sa818_at_connect round-trip over UART). Omitted when
+ *     CONFIG_FM_BOOT_CONFIRM_SKIP_SA818 is set (bench/HIL builds without a
+ *     working radio); production builds always keep this criterion.
  *
  * IWDG / task_wdt: task_wdt is initialised with the hardware IWDG as its
  * fallback.  The gate thread registers one channel with a period of
@@ -98,6 +100,7 @@ bool probe_shell(void *c) {
   return IS_ENABLED(CONFIG_SHELL);
 }
 
+#if !IS_ENABLED(CONFIG_FM_BOOT_CONFIRM_SKIP_SA818)
 bool probe_sa818(void *c) {
   const struct device *d = static_cast<Env *>(c)->sa818;
   if (!device_is_ready(d)) {
@@ -107,6 +110,7 @@ bool probe_sa818(void *c) {
   enum sa818_result rc = sa818_at_connect(d);
   return rc == SA818_OK;
 }
+#endif /* !CONFIG_FM_BOOT_CONFIRM_SKIP_SA818 */
 
 /* ---- hooks ----------------------------------------------------------------- */
 
@@ -217,7 +221,11 @@ void gate_thread(void *, void *, void *) {
   static HealthCriterion crit[] = {
       {"usb", probe_usb, &g_env},
       {"shell", probe_shell, &g_env},
+#if !IS_ENABLED(CONFIG_FM_BOOT_CONFIRM_SKIP_SA818)
+      /* SA818 AT handshake — omitted on a bench build (see
+       * CONFIG_FM_BOOT_CONFIRM_SKIP_SA818) that has no working radio. */
       {"sa818", probe_sa818, &g_env},
+#endif
   };
   const GateHooks hooks{h_now, h_sleep, h_confd, h_confirm, h_reboot, nullptr};
   const GateConfig cfg{GATE_DEADLINE_MS, GATE_DWELL_MS, GATE_POLL_MS};
