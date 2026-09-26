@@ -8,3 +8,18 @@ tests:
     integration_platforms:
       - fm_board
       - native_sim/native/64
+  fm.app.loopback.build:
+    # Build-only: verify the test-mode UAC2 loopback (SA818 bypass) compiles into
+    # the fm_board app with CONFIG_FM_TEST_LOOPBACK=y. Runtime verification of the
+    # audio routing is deferred to the HIL bench.
+    build_only: true
+    extra_configs:
+      - CONFIG_FM_TEST_LOOPBACK=y
+    platform_allow:
+      - fm_board
+    integration_platforms:
+      - fm_board
+    tags:
+      - usb
+      - audio
+      - loopback

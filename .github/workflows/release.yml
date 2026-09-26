@@ -38,7 +38,7 @@ jobs:
           echo "OK — releasing from default branch ${REF_NAME}"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: fw
           fetch-depth: 0        # need tags to compute NN
@@ -289,7 +289,7 @@ jobs:
       # are just the run-scoped copy (bin/elf/native_sim + SHA256SUMS, plus the
       # cosign .bundle signatures when not a dry run).
       - name: Attach build artifacts to the run
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fw-${{ steps.ver.outputs.version }}${{ inputs.dry_run && '-dryrun' || '' }}
           path: fw/release/out/*
@@ -318,8 +318,8 @@ jobs:
 
             | Target | DFU update (signed) | Provisioning (SWD) | Debug (bare) | Debug ELF | Sim (static) |
             |---|---|---|---|---|---|
-            | fm-sa818-2m (VHF/2m) | `fm-sa818-2m.signed.bin` | `fm-sa818-2m.mcuboot.hex` | `fm-sa818-2m.bin` | `fm-sa818-2m.elf` | `fm-sa818-2m.native_sim` |
-            | fm-sa818-70cm (UHF/70cm) | `fm-sa818-70cm.signed.bin` | `fm-sa818-70cm.mcuboot.hex` | `fm-sa818-70cm.bin` | `fm-sa818-70cm.elf` | `fm-sa818-70cm.native_sim` |
+            | fm-sa818-vhf (VHF/2m) | `fm-sa818-vhf.signed.bin` | `fm-sa818-vhf.mcuboot.hex` | `fm-sa818-vhf.bin` | `fm-sa818-vhf.elf` | `fm-sa818-vhf.native_sim` |
+            | fm-sa818-uhf (UHF/70cm) | `fm-sa818-uhf.signed.bin` | `fm-sa818-uhf.mcuboot.hex` | `fm-sa818-uhf.bin` | `fm-sa818-uhf.elf` | `fm-sa818-uhf.native_sim` |
 
             **`.signed.bin`** = DFU update image (MCUboot, signed with the OE5XRX **production key**; dev key only for dry-run builds);
             `.mcuboot.hex` = bootloader for one-time SWD provisioning; `.bin`/`.elf` = bare debug build.

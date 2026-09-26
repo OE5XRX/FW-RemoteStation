@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install clang-format-18
         run: |
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: fw
 
@@ -121,6 +121,13 @@ jobs:
           set -euo pipefail
           west twister -T tests/unit_audio -p native_sim/native/64 -v --inline-logs
 
+      - name: Twister unit tests (tests/unit_device_uid)
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          west twister -T tests/unit_device_uid -p native_sim/native/64 -v --inline-logs
+
       - name: Python unit tests (scripts/)
         working-directory: fw
         run: |
@@ -131,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: fw
 
