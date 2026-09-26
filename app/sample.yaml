@@ -23,3 +23,14 @@ tests:
       - usb
       - audio
       - loopback
+  fm.app.bench_skip_sa818.build:
+    # Build-only: verify the boot-confirm health gate compiles with the SA818
+    # criterion dropped (CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y) for HIL/bench use
+    # without a working radio.
+    build_only: true
+    extra_configs:
+      - CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y
+    platform_allow:
+      - fm_board
+    integration_platforms:
+      - fm_board
