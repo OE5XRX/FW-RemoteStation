@@ -1,4 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# Absolute interpreter on purpose: `#!/usr/bin/env bash` would have the kernel
+# resolve `bash` via the inherited (PR-influenced) PATH, so a planted lookalike
+# `bash` could hijack this root-owned hook before the PATH pin below ever runs.
 # runner-cleanup-hook.sh — GitHub Actions "job completed" hook for the HIL bench.
 #
 # Wired host-side via ACTIONS_RUNNER_HOOK_JOB_COMPLETED in a root-owned systemd
@@ -64,11 +67,14 @@ fi
 #     same user and could plant such a symlink).
 #   * we then require the resolved workspace to be a strict descendant of the
 #     resolved runner work root.
-# The runner work root defaults to /opt/actions-runner/_work (the documented
-# install path); override with RUNNER_CLEANUP_WORK_ROOT if the runner lives
-# elsewhere.
-work_root_real=$(realpath -e "${RUNNER_CLEANUP_WORK_ROOT:-/opt/actions-runner/_work}" 2>/dev/null) || {
-  log "cannot resolve runner work root — refusing to wipe"
+# The runner work root is HARD-CODED to the documented install path. It is
+# deliberately NOT read from the environment: the hook inherits the PR-influenced
+# job environment, so an env-overridable root could be pointed at an attacker-
+# chosen directory (via GITHUB_ENV) and authorize deletion there. A different
+# install path must be changed here, in this root-owned script.
+readonly WORK_ROOT=/opt/actions-runner/_work
+work_root_real=$(realpath -e "$WORK_ROOT" 2>/dev/null) || {
+  log "cannot resolve runner work root '$WORK_ROOT' — refusing to wipe"
   exit 0
 }
 ws_real=$(realpath -e "$ws" 2>/dev/null) || {
