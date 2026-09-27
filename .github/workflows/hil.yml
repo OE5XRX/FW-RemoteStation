@@ -34,15 +34,19 @@ concurrency:
 jobs:
   hil_bench_gate:
     name: HIL bench gate (fm_board)
-    # For labeled events: fire only when the label being added IS 'hil-ok'.
-    # workflow_dispatch is restricted to refs/heads/main: the pull_request_target
-    # trigger protects the workflow YAML by running from the base branch, but
-    # workflow_dispatch lets a caller select any branch — including a PR branch
-    # whose YAML is not yet merged and reviewed. Pinning to main ensures the
-    # trusted workflow definition is always what runs on the bench.
+    # For labeled events: fire only when the label being added IS 'hil-ok' AND the
+    # PR targets main. pull_request_target runs the workflow definition from the
+    # PR's BASE branch, so a PR based on some other (attacker-pushable) branch
+    # could otherwise run a non-main hil.yml on the bench. Requiring
+    # base.ref == 'main' pins the trusted workflow source, matching the
+    # workflow_dispatch restriction below.
+    # workflow_dispatch is restricted to refs/heads/main for the same reason:
+    # it lets a caller select any branch — including a PR branch whose YAML is not
+    # yet merged and reviewed. Pinning to main ensures the trusted workflow
+    # definition is always what runs on the bench.
     if: >
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      github.event.label.name == 'hil-ok'
+      (github.event.label.name == 'hil-ok' && github.event.pull_request.base.ref == 'main')
     runs-on: [self-hosted, hil, fm_board]
     # Bound the whole bench cycle. The concurrency group is non-canceling, so a
     # hung west/dfu-util/serial call would otherwise occupy the single shared
@@ -268,8 +272,11 @@ jobs:
     name: Remove hil-ok label
     needs: hil_bench_gate
     # always(): remove the label whether the gate passed, failed, or was
-    # cancelled. Skip for workflow_dispatch (no PR / no label to remove).
-    if: always() && github.event_name == 'pull_request_target' && github.event.label.name == 'hil-ok'
+    # cancelled. Skip for workflow_dispatch (no PR / no label to remove). Mirror
+    # the gate's base.ref == 'main' condition so the two stay consistent.
+    if: >
+      always() && github.event_name == 'pull_request_target' &&
+      github.event.label.name == 'hil-ok' && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     # Label add/remove goes through the Issues API (issues.removeLabel), which
     # requires `issues: write` even when the target is a PR. `pull-requests: write`

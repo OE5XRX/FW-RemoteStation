@@ -126,9 +126,19 @@ maintainers an explicit gate before code touches the board.
 After each job the runner should wipe its `_work` workspace and kill any stray
 bench processes (a `pyocd` still holding the SWD probe, `aplay`/`arecord` holding
 the ALSA device, a `dfu-util` mid-transfer) so the next job starts from a clean
-slate and the hardware is free. This is wired **host-side** via the runner's
-`ACTIONS_RUNNER_HOOK_JOB_COMPLETED` environment variable — **not** from the
+slate and the hardware is free. This is wired **host-side** via a root-owned
+systemd drop-in that sets `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` — **not** from the
 workflow YAML — so a PR cannot alter or skip it.
+
+> **Scope of this hook:** it is **defense-in-depth hygiene**, not the privilege
+> boundary. The real containment is that `hil` has no sudo, no readable
+> credentials, and (planned) network isolation — see the top-of-file warning and
+> the security notes below. Even if a determined job managed to neutralize the
+> hook, the blast radius is limited to *leftover files / stray processes* for the
+> next run, which the SHA-pin, one-shot `hil-ok` re-review, and clean rebuild
+> (`west build -p always`) already defend against. Harden it as far as the runner
+> tree's ownership allows, but do not treat it as the thing standing between a PR
+> and the host.
 
 The hook script lives in this repo at
 [`scripts/runner-cleanup-hook.sh`](../scripts/runner-cleanup-hook.sh). It is
@@ -169,21 +179,31 @@ workspace at `/home/hil/zephyrproject`.
    UNIT
    sudo systemctl daemon-reload
    ```
-3. Close the `.env` override path: the runner sources `.env` at start, so a
-   `hil`-writable `.env` could re-set `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` and win
-   over the drop-in. Make `.env` root-owned (the runner does not write it during
-   normal operation) and confirm it does **not** set the hook variable:
+3. Close the `.env` override path. The runner sources `.env` at start, so a
+   `.env` that sets `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` could win over the
+   drop-in. **Root-owning the `.env` file is not sufficient by itself:** on Unix,
+   the right to unlink and re-create a file comes from write permission on its
+   *directory*, so while `/opt/actions-runner` is owned/writable by `hil`, a job
+   can delete the root-owned `.env` and drop in its own. Closing this properly
+   means the runner root directory must **not** be `hil`-writable:
    ```bash
-   sudo touch /opt/actions-runner/.env
-   sudo chown root:root /opt/actions-runner/.env
-   sudo chmod 0644 /opt/actions-runner/.env
-   grep -q ACTIONS_RUNNER_HOOK_JOB_COMPLETED /opt/actions-runner/.env \
-     && echo "REMOVE the hook line from .env — the drop-in owns it" || true
+   # Make the runner root root-owned; grant hil only the subdirs it must write.
+   sudo chown root:root /opt/actions-runner
+   sudo chmod 0755 /opt/actions-runner
+   sudo chown -R hil:hil /opt/actions-runner/_work /opt/actions-runner/_diag
+   # Provide an empty, root-owned .env so nothing overrides the drop-in.
+   sudo install -o root -g root -m 0644 /dev/null /opt/actions-runner/.env
    ```
-   > **FW-HIL playbook follow-up:** the playbook currently `chown -R hil`s
-   > `/opt/actions-runner`, which would revert `.env` to `hil` ownership on the
-   > next run. Exclude `.env` from that recursive chown (or re-apply the root
-   > ownership after provisioning) so this boundary survives re-provisioning.
+   Confirm `hil` cannot recreate it: `sudo -u hil touch /opt/actions-runner/.env`
+   must fail with *Permission denied*.
+   > **FW-HIL playbook follow-up (required for this to survive re-provisioning):**
+   > the playbook currently `chown -R hil`s all of `/opt/actions-runner`, which
+   > re-opens this path on the next run. Change it to keep the runner root
+   > `root`-owned and grant `hil` only `_work` (and `_diag`). Verify the runner
+   > service still starts and self-updates under that ownership; if a specific
+   > runner state file needs to be `hil`-writable, narrow the grant to that file
+   > rather than the whole tree. Until the playbook is fixed, re-apply the
+   > ownership above after every provisioning run.
 4. Restart the runner so it picks up the drop-in:
    ```bash
    sudo systemctl restart gh-actions-runner.service
