@@ -46,20 +46,33 @@ USB Audio Class 2 (UAC2) Integration auf Application-Level.
 
 ## Audio-Datenfluss
 
-**Transmission (USB OUT → SA818 TX)**: asynchronous sink with an **explicit
-feedback endpoint** (no `implicit-feedback` in the devicetree). The TX ring
-fill level is regulated by the software `BufferFeedback` PI controller
-(set point = half full); `feedback_cb` reports the current rate correction
-to the host and is mandatory for this interface once `implicit-feedback` is
-removed — the class init fails without it.
+**Transmission (USB OUT → SA818 TX)**: asynchronous sink with **no feedback
+endpoint** (`implicit-feedback` on the OUT streaming interface in the
+devicetree tells the UAC2 class to emit no explicit feedback endpoint). The
+host free-runs the playback stream against the device's internal-fixed 8 kHz
+clock; a small host↔device clock offset is absorbed by the 32 ms TX ring. (The
+capture IN is intentionally **not** marked as the OUT stream's implicit-feedback
+data endpoint — that would deadlock the loopback self-test, see the DT note — so
+the OUT stream genuinely has no feedback source, with bounded drift only on very
+long continuous transmissions.)
+
+> **Why implicit, not explicit feedback?** The STM32U575 OTG_FS is full-speed
+> with a small shared FIFO and could not sustain the *second* dynamically
+> enabled isochronous IN endpoint that an explicit feedback endpoint adds:
+> in full-duplex (playback + capture) the OTG core wedged (host: "endpoint not
+> enabled", the CDC-ACM shell died with it). Dropping the explicit feedback
+> endpoint leaves full-duplex with one iso-IN + one iso-OUT, which the core
+> handles. The explicit-feedback path (`BufferFeedback` PI controller +
+> `feedback_cb`) is preserved and **compile-time selected**: remove
+> `implicit-feedback` from the DT and it is wired back in automatically
+> (`OUT_EXPLICIT_FEEDBACK` in `usb_audio_bridge.cpp`).
+
 1. Host sendet Audio via USB Audio OUT (Playback)
 2. UAC2 Stack empfängt Daten in `uac2_data_recv_cb()`
 3. Daten werden in TX Ring Buffer geschrieben
 4. `audio_work_handler()` liest aus Ring Buffer
 5. 16-bit PCM wird zu DAC-Wert konvertiert
 6. DAC schreibt zu SA818 TX Modulator
-7. `uac2_feedback_cb()` liefert die von `BufferFeedback` berechnete
-   Korrektur an den Host zurück, sodass der Ring mittig bleibt
 
 **Reception (SA818 RX → USB IN)**: plain **asynchronous capture endpoint**
 (no `implicit-feedback`) — this is what makes the host present it as a
@@ -110,7 +123,11 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
 - Verwaltet Ring Buffer für USB ↔ SA818
 - Handhabt UAC2 Terminal Activation
 - SOF-getriebenes USB IN Streaming (`uac2_sof_cb()`, kein separater Thread)
-- Software-Feedback-Regler (`BufferFeedback`) für den TX Ring (explicit feedback)
+- Software-Feedback-Regler (`BufferFeedback`) für den TX Ring **nur im
+  explicit-feedback-Build** (`OUT_EXPLICIT_FEEDBACK`); im fm_board-Default
+  (`implicit-feedback`) ist der Regler auskompiliert und der OUT-Stream ist ein
+  asynchroner Sink **ohne** Feedback-Quelle (der Capture-IN wird bewusst nicht
+  als implicit-feedback-Endpoint markiert — siehe DT-Kommentar)
 
 **Ring Buffer**:
 - **TX Ring**: 512 Bytes (256 Samples = 32ms @ 8kHz)
@@ -124,7 +141,14 @@ sa818_result sa818_audio_stream_stop(const struct device *dev);
 - **Processing Rate**: 125µs pro Sample (8kHz)
 - **Work Handler**: Delayable work, läuft mit 8kHz
 - **USB IN**: SOF-getrieben (`uac2_sof_cb`), ein variabel großes Paket pro SOF (1ms), kein separater Polling-Thread
-- **USB OUT Feedback**: `uac2_feedback_cb` meldet die von `BufferFeedback` (PI-Regler, Sollwert = halb voller TX-Ring) berechnete Korrektur an den Host
+- **USB OUT Feedback**: im fm_board-Default (`implicit-feedback` auf dem
+  OUT-Interface) **kein** expliziter Feedback-Endpoint — der OUT-Stream ist ein
+  asynchroner Sink ohne Feedback-Quelle und läuft gegen den geteilten 8-kHz-Takt
+  (der Capture-IN wird bewusst *nicht* als implicit-feedback-Endpoint markiert,
+  da das den Loopback-Selbsttest verklemmt — siehe DT-Kommentar). Nur wenn
+  `implicit-feedback` im DT entfernt wird (`OUT_EXPLICIT_FEEDBACK`), meldet
+  `uac2_feedback_cb` die von `BufferFeedback` (PI-Regler, Sollwert = halb voller
+  TX-Ring) berechnete Korrektur an den Host
 
 ### UAC2 Callbacks
 
@@ -135,7 +159,7 @@ static const struct uac2_ops uac2_ops = {
     .get_recv_buf = uac2_get_recv_buf,        // Buffer für USB OUT
     .data_recv_cb = uac2_data_recv_cb,        // USB OUT Daten empfangen
     .buf_release_cb = uac2_buf_release_cb,    // USB IN Buffer freigeben
-    .feedback_cb = uac2_feedback_cb,          // Explicit Feedback für USB OUT (mandatory ohne implicit-feedback)
+    // .feedback_cb nur bei OUT_EXPLICIT_FEEDBACK (DT ohne implicit-feedback)
 };
 ```
 
@@ -328,11 +352,22 @@ putty -serial COM3 -sercfg 115200,8,n,1,N
 - Work Handler für DAC/ADC läuft weiterhin mit fester Rate (8kHz)
 - Weniger Kontextwechsel, geringere Latenz als mit separatem Thread
 
-### Warum explicit Feedback statt implicit Feedback (OUT)?
-- `implicit-feedback` verlangt vom Host, die Rate aus dem IN-Stream
-  abzuleiten — das ist mit dem jetzt reinen Capture-IN nicht mehr sinnvoll
-- Ein expliziter Feedback-Endpoint plus `BufferFeedback`-PI-Regler regelt
-  den TX-Ring-Füllstand direkt und unabhängig vom IN-Pfad
+### Warum implicit Feedback (OUT) auf fm_board?
+- Erzwungen durch die STM32U575-OTG_FS-Hardware: ein *expliziter*
+  Feedback-Endpoint ist ein zweiter dynamisch aktivierter iso-IN-Endpoint;
+  zusammen mit dem Capture-iso-IN überforderte das im Full-Duplex den
+  OTG-Core (dynamische TxFIFO-Vergabe in `udc_stm32` überlappte → Core
+  wedged, CDC-Shell tot). Siehe DT-Kommentar an `as_iso_out`.
+- Mit `implicit-feedback` entfällt der Feedback-Endpoint; Full-Duplex hat nur
+  noch einen iso-IN (Capture) + einen iso-OUT (Playback) — dieselbe Topologie,
+  die einseitig (nur TX **oder** nur RX) schon funktioniert.
+- **Trade-off:** der `BufferFeedback`-PI-Regler regelt den TX-Ring dann nicht
+  mehr aktiv; der Host läuft gegen den geteilten 8-kHz-Takt. Der
+  explicit-feedback-Pfad bleibt compile-time wählbar (`implicit-feedback` im DT
+  entfernen ⇒ `OUT_EXPLICIT_FEEDBACK` reaktiviert Regler + `feedback_cb`).
+- Der saubere Root-Fix (dynamische TxFIFO-Vergabe in `udc_stm32`
+  überlappungsfrei machen, damit 2× iso-IN + explicit feedback tragbar wären)
+  ist ein Zephyr-Treiber-/Upstream-Thema — hier bewusst nicht angefasst.
 
 ### Warum 8kHz?
 - SA818 Audio-Bandbreite: 300-3000 Hz

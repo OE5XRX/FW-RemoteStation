@@ -27,10 +27,21 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
         src/main_usb_audio.cpp
         src/usb_audio_bridge.cpp
         src/audio_stream.cpp
-        src/feedback.cpp
         src/boot_confirm/health_gate.cpp
         src/boot_confirm/boot_confirm_fm.cpp
     )
+    # The explicit-feedback PI regulator (feedback.cpp) is only wired in when the
+    # OUT streaming interface does NOT use implicit feedback. With implicit-feedback
+    # (fm_board default) the UAC2 class emits no feedback endpoint, so building it
+    # into the app would be dead code -- keep the source out of the app build then.
+    # (It stays unit-tested via tests/unit_audio regardless of this selection.)
+    dt_nodelabel(as_iso_out_path NODELABEL "as_iso_out")
+    if(as_iso_out_path)
+        dt_prop(as_iso_out_implicit_fb PATH "${as_iso_out_path}" PROPERTY "implicit-feedback")
+    endif()
+    if(NOT as_iso_out_implicit_fb)
+        target_sources(app PRIVATE src/feedback.cpp)
+    endif()
     target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/boot_confirm)
     # DFU runtime->DFU-mode switch is prod-only (MCUboot); guard so the bare build never compiles it.
     if(CONFIG_BOOTLOADER_MCUBOOT)

@@ -128,6 +128,35 @@
 			linked-terminal = <&usb_out_terminal>;
 			subslot-size = <2>;
 			bit-resolution = <16>;
+
+			/*
+			 * `implicit-feedback` here means: emit NO explicit feedback
+			 * endpoint for the host->device (playback) stream.
+			 *
+			 * Why: the STM32U575 OTG_FS is full-speed with a small shared FIFO,
+			 * and the Zephyr udc_stm32 driver allocates each IN endpoint's TxFIFO
+			 * dynamically on enable (HAL_PCDEx_SetTxFiFo places FIFO n at
+			 * GRXFSIZ + sum(DIEPTXF[0..n-1])). With an explicit feedback endpoint
+			 * the full-duplex config needs THREE iso endpoints at once -- iso-OUT
+			 * (playback) + iso-IN (explicit feedback) + iso-IN (capture) -- and
+			 * the two iso-IN TxFIFOs overlap when enabled out-of-order / toggled
+			 * (as ALSA does on underrun): the OTG core is corrupted, the host
+			 * sees "cannot submit urb: endpoint not enabled", and every IN
+			 * endpoint (incl. the CDC-ACM shell) dies. Half-duplex (<=2 iso EPs)
+			 * works. Dropping the explicit feedback endpoint leaves full-duplex
+			 * with one iso-IN + one iso-OUT, which the core handles.
+			 *
+			 * Note this is a plain asynchronous OUT sink with NO feedback source
+			 * (the capture IN is intentionally not marked as the implicit-feedback
+			 * data endpoint -- that would deadlock the loopback self-test; see the
+			 * in_interface note). The host free-runs the OUT stream against the
+			 * shared internal-fixed 8 kHz clock; a small host<->device clock
+			 * offset is absorbed by the 32 ms TX ring, with bounded drift only on
+			 * very long continuous transmissions. The explicit-feedback +
+			 * BufferFeedback PI path is retained and compile-time selectable
+			 * (remove this property) for a future udc_stm32 TxFIFO fix.
+			 */
+			implicit-feedback;
 		};
 
 		as_iso_in: in_interface {
@@ -135,6 +164,20 @@
 			linked-terminal = <&usb_in_terminal>;
 			subslot-size = <2>;
 			bit-resolution = <16>;
+
+			/*
+			 * Deliberately NOT marked `implicit-feedback`. Doing so (turning this
+			 * capture endpoint into the OUT stream's implicit-feedback data
+			 * endpoint, as the upstream uac2_implicit_feedback sample does) would
+			 * make the host pace the OUT stream from this IN stream's rate. That
+			 * is fine in normal operation (IN is fed by the ADC) but DEADLOCKS the
+			 * firmware loopback self-test (CONFIG_FM_TEST_LOOPBACK): there the IN
+			 * stream is fed *from* the OUT stream, so pacing OUT by IN is circular
+			 * and neither stream ever starts (host: aplay + arecord both EIO,
+			 * verified on HW). The OUT interface is therefore left as a plain
+			 * asynchronous sink without feedback -- see the note there for the
+			 * (bounded) clock-drift trade-off that entails.
+			 */
 		};
 	};
 

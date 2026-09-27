@@ -12,7 +12,6 @@
  */
 
 #include "audio_stream.h"
-#include "feedback.h"
 
 #include <string.h>
 #include <zephyr/device.h>
@@ -26,6 +25,24 @@ extern "C" {
 }
 
 LOG_MODULE_REGISTER(usb_audio_bridge, LOG_LEVEL_INF);
+
+/*
+ * The OUT (playback) sink uses an EXPLICIT feedback endpoint + software
+ * BufferFeedback PI regulator only when the devicetree does NOT request
+ * implicit feedback on the OUT streaming interface. With `implicit-feedback`
+ * set (the fm_board default -- see the DT for the rationale), the UAC2 class
+ * emits no feedback endpoint at all, so wiring the regulator or a feedback_cb
+ * would be dead code: the whole explicit-feedback path is compiled out and the
+ * OUT stream is a plain asynchronous sink against the shared audio clock.
+ *
+ * Flipping the DT property back to explicit feedback re-enables all of it
+ * (and BufferFeedback stays unit-tested in tests/unit_audio regardless).
+ */
+#define OUT_EXPLICIT_FEEDBACK (!DT_PROP_OR(DT_NODELABEL(as_iso_out), implicit_feedback, 0))
+
+#if OUT_EXPLICIT_FEEDBACK
+#include "feedback.h"
+#endif
 
 /* Audio configuration */
 #define AUDIO_SAMPLE_RATE_HZ 8000
@@ -107,10 +124,12 @@ struct usb_audio_bridge_ctx {
   struct k_mutex lock;
 
   /* Status */
-  bool tx_enabled;                    /* USB OUT terminal active */
-  bool rx_enabled;                    /* USB IN terminal active */
-  bool tx_prebuffered;                /* TX ring reached the prebuffer threshold */
+  bool tx_enabled;     /* USB OUT terminal active */
+  bool rx_enabled;     /* USB IN terminal active */
+  bool tx_prebuffered; /* TX ring reached the prebuffer threshold */
+#if OUT_EXPLICIT_FEEDBACK
   usb_audio::BufferFeedback feedback; /* explicit feedback regulator (OUT) */
+#endif
 
 #if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
   bool loopback_enabled; /* test-only: route USB OUT -> USB IN, SA818 bypassed */
@@ -200,6 +219,7 @@ static void uac2_sof_cb(const struct device *dev, void *user_data) {
 
   ARG_UNUSED(dev);
 
+#if OUT_EXPLICIT_FEEDBACK
   /* OUT explicit feedback: keep the TX ring near half full. */
   k_mutex_lock(&ctx->lock, K_FOREVER);
   bool tx = ctx->tx_enabled;
@@ -216,6 +236,7 @@ static void uac2_sof_cb(const struct device *dev, void *user_data) {
   if (tx && !loopback) {
     ctx->feedback.update(tx_used, TX_RING_SIZE / AUDIO_BYTES_PER_SAMPLE);
   }
+#endif /* OUT_EXPLICIT_FEEDBACK */
 
   /* IN capture: send whatever whole samples we have this SOF. As an async IN
    * endpoint the variable packet size itself conveys the rate; no feedback. */
@@ -260,7 +281,9 @@ static void uac2_terminal_update_cb(const struct device *dev, uint8_t terminal, 
   if (terminal == USB_OUT_TERMINAL_ID) {
     ctx->tx_enabled = enabled;
     ctx->tx_prebuffered = false;
+#if OUT_EXPLICIT_FEEDBACK
     ctx->feedback.reset();
+#endif
     LOG_INF("USB OUT (TX) terminal %s", enabled ? "enabled" : "disabled");
 
     if (!enabled) {
@@ -368,6 +391,7 @@ static void uac2_buf_release_cb(const struct device *dev, uint8_t terminal, void
   /* Buffer is from our pool, no need to free */
 }
 
+#if OUT_EXPLICIT_FEEDBACK
 /**
  * @brief UAC2 explicit feedback callback (OUT / playback path)
  *
@@ -398,6 +422,7 @@ static uint32_t uac2_feedback_cb(const struct device *dev, uint8_t terminal, voi
 
   return ctx->feedback.value();
 }
+#endif /* OUT_EXPLICIT_FEEDBACK */
 
 /* UAC2 operations structure */
 static const struct uac2_ops uac2_ops = {
@@ -406,7 +431,9 @@ static const struct uac2_ops uac2_ops = {
     .get_recv_buf = uac2_get_recv_buf,
     .data_recv_cb = uac2_data_recv_cb,
     .buf_release_cb = uac2_buf_release_cb,
+#if OUT_EXPLICIT_FEEDBACK
     .feedback_cb = uac2_feedback_cb,
+#endif
 };
 
 /**
@@ -446,7 +473,9 @@ extern "C" int usb_audio_bridge_register_ops(const struct device *uac2_dev) {
   ctx->usb_out_buf_idx = 0;
   ctx->usb_in_buf_idx = 0;
   ctx->tx_prebuffered = false;
+#if OUT_EXPLICIT_FEEDBACK
   ctx->feedback.init(USB_SAMPLES_PER_SOF);
+#endif
 #if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
   ctx->loopback_enabled = false;
 #endif
