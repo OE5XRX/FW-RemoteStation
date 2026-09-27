@@ -44,6 +44,10 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       github.event.label.name == 'hil-ok'
     runs-on: [self-hosted, hil, fm_board]
+    # Bound the whole bench cycle. The concurrency group is non-canceling, so a
+    # hung west/dfu-util/serial call would otherwise occupy the single shared
+    # bench until GitHub's default 6 h limit and block every later HIL run.
+    timeout-minutes: 45
     # Zephyr SDK path — required when the SDK was not CMake-registered at install
     # time (e.g. setup.sh run as root, not as the hil user). West/CMake falls back
     # to this env var before giving up on toolchain discovery.
@@ -98,6 +102,10 @@ jobs:
           DISPATCH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # `west` lives in the bench venv, not on the systemd runner's default
+          # PATH — activate it before the `west patch apply` below (git itself is
+          # system-wide, but west is not).
+          source /opt/fw-hil-venv/bin/activate
           if [ -n "$PR_NUMBER" ]; then
             # Fetch main so PR_BASE_SHA (a commit on main's history) is reachable
             # for the west.yml change detection below.
