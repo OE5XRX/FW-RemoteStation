@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           source /opt/fw-hil-venv/bin/activate
-          trap "git checkout app/VERSION" EXIT
+          trap "git checkout -- app/VERSION" EXIT
           sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 0/' app/VERSION
           west build -b fm_board/stm32u575xx --sysbuild app \
             -d build/baseline -p always -- \
@@ -165,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           source /opt/fw-hil-venv/bin/activate
-          trap "git checkout app/VERSION" EXIT
+          trap "git checkout -- app/VERSION" EXIT
           sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 1/' app/VERSION
           west build -b fm_board/stm32u575xx --sysbuild app \
             -d build/update -p always -- \
@@ -185,7 +185,7 @@ jobs:
         run: |
           set -euo pipefail
           source /opt/fw-hil-venv/bin/activate
-          trap "git checkout app/VERSION" EXIT
+          trap "git checkout -- app/VERSION" EXIT
           sed -i 's/^VERSION_TWEAK =.*/VERSION_TWEAK = 2/' app/VERSION
           west build -b fm_board/stm32u575xx --sysbuild app \
             -d build/unhealthy -p always

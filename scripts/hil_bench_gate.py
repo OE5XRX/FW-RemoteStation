@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """HIL bench gate for FW-RemoteStation.
 
-Orchestrates the three-step bench gate:
-  1. USB composite assert  (sanity check: board is alive and enumerates correctly)
+Orchestrates the bench gate:
+  1. USB composite assert  (pre-gate sanity: board is alive and enumerates)
   2. DFU update cycle      (baseline → update → healthy image sticks)
   3. DFU revert cycle      (baseline → unhealthy → MCUboot reverts to baseline)
+  4. USB composite assert  (post-gate: board still enumerates after the cycles)
 
 Called by .github/workflows/hil.yml on the [self-hosted, hil, fm_board] runner.
 Requires fw_hil pre-installed in /opt/fw-hil-venv (FW-HIL ansible/site.yml).
