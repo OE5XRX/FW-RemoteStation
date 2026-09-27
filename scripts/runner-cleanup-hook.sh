@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # runner-cleanup-hook.sh — GitHub Actions "job completed" hook for the HIL bench.
 #
-# Wired host-side via ACTIONS_RUNNER_HOOK_JOB_COMPLETED in the self-hosted
-# runner's .env (see docs/hil-runner-setup.md), NOT from the workflow YAML — so a
-# PR cannot alter or skip it. The runner invokes it AFTER every job, regardless
-# of outcome. It does two things:
+# Wired host-side via ACTIONS_RUNNER_HOOK_JOB_COMPLETED in a root-owned systemd
+# drop-in on the runner service (see docs/hil-runner-setup.md), NOT from the
+# workflow YAML and NOT from the hil-writable .env — so a PR cannot alter or skip
+# it. The runner invokes it AFTER every job, regardless of outcome. It does two
+# things:
 #
 #   1. Kill stray bench processes the job may have left running — pyocd holding
 #      the SWD probe, aplay/arecord holding the ALSA device, dfu-util mid
@@ -19,6 +20,12 @@
 # Note: -e is deliberately NOT set — cleanup must run to completion even when an
 # individual step has nothing to do (e.g. pkill finds no match and exits 1).
 set -uo pipefail
+
+# Job-completed hooks inherit the (PR-influenced) job environment. A PR can
+# prepend a workspace directory to PATH via GITHUB_PATH, which would make an
+# unqualified `id`/`pkill`/`realpath`/`find`/`rm` resolve to an attacker-planted
+# lookalike. Pin PATH to trusted system directories before calling any helper.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 log() { echo "[runner-cleanup-hook] $*"; }
 
@@ -49,27 +56,36 @@ if [ -z "$ws" ]; then
   exit 0
 fi
 
-# Canonicalize before deleting. A textual match on "$ws" is not enough: a job
-# runs as this same user, so it could point a component of the workspace path at
-# the persistent west workspace via a symlink. realpath resolves every symlink;
-# we then require the RESOLVED path to still sit inside a runner _work tree. If
-# resolution fails or the resolved path escaped _work, we refuse to delete.
+# Canonicalize and require containment under the ACTUAL runner work root, not
+# merely "some path with a _work component" (which would match e.g.
+# /tmp/attacker/_work/x). Two protections at once:
+#   * realpath resolves every symlink, so a symlinked path component cannot
+#     redirect the delete at the persistent west workspace (the job runs as this
+#     same user and could plant such a symlink).
+#   * we then require the resolved workspace to be a strict descendant of the
+#     resolved runner work root.
+# The runner work root defaults to /opt/actions-runner/_work (the documented
+# install path); override with RUNNER_CLEANUP_WORK_ROOT if the runner lives
+# elsewhere.
+work_root_real=$(realpath -e "${RUNNER_CLEANUP_WORK_ROOT:-/opt/actions-runner/_work}" 2>/dev/null) || {
+  log "cannot resolve runner work root — refusing to wipe"
+  exit 0
+}
 ws_real=$(realpath -e "$ws" 2>/dev/null) || {
   log "cannot resolve '$ws' — refusing to wipe"
   exit 0
 }
-case "$ws_real" in
-  */_work/*) : ;;
+if [ "$ws_real" = "$work_root_real" ]; then
+  log "refusing to wipe the runner work root '$ws_real' itself"
+  exit 0
+fi
+case "$ws_real/" in
+  "$work_root_real"/*) : ;;
   *)
-    log "resolved path '$ws_real' is not inside a runner _work tree — refusing to wipe"
+    log "resolved path '$ws_real' is not under runner work root '$work_root_real' — refusing to wipe"
     exit 0
     ;;
 esac
-# Never operate on the _work root itself or an absurdly short path.
-if [ "$ws_real" = "${ws_real%%/_work/*}/_work" ] || [ "${#ws_real}" -lt 12 ]; then
-  log "refusing to wipe '$ws_real' — too close to the _work root"
-  exit 0
-fi
 
 if [ -d "$ws_real" ]; then
   # Delete the contents but keep the directory itself; the runner expects it to

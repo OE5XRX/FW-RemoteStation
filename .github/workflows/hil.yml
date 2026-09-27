@@ -271,7 +271,12 @@ jobs:
     # cancelled. Skip for workflow_dispatch (no PR / no label to remove).
     if: always() && github.event_name == 'pull_request_target' && github.event.label.name == 'hil-ok'
     runs-on: ubuntu-latest
+    # Label add/remove goes through the Issues API (issues.removeLabel), which
+    # requires `issues: write` even when the target is a PR. `pull-requests: write`
+    # is kept for clarity of intent; without `issues: write` the call 403s and the
+    # one-shot gate silently breaks (label stays attached).
     permissions:
+      issues: write
       pull-requests: write
     steps:
       - name: Remove hil-ok label from PR
