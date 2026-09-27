@@ -129,11 +129,14 @@ After completing steps 1–4, trigger the gate manually:
 1. Go to **FW-RemoteStation → Actions → HIL Bench Gate**.
 2. Click **Run workflow** → **Run**.
 
-The first run should complete all three bench steps:
+The first run should complete all bench steps:
 - SWD flash baseline (via west + pyocd)
 - DFU update cycle (firmware self-reboot + MCUboot swap)
 - DFU revert cycle (unhealthy image → MCUboot reverts)
 - USB composite assert (VID `2fe3:0012`, UAC2 + CDC + DFU)
+- Audio loopback gate — builds the `CONFIG_FM_TEST_LOOPBACK=y` variant,
+  flashes it over SWD, and scores an internal UAC2 OUT→IN loopback
+  (correlation / SNR / dropout thresholds)
 
 ---
 
@@ -142,8 +145,16 @@ The first run should complete all three bench steps:
 - **`dfu-util` and `pyusb` require USB access** — the udev rules grant the
   `dialout` and `plugdev` groups; `hil` is in both. If the runner runs as a
   different user, adjust group membership accordingly.
-- **Audio loopback (Baustein 8.4)** is disabled in the workflow (`if: false`).
-  It will be enabled once the ALSA loopback cable is wired on the bench.
-- **The `fw_hil` bench-gate CLI entrypoint** does not yet exist; `scripts/hil_bench_gate.py`
-  calls the fw\_hil library directly. When FW-HIL exposes a proper CLI, update
-  the invocation in `hil.yml` (marked with `# TODO`).
+- **Audio loopback (Baustein 8.4)** is wired into the workflow
+  (`scripts/hil_audio_loopback.py`). It is a **purely digital** firmware
+  loopback: `CONFIG_FM_TEST_LOOPBACK=y` routes the UAC2 OUT stream
+  (host→device) straight back into the UAC2 IN stream (device→host), bypassing
+  the SA818 entirely. **No ALSA loopback cable and no 12 V / RF are required** —
+  the reference tone is played and captured over the board's own UAC2
+  playback/capture ALSA device (`card … [FM Transceiver Board]`). The gate scores
+  the capture with `fw_hil.audio_analysis.analyze_loopback` (defaults:
+  correlation ≥ 0.9, SNR ≥ 20 dB, dropout-fraction ≤ 0.01).
+- **The `fw_hil` bench-gate CLI entrypoint** does not yet exist;
+  `scripts/hil_bench_gate.py` and `scripts/hil_audio_loopback.py` call the
+  fw\_hil library directly. When FW-HIL exposes a proper CLI, update the
+  invocations in `hil.yml` (marked with `# TODO`).

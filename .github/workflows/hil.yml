@@ -19,6 +19,14 @@ on:
     types: [labeled]
   workflow_dispatch:
 
+# Least-privilege token. pull_request_target grants a read/write GITHUB_TOKEN by
+# default; this workflow only checks out code and reports its own check status
+# (which needs no token scope), so drop everything to read-only. Combined with
+# persist-credentials: false on the checkout, PR-controlled build steps never see
+# a writable token or the token in .git/config. No `secrets.*` are referenced.
+permissions:
+  contents: read
+
 concurrency:
   group: hil-bench
   cancel-in-progress: false   # never interrupt a running bench cycle
@@ -200,11 +208,35 @@ jobs:
             --unhealthy-image /tmp/hil-unhealthy.signed.bin
 
       # ── Baustein 8.4: Audio loopback ─────────────────────────────────────────
-      # Disabled until the audio loopback test infrastructure is wired up.
-      # Requires: CONFIG_FM_TEST_LOOPBACK build + ALSA loopback cable on bench.
-      # See: feat/fw-test-loopback (FW-RemoteStation) + FW-HIL audio_analysis.py
-      - name: "[TODO Baustein 8.4] Audio loopback test"
-        if: false
+      # Build the audio-loopback variant: CONFIG_FM_TEST_LOOPBACK=y adds the
+      # `audio loopback on/off` shell command and the internal UAC2 OUT->IN
+      # routing. SKIP_SA818=y so the health gate self-confirms without the 12 V
+      # rail (same rationale as the baseline/update builds above). Dedicated
+      # build dir; -p always so no prior build's Kconfig cache leaks in.
+      - name: Build audio-loopback firmware (CONFIG_FM_TEST_LOOPBACK=y, SKIP_SA818=y)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
         run: |
-          echo "TODO: audio loopback (Baustein 8.4)"
-          echo "Needs: CONFIG_FM_TEST_LOOPBACK=y build + ALSA cable on bench"
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          west build -b fm_board/stm32u575xx --sysbuild app \
+            -d build/audio -p always -- \
+            -Dapp_CONFIG_FM_TEST_LOOPBACK=y \
+            -Dapp_CONFIG_FM_BOOT_CONFIRM_SKIP_SA818=y
+
+      # Purely digital FW loopback (USB OUT -> USB IN, SA818 bypassed): no analog
+      # path, no RF, no PTT, no 12 V, no ALSA loopback cable. Flashes the loopback
+      # build over SWD, then LiveAudioLoopback arms `audio loopback on`, plays a
+      # reference tone on the UAC2 playback device while recording the capture
+      # device, scores it (correlation/SNR/dropouts), and disarms on exit.
+      # Runs last: it overwrites the DFU-gate firmware with the loopback build.
+      - name: HIL audio loopback gate (CONFIG_FM_TEST_LOOPBACK)
+        working-directory: /home/hil/zephyrproject/FW-RemoteStation
+        run: |
+          set -euo pipefail
+          source /opt/fw-hil-venv/bin/activate
+          python scripts/hil_audio_loopback.py \
+            --fw-repo-dir     /home/hil/zephyrproject/FW-RemoteStation \
+            --audio-build-dir /home/hil/zephyrproject/FW-RemoteStation/build/audio \
+            --probe-serial    35FF70064D4D323837380843 \
+            --cdc             /dev/fm-board-cdc \
+            --card-hint       "FM Transceiver Board"
