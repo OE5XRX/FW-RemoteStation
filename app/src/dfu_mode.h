@@ -36,11 +36,14 @@ extern "C" {
 void dfu_mode_switch_to_dfu(struct usbd_context *composite);
 
 /**
- * @brief Request an upgrade on next boot (called after DFU download completes).
+ * @brief Request an upgrade and self-reboot (called after DFU download done).
  *
- * Sets the MCUboot upgrade flag for a test-mode swap.  The health gate
- * confirms the new image only after all health criteria pass; if they do not,
- * the IWDG fires and MCUboot reverts automatically.
+ * Sets the MCUboot upgrade flag, then schedules a short delayed cold reboot so
+ * the DFU manifestation completes cleanly and the station swaps in the new
+ * image without an external reset (there is no debugger on the board).  On the
+ * following trial boot the health gate confirms the new image only after all
+ * health criteria pass; if they do not, the IWDG fires and MCUboot reverts
+ * automatically.
  */
 void dfu_mode_download_completed(void);
 

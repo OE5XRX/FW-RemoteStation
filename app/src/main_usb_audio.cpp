@@ -143,14 +143,10 @@ int main(void) {
   LOG_INF("USB UAC2: Audio streaming @ 8kHz");
   LOG_INF("USB DFU: Firmware update (detach to enter DFU mode)");
 
-  while (true) {
-    k_sleep(K_SECONDS(10));
-
-    /* Optional: Print status periodically */
-    sa818_status status = sa818_get_status(sa818);
-    LOG_INF("SA818 Status - Power: %s, PTT: %s, SQL: %s", status.device_power == SA818_DEVICE_ON ? "ON" : "OFF",
-            status.ptt_state == SA818_PTT_ON ? "ON" : "OFF", status.squelch_state == SA818_SQUELCH_OPEN ? "OPEN" : "CLOSED");
-  }
+  /* No unsolicited status: the control UART stays quiet. Live state is pulled on
+   * demand via `module fm status`. The shell + boot-confirm run on their own
+   * threads; the main thread has nothing left to do, so it parks. */
+  k_sleep(K_FOREVER);
 
   return 0;
 }

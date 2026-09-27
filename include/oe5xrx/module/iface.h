@@ -35,8 +35,8 @@
 
 namespace mod {
 
-enum class Kind { Setting, Action, Telemetry };
-enum class ValueType { Bool, Int, Float, Enum, String };
+enum class Kind { Setting, Action, Telemetry, Audio };
+enum class ValueType { Bool, Int, Float, Enum, String, Stream };
 enum class Op { Set, Get, Do };
 
 inline const char *kindStr(Kind k) {
@@ -47,6 +47,8 @@ inline const char *kindStr(Kind k) {
     return "action";
   case Kind::Telemetry:
     return "telemetry";
+  case Kind::Audio:
+    return "audio";
   }
   return "";
 }
@@ -63,6 +65,8 @@ inline const char *typeStr(ValueType t) {
     return "enum";
   case ValueType::String:
     return "string";
+  case ValueType::Stream:
+    return "stream";
   }
   return "";
 }
@@ -247,6 +251,16 @@ public:
       w.kvStr("error", err_ != nullptr ? err_ : "error");
     }
     w.ch('}');
+  }
+
+  /** Render just the value arm as JSON (integer/float/bool/quoted string), or `null`
+   *  when this result is an error. Used by Module::snapshot for the aggregate status. */
+  void renderValueOnly(JsonWriter &w) const {
+    if (!ok_) {
+      w.raw("null");
+      return;
+    }
+    renderValue(w);
   }
 
 private:
@@ -442,6 +456,24 @@ public:
   }
 };
 
+/** @brief Kind mixin: an audio stream endpoint. Descriptor-only; `get`->onGet
+ *  (a declarative transport id), `set`/`do`->wrong_op. The agent keys off the
+ *  advertised `kind:"audio"` capability to derive that an audio path exists. */
+class AudioInfo : public Capability {
+public:
+  Kind kind() const override { return Kind::Audio; }
+  Result handle(Op op, const char *) override {
+    switch (op) {
+    case Op::Get:
+      return onGet();
+    case Op::Set:
+    case Op::Do:
+    default:
+      return Result::err("wrong_op");
+    }
+  }
+};
+
 struct Identity {
   const char *type;       // stable compatibility anchor (e.g. "fm_transceiver")
   const char *model;      // e.g. "SA818-V" / "SA818-U"
@@ -499,6 +531,31 @@ public:
       c->describe(w);
     }
     w.ch(']');
+    w.ch('}');
+  }
+
+  /** Render `{"schema":1,"module":<id>,"values":{<cap>:<value>,…}}` — a live snapshot
+   *  of every capability's `get` value. A cap whose get errors renders as `null`, so one
+   *  unavailable cap never fails the whole snapshot. */
+  void snapshot(JsonWriter &w) const {
+    w.ch('{');
+    w.kvRaw("schema", "1");
+    w.ch(',');
+    w.kvStr("module", moduleId_);
+    w.ch(',');
+    w.key("values");
+    w.ch('{');
+    bool first = true;
+    for (Capability *c : caps_) {
+      if (!first) {
+        w.ch(',');
+      }
+      first = false;
+      w.key(c->name());
+      Result r = c->handle(Op::Get, "");
+      r.renderValueOnly(w);
+    }
+    w.ch('}');
     w.ch('}');
   }
 

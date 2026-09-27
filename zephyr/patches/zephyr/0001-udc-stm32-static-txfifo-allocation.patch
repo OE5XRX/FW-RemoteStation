@@ -1,0 +1,165 @@
+diff --git a/drivers/usb/udc/udc_stm32.c b/drivers/usb/udc/udc_stm32.c
+index de77e31809c..6261ed564a8 100644
+--- a/drivers/usb/udc/udc_stm32.c
++++ b/drivers/usb/udc/udc_stm32.c
+@@ -170,10 +170,27 @@ struct udc_stm32_msg {
+ 	uint16_t rx_count;
+ };
+ 
++/*
++ * USB allows at most 16 IN endpoints (indices 0..15); the OTG cores used with
++ * this driver expose far fewer (OTG_FS: 6, OTG_HS: 9). This bounds the frozen
++ * TxFIFO reservation table below without a per-instance allocation.
++ */
++#define UDC_STM32_MAX_IN_ENDPOINTS 16U
++
+ struct udc_stm32_data  {
+ 	stm32_pcd_handle_t pcd;
+ 	const struct device *dev;
+ 	uint32_t occupied_mem;
++	/*
++	 * OTG only: frozen per-index IN-endpoint TxFIFO reservation, in words.
++	 * Assigned on first enable and grown monotonically; never reduced on
++	 * disable. The whole layout is re-programmed in strict index order from
++	 * this table (see udc_stm32_program_tx_fifos()), so a TxFIFO can never
++	 * shift or overlap when endpoints are enabled out of order or toggled
++	 * (e.g. UAC2 full-duplex with three iso endpoints, or ALSA re-selecting
++	 * an alternate setting on underrun).
++	 */
++	uint16_t tx_fifo_words[UDC_STM32_MAX_IN_ENDPOINTS];
+ 	/* wLength of SETUP packet for s-out-status */
+ 	uint32_t ep0_out_wlength;
+ 	struct k_thread thread_data;
+@@ -950,6 +967,13 @@ static void udc_stm32_mem_init(const struct device *dev)
+ 
+ 	priv->occupied_mem += UDC_STM32_EP0_MAX_PACKET_SIZE;
+ 
++	/*
++	 * occupied_mem now holds the fixed base (RxFIFO + EP0 TxFIFO). The
++	 * per-index IN TxFIFO reservations are tracked separately and start
++	 * empty on every (re)enable of the controller.
++	 */
++	memset(priv->tx_fifo_words, 0, sizeof(priv->tx_fifo_words));
++
+ 	/* Reset TX allocs */
+ 	for (unsigned int i = 1U; i < cfg->num_endpoints; i++) {
+ 		status = HAL_PCDEx_SetTxFiFo(&priv->pcd, i, 0);
+@@ -957,43 +981,104 @@ static void udc_stm32_mem_init(const struct device *dev)
+ 	}
+ }
+ 
++/* Sum of all frozen IN-endpoint TxFIFO reservations, in words. */
++static uint32_t udc_stm32_tx_fifo_words(const struct udc_stm32_data *priv,
++					const struct udc_stm32_config *cfg)
++{
++	uint32_t words = 0U;
++
++	for (unsigned int i = 1U; i < cfg->num_endpoints; i++) {
++		words += priv->tx_fifo_words[i];
++	}
++
++	return words;
++}
++
++/*
++ * Re-program every IN-endpoint TxFIFO from the frozen reservation table, in
++ * strict index order.
++ *
++ * HAL_PCDEx_SetTxFiFo() places TxFIFO n right after the sum of RxFIFO, EP0 TX
++ * and every lower-indexed TxFIFO read from the *live* registers. Walking the
++ * indices in ascending order therefore always yields a contiguous,
++ * non-overlapping layout, independent of the order in which endpoints were
++ * enabled. Reservations are frozen (never reduced on disable), so an already
++ * placed FIFO is only ever re-written with an identical offset/size unless a
++ * lower-indexed endpoint legitimately grows -- which for a fixed-function
++ * device happens at most once, when that endpoint is first enabled.
++ */
++static int udc_stm32_program_tx_fifos(const struct device *dev)
++{
++	struct udc_stm32_data *priv = udc_get_private(dev);
++	const struct udc_stm32_config *cfg = dev->config;
++
++	for (unsigned int i = 1U; i < cfg->num_endpoints; i++) {
++		if (HAL_PCDEx_SetTxFiFo(&priv->pcd, i, priv->tx_fifo_words[i]) != HAL_OK) {
++			return -EIO;
++		}
++	}
++
++	return 0;
++}
++
+ static int udc_stm32_ep_mem_config(const struct device *dev,
+ 				   struct udc_ep_config *ep_cfg,
+ 				   bool enable)
+ {
+ 	struct udc_stm32_data *priv = udc_get_private(dev);
+ 	const struct udc_stm32_config *cfg = dev->config;
++	const uint8_t idx = USB_EP_GET_IDX(ep_cfg->addr);
++	uint16_t prev;
+ 	unsigned int words;
++	uint32_t total;
++	int ret;
+ 
+-	if (!USB_EP_DIR_IS_IN(ep_cfg->addr) || USB_EP_GET_IDX(ep_cfg->addr) == 0U) {
++	if (!USB_EP_DIR_IS_IN(ep_cfg->addr) || idx == 0U || idx >= UDC_STM32_MAX_IN_ENDPOINTS) {
++		return 0;
++	}
++
++	/*
++	 * Reservations are frozen for the lifetime of the controller session:
++	 * disabling an endpoint keeps its TxFIFO slot so that a later, higher
++	 * indexed endpoint cannot reuse the space and then overlap this one when
++	 * it is re-enabled. That overlap is the root cause of the OTG-core wedge
++	 * seen with three concurrent iso endpoints (UAC2 full-duplex).
++	 */
++	if (!enable) {
+ 		return 0;
+ 	}
+ 
+ 	words = DIV_ROUND_UP(MIN(udc_mps_ep_size(ep_cfg), cfg->ep_mps), 4U);
+ 	words = (words <= 64) ? words * 2 : words;
+ 
+-	if (!enable) {
+-		if (priv->occupied_mem >= (words * 4)) {
+-			priv->occupied_mem -= (words * 4);
+-		}
+-		if (HAL_PCDEx_SetTxFiFo(&priv->pcd, USB_EP_GET_IDX(ep_cfg->addr), 0) != HAL_OK) {
+-			return -EIO;
+-		}
++	/* Grow-only: an existing reservation is never shrunk. */
++	if (words <= priv->tx_fifo_words[idx]) {
+ 		return 0;
+ 	}
+ 
+-	if (cfg->dram_size - priv->occupied_mem < words * 4) {
++	/* Verify the new layout still fits the controller's dedicated RAM. */
++	total = priv->occupied_mem +
++		(udc_stm32_tx_fifo_words(priv, cfg) - priv->tx_fifo_words[idx] + words) * 4U;
++	if (total > cfg->dram_size) {
+ 		LOG_ERR("Unable to allocate FIFO for 0x%02x", ep_cfg->addr);
+ 		return -ENOMEM;
+ 	}
+ 
+-	if (HAL_PCDEx_SetTxFiFo(&priv->pcd, USB_EP_GET_IDX(ep_cfg->addr), words) != HAL_OK) {
+-		return -EIO;
+-	}
++	/*
++	 * Stage the new reservation, then program. Roll back on failure so the
++	 * table always reflects what is actually programmed: otherwise a failed
++	 * pass would leave the larger reservation committed and the grow-only
++	 * early-return above would skip reprogramming on a subsequent retry.
++	 */
++	prev = priv->tx_fifo_words[idx];
++	priv->tx_fifo_words[idx] = words;
+ 
+-	priv->occupied_mem += words * 4;
++	ret = udc_stm32_program_tx_fifos(dev);
++	if (ret != 0) {
++		priv->tx_fifo_words[idx] = prev;
++	}
+ 
+-	return 0;
++	return ret;
+ }
+ #endif
+ 

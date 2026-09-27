@@ -2,12 +2,13 @@
  * Copyright (c) 2026 OE5XRX
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
- * `loopback` shell command — test-only UAC2 internal loopback control.
+ * `audio` shell command tree — test-only UAC2 internal loopback control.
  *
- * Arms/disarms the bench test mode that routes USB OUT (host -> device) audio
- * straight back to USB IN (device -> host), bypassing the SA818. Lets the
- * host-side audio path be exercised without a working radio link. Compiled only
- * when CONFIG_FM_TEST_LOOPBACK is set (default n); never present in a production
+ * `audio loopback on|off|status` arms/disarms the bench test mode that routes
+ * USB OUT (host -> device) audio straight back to USB IN (device -> host),
+ * bypassing the SA818. Lets the host-side audio path be exercised without a
+ * working radio link (drives the HIL audio-loopback gate). Compiled only when
+ * CONFIG_FM_TEST_LOOPBACK is set (default n); never present in a production
  * build.
  */
 #include "usb_audio_bridge.h"
@@ -41,4 +42,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(loopback_subcmds, SHELL_CMD(on, NULL, "Enable int
                                SHELL_CMD(off, NULL, "Disable internal UAC2 loopback", cmd_loopback_off),
                                SHELL_CMD(status, NULL, "Show loopback state", cmd_loopback_status), SHELL_SUBCMD_SET_END);
 
-SHELL_CMD_REGISTER(loopback, &loopback_subcmds, "Test-only UAC2 internal loopback (SA818 bypass)", NULL);
+SHELL_STATIC_SUBCMD_SET_CREATE(audio_subcmds, SHELL_CMD(loopback, &loopback_subcmds, "Test-only UAC2 internal loopback (SA818 bypass)", NULL),
+                               SHELL_SUBCMD_SET_END);
+
+SHELL_CMD_REGISTER(audio, &audio_subcmds, "Audio test controls (bench/HIL only)", NULL);

@@ -104,12 +104,21 @@ This repo carries downstream fixes to west modules under `zephyr/patches/` (inde
 west patch apply
 ```
 
-Currently one patch: the STM32 UDC isochronous-OUT-incomplete recovery
-(`HAL_PCD_ISOOUTIncompleteCallback` in `drivers/usb/udc/udc_stm32.c`) — **required for
-UAC2 host→device playback (TX audio) on fm_board**; without it iso-OUT reception stalls after
-a few frames. `west update` resets the module, so re-run `west patch apply` afterwards (CI does
-this automatically after `action-zephyr-setup`). Upstream: zephyr#113622 (iso IN recovery is a
-separate follow-up).
+Currently one patch: the STM32 OTG UDC static TxFIFO allocation
+(`drivers/usb/udc/udc_stm32.c`) — **required for UAC2 full-duplex on fm_board**. The
+upstream driver sizes each IN-endpoint TxFIFO dynamically per `ep_enable` and frees it on
+`ep_disable`; because `HAL_PCDEx_SetTxFiFo()` derives a FIFO's offset from the live sizes of
+all lower-indexed FIFOs, enabling endpoints out of order or toggling an alternate setting (as
+ALSA does on underrun) makes a middle FIFO overlap a higher one. With three concurrent iso
+endpoints (iso-OUT playback + iso-IN explicit feedback 0x83 + iso-IN capture 0x84) the overlap
+wedges the OTG core: every IN endpoint (incl. CDC-ACM) stops, no reboot. The patch freezes the
+layout — reservations are recorded per index, grown monotonically, never released on disable,
+and re-programmed in strict index order — so offsets can never shift or overlap. Keeps explicit
+feedback working (no TX clock drift). `west update` resets the module, so re-run `west patch
+apply` afterwards (CI does this automatically after `action-zephyr-setup`).
+
+(The earlier iso-OUT-incomplete recovery, `HAL_PCD_ISOOUTIncompleteCallback` / zephyr#113622,
+is now upstream at the pinned SHA and no longer carried here.)
 
 ### Build commands
 
