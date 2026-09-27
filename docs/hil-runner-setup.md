@@ -233,6 +233,16 @@ The first run should complete all bench steps:
   playback/capture ALSA device (`card … [FM Transceiver Board]`). The gate scores
   the capture with `fw_hil.audio_analysis.analyze_loopback` (defaults:
   correlation ≥ 0.9, SNR ≥ 20 dB, dropout-fraction ≤ 0.01).
+- **Persistent west workspace is not reset per job** — for rebuild speed the
+  bench reuses `/home/hil/zephyrproject`; only the manifest repo is re-checked-out
+  to the PR commit (`west update` runs only when `west.yml` changes, which the
+  gate detects and fails on). The app is always rebuilt clean (`west build -p
+  always`), but PR-controlled build steps *could* mutate a Zephyr/module tree and
+  that contamination would carry into the next run. This is an accepted tradeoff
+  of the persistent-workspace model; the one-shot `hil-ok` gate (a maintainer
+  re-reviews the diff before every run) is the compensating control. A fully
+  disposable per-job workspace would remove the risk at the cost of a full
+  `west update` each run — a possible future hardening.
 - **The `fw_hil` bench-gate CLI entrypoint** does not yet exist;
   `scripts/hil_bench_gate.py` and `scripts/hil_audio_loopback.py` call the
   fw\_hil library directly. When FW-HIL exposes a proper CLI, update the
