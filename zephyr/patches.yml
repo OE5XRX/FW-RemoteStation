@@ -1,5 +1,31 @@
 # Downstream patches applied to west modules via 'west patch apply'.
-# (empty) The STM32 UDC isochronous-incomplete recovery is now upstream in
-# Zephyr (PR #113622), present at the pinned SHA, so no downstream patch is
-# needed. Re-add here only if a future pin predates an upstream fix.
-patches: []
+# Keep this list minimal; each entry should be upstreamable and tracked.
+patches:
+  - path: zephyr/0001-udc-stm32-static-txfifo-allocation.patch
+    sha256sum: 53fd40d3ac33f740b54ddd1992ebd65f00db111a73180604bfc6c47b9c476f2a
+    module: zephyr
+    author: Peter Buchegger
+    email: peter.buchegger7@gmail.com
+    date: 2026-09-27
+    upstreamable: true
+    issue: https://github.com/zephyrproject-rtos/zephyr/issues
+    comments: >
+      STM32 OTG UDC allocated the per-IN-endpoint TxFIFO dynamically on every
+      ep_enable and freed it on ep_disable. HAL_PCDEx_SetTxFiFo() derives each
+      FIFO's offset from the *live* sizes of all lower-indexed TxFIFOs, so
+      enabling endpoints out of order or toggling an alternate setting (as ALSA
+      does on underrun) makes a middle FIFO's slot get reused and then overlap a
+      higher-indexed one. With three concurrent iso endpoints -- UAC2 full-duplex
+      on fm_board: iso-OUT playback + iso-IN explicit feedback (0x83) + iso-IN
+      capture (0x84) -- the overlap corrupts the OTG core: all IN endpoints
+      (including CDC-ACM) wedge and no data flows, with no reboot. FIFO RAM is
+      not exhausted (~928/1280 B on OTG_FS); the failure is purely layout
+      overlap.
+
+      This patch freezes the layout: each IN endpoint's TxFIFO reservation is
+      recorded per index, grown monotonically, and never released on disable.
+      The whole layout is (re)programmed in strict index order from that table,
+      so offsets are always contiguous and non-overlapping regardless of the
+      order endpoints are enabled or how often an alternate setting is toggled.
+      Keeps explicit feedback (three iso EPs) working without drift. Fixes the
+      UAC2 full-duplex wedge on fm_board (STM32U575, OTG_FS).
