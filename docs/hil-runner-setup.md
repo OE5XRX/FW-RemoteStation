@@ -155,18 +155,43 @@ workspace at `/home/hil/zephyrproject`.
    ```
    (`hil` can read/execute `/opt/runner-hooks/runner-cleanup-hook.sh` but, since
    both the file and its parent are root-owned, cannot overwrite or replace it.)
-2. Point the runner at it via its `.env` (read by the runner service at start):
+2. Wire the hook via a **root-owned systemd drop-in**, not the runner's `.env`.
+   The `.env` file lives under `/opt/actions-runner`, which the FW-HIL playbook
+   owns as `hil` — the same account that runs PR code — so a job could rewrite or
+   delete an `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` line there and bypass the hook.
+   A drop-in under `/etc/systemd` is root-owned and outside the runner tree, so
+   neither PR code nor a runner auto-update can touch it:
    ```bash
-   echo 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/opt/runner-hooks/runner-cleanup-hook.sh' \
-     | sudo tee -a /opt/actions-runner/.env
+   sudo install -d -m 0755 /etc/systemd/system/gh-actions-runner.service.d
+   sudo tee /etc/systemd/system/gh-actions-runner.service.d/10-cleanup-hook.conf >/dev/null <<'UNIT'
+   [Service]
+   Environment=ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/opt/runner-hooks/runner-cleanup-hook.sh
+   UNIT
+   sudo systemctl daemon-reload
    ```
-3. Restart the runner so it picks up the new `.env`:
+3. Close the `.env` override path: the runner sources `.env` at start, so a
+   `hil`-writable `.env` could re-set `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` and win
+   over the drop-in. Make `.env` root-owned (the runner does not write it during
+   normal operation) and confirm it does **not** set the hook variable:
+   ```bash
+   sudo touch /opt/actions-runner/.env
+   sudo chown root:root /opt/actions-runner/.env
+   sudo chmod 0644 /opt/actions-runner/.env
+   grep -q ACTIONS_RUNNER_HOOK_JOB_COMPLETED /opt/actions-runner/.env \
+     && echo "REMOVE the hook line from .env — the drop-in owns it" || true
+   ```
+   > **FW-HIL playbook follow-up:** the playbook currently `chown -R hil`s
+   > `/opt/actions-runner`, which would revert `.env` to `hil` ownership on the
+   > next run. Exclude `.env` from that recursive chown (or re-apply the root
+   > ownership after provisioning) so this boundary survives re-provisioning.
+4. Restart the runner so it picks up the drop-in:
    ```bash
    sudo systemctl restart gh-actions-runner.service
    ```
 
 Verify: after the next job, the runner log shows `[runner-cleanup-hook]` lines
-and `_work/FW-RemoteStation` is empty.
+and `_work/FW-RemoteStation` is empty. Confirm the wiring is root-protected with
+`systemctl show gh-actions-runner.service -p Environment | grep HOOK`.
 
 ---
 

@@ -132,14 +132,18 @@ jobs:
           fi
           west patch apply
 
-      # imgtool is required by the MCUboot sysbuild signing step.
-      # It is not pre-installed in the bench venv; install it once here so all
-      # three --sysbuild builds below can sign images.
-      - name: Install imgtool
+      # The --sysbuild builds below need imgtool (MCUboot signing) plus the rest
+      # of the Zephyr/MCUboot Python requirements. Per repo convention
+      # (CLAUDE.md), `west packages pip --install` is the canonical way to install
+      # them — it covers imgtool and every other sysbuild dep, so a freshly
+      # provisioned bench venv (which ships only west/pyocd/fw_hil) does not fail
+      # the first build. Must run inside the west workspace. Idempotent.
+      - name: Install sysbuild Python requirements
+        working-directory: /home/hil/zephyrproject
         run: |
           set -euo pipefail
           source /opt/fw-hil-venv/bin/activate
-          pip install --quiet imgtool
+          west packages pip --install
 
       # Build baseline: SKIP_SA818=y so the health gate confirms without 12 V.
       # VERSION_TWEAK is explicitly set to 0 so the gate's expected version string
