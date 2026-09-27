@@ -14,9 +14,11 @@ These steps require a GitHub PAT or admin access; they cannot be automated.
 > account `pbuchegger` has passwordless sudo (`NOPASSWD:ALL`) — if the runner
 > ran as `pbuchegger`, any PR (including from an approved fork) would get
 > **instant root** on the box. The `hil` service account is deliberately
-> **sudo-less** (groups: `hil`, `dialout`, `audio`, `plugdev` only) and can read
-> no credentials, so untrusted firmware code is confined to the hardware it needs
-> and nothing more.
+> **sudo-less** — it holds only the hardware-access groups it needs
+> (`dialout` + `plugdev` for the CDC/ST-Link udev rules, and `audio` for the
+> loopback gate's ALSA access; see the group note under *Known limitations*) —
+> and can read no credentials, so untrusted firmware code is confined to the
+> hardware it needs and nothing more.
 >
 > Every `sudo -u hil -i` and every `systemctl` unit below is written for `hil` on
 > purpose. Do not "fix" a permission error by switching the runner to
@@ -130,23 +132,33 @@ workflow YAML — so a PR cannot alter or skip it.
 
 The hook script lives in this repo at
 [`scripts/runner-cleanup-hook.sh`](../scripts/runner-cleanup-hook.sh). It is
-defensive and idempotent: it only ever deletes **inside** a runner `_work` tree
-(it refuses otherwise) and never touches the persistent west workspace at
-`/home/hil/zephyrproject`.
+defensive and idempotent: it only ever deletes inside a **resolved** runner
+`_work` tree (it `realpath`-canonicalizes the workspace and refuses if it escaped
+`_work`, defeating symlink redirection) and never touches the persistent west
+workspace at `/home/hil/zephyrproject`.
 
-1. Copy the script to a stable path owned by `hil` (it must survive runner
-   auto-updates, so keep it outside `/opt/actions-runner`):
+> ⚠️ **Install the hook root-owned and NOT writable by `hil`.** The hook runs as
+> the runner user (`hil`), which also executes PR-controlled build code. If the
+> hook lived in a `hil`-writable path, a PR could overwrite it during the job and
+> make the runner execute attacker-controlled cleanup (or none) afterwards —
+> defeating the whole point. Install it (and its parent directory) `root:root`,
+> mode `0755`, so `hil` can execute but not modify it.
+
+1. As an admin, **review** `scripts/runner-cleanup-hook.sh` in the reviewed
+   commit, then install it to a root-owned path (outside `/opt/actions-runner` so
+   it survives runner auto-updates):
    ```bash
-   sudo -u hil -i
-   mkdir -p /home/hil/runner-hooks
-   cp /home/hil/zephyrproject/FW-RemoteStation/scripts/runner-cleanup-hook.sh \
-      /home/hil/runner-hooks/runner-cleanup-hook.sh
-   chmod +x /home/hil/runner-hooks/runner-cleanup-hook.sh
+   sudo install -d -o root -g root -m 0755 /opt/runner-hooks
+   sudo install -o root -g root -m 0755 \
+     /home/hil/zephyrproject/FW-RemoteStation/scripts/runner-cleanup-hook.sh \
+     /opt/runner-hooks/runner-cleanup-hook.sh
    ```
+   (`hil` can read/execute `/opt/runner-hooks/runner-cleanup-hook.sh` but, since
+   both the file and its parent are root-owned, cannot overwrite or replace it.)
 2. Point the runner at it via its `.env` (read by the runner service at start):
    ```bash
-   echo 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/home/hil/runner-hooks/runner-cleanup-hook.sh' \
-     >> /opt/actions-runner/.env
+   echo 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/opt/runner-hooks/runner-cleanup-hook.sh' \
+     | sudo tee -a /opt/actions-runner/.env
    ```
 3. Restart the runner so it picks up the new `.env`:
    ```bash
@@ -203,8 +215,15 @@ The first run should complete all bench steps:
 ## Known limitations (to be resolved with future work)
 
 - **`dfu-util` and `pyusb` require USB access** — the udev rules grant the
-  `dialout` and `plugdev` groups; `hil` is in both. If the runner runs as a
+  `dialout` and `plugdev` groups; `hil` must be in both. If the runner runs as a
   different user, adjust group membership accordingly.
+- **The audio-loopback gate needs the `audio` group** — `aplay`/`arecord` open
+  the board's ALSA device, which requires `hil` to be in the `audio` group. The
+  FW-HIL Ansible playbook currently provisions only `dialout` + `plugdev`, so on
+  a freshly re-provisioned box add `audio` explicitly
+  (`sudo usermod -aG audio hil` and re-login the service), or the loopback step
+  fails with an ALSA permission error. Folding `audio` into the playbook's runner
+  groups is a FW-HIL follow-up.
 - **Audio loopback (Baustein 8.4)** is wired into the workflow
   (`scripts/hil_audio_loopback.py`). It is a **purely digital** firmware
   loopback: `CONFIG_FM_TEST_LOOPBACK=y` routes the UAC2 OUT stream

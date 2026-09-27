@@ -49,27 +49,36 @@ if [ -z "$ws" ]; then
   exit 0
 fi
 
-# Refuse to delete anything not clearly inside a runner _work tree, plus a
-# minimum-length guard against absurdly short paths.
-case "$ws" in
+# Canonicalize before deleting. A textual match on "$ws" is not enough: a job
+# runs as this same user, so it could point a component of the workspace path at
+# the persistent west workspace via a symlink. realpath resolves every symlink;
+# we then require the RESOLVED path to still sit inside a runner _work tree. If
+# resolution fails or the resolved path escaped _work, we refuse to delete.
+ws_real=$(realpath -e "$ws" 2>/dev/null) || {
+  log "cannot resolve '$ws' — refusing to wipe"
+  exit 0
+}
+case "$ws_real" in
   */_work/*) : ;;
   *)
-    log "refusing to wipe '$ws' — not inside a runner _work tree"
+    log "resolved path '$ws_real' is not inside a runner _work tree — refusing to wipe"
     exit 0
     ;;
 esac
-if [ "${#ws}" -lt 12 ]; then
-  log "refusing to wipe suspiciously short path '$ws'"
+# Never operate on the _work root itself or an absurdly short path.
+if [ "$ws_real" = "${ws_real%%/_work/*}/_work" ] || [ "${#ws_real}" -lt 12 ]; then
+  log "refusing to wipe '$ws_real' — too close to the _work root"
   exit 0
 fi
 
-if [ -d "$ws" ]; then
+if [ -d "$ws_real" ]; then
   # Delete the contents but keep the directory itself; the runner expects it to
-  # exist for the next job.
-  find "$ws" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
-  log "wiped workspace contents under $ws"
+  # exist for the next job. Children that are symlinks are removed as links
+  # (rm does not follow them), so only the _work tree's own files are deleted.
+  find "$ws_real" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+  log "wiped workspace contents under $ws_real"
 else
-  log "workspace '$ws' does not exist — nothing to wipe"
+  log "workspace '$ws_real' does not exist — nothing to wipe"
 fi
 
 exit 0
