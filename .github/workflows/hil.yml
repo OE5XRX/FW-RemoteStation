@@ -248,3 +248,45 @@ jobs:
             --probe-serial    35FF70064D4D323837380843 \
             --cdc             /dev/fm-board-cdc \
             --card-hint       "FM Transceiver Board"
+
+  # ── Auto-remove the 'hil-ok' label after every gate run ────────────────────
+  # Each 'hil-ok' add is a single, one-shot approval: once the bench has run
+  # (pass OR fail), the label is removed so "labeled == approved right now" always
+  # holds. A maintainer must consciously re-add it — after re-reading the diff —
+  # to run the bench again.
+  #
+  # This runs as a SEPARATE job on a GitHub-hosted runner, NOT the self-hosted
+  # bench, and it deliberately checks out NO code. Removing a label needs
+  # `pull-requests: write`, but the bench job (which executes PR-controlled code)
+  # is kept at `contents: read`. Isolating the write scope here means PR code
+  # never runs in a job that holds a writable token.
+  remove-hil-ok-label:
+    name: Remove hil-ok label
+    needs: hil_bench_gate
+    # always(): remove the label whether the gate passed, failed, or was
+    # cancelled. Skip for workflow_dispatch (no PR / no label to remove).
+    if: always() && github.event_name == 'pull_request_target' && github.event.label.name == 'hil-ok'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove hil-ok label from PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'hil-ok',
+              });
+              core.info('Removed hil-ok label.');
+            } catch (error) {
+              // 404 == label already gone (e.g. removed manually). Not an error.
+              if (error.status === 404) {
+                core.info('hil-ok label already absent — nothing to remove.');
+              } else {
+                throw error;
+              }
+            }

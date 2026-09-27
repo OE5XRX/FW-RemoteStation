@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# runner-cleanup-hook.sh — GitHub Actions "job completed" hook for the HIL bench.
+#
+# Wired host-side via ACTIONS_RUNNER_HOOK_JOB_COMPLETED in the self-hosted
+# runner's .env (see docs/hil-runner-setup.md), NOT from the workflow YAML — so a
+# PR cannot alter or skip it. The runner invokes it AFTER every job, regardless
+# of outcome. It does two things:
+#
+#   1. Kill stray bench processes the job may have left running — pyocd holding
+#      the SWD probe, aplay/arecord holding the ALSA device, dfu-util mid
+#      transfer — so the next job finds the hardware free.
+#   2. Wipe the runner's _work workspace so PR-controlled files from this run do
+#      not persist into the next job.
+#
+# Defensive + idempotent: safe when there is nothing to clean, and it refuses to
+# delete anything outside the runner's _work tree. It never touches the
+# persistent west workspace at /home/hil/zephyrproject.
+#
+# Note: -e is deliberately NOT set — cleanup must run to completion even when an
+# individual step has nothing to do (e.g. pkill finds no match and exits 1).
+set -uo pipefail
+
+log() { echo "[runner-cleanup-hook] $*"; }
+
+# ── 1. Kill stray bench processes owned by this runner user ──────────────────
+# Scope every kill to the current user so we never touch another user's tools.
+# pkill exits non-zero when nothing matches; that is expected, not an error.
+me=$(id -un)
+
+for proc in pyocd aplay arecord dfu-util; do
+  if pkill -x -u "$me" "$proc" 2>/dev/null; then
+    log "killed stray $proc"
+  fi
+done
+
+# pyocd is frequently launched as `python .../pyocd ...`, which -x by exact name
+# misses. Match the pyocd token in the full command line, still scoped to this
+# user. The bracket in '[p]yocd' keeps pkill from matching its own arg list.
+if pkill -u "$me" -f '[p]yocd' 2>/dev/null; then
+  log "killed stray pyocd (python launcher form)"
+fi
+
+# ── 2. Wipe the runner _work workspace ───────────────────────────────────────
+# RUNNER_WORKSPACE points at .../_work/<repo>; GITHUB_WORKSPACE at
+# .../_work/<repo>/<repo>. Clean the enclosing per-repo workspace directory.
+ws="${RUNNER_WORKSPACE:-${GITHUB_WORKSPACE:-}}"
+if [ -z "$ws" ]; then
+  log "no RUNNER_WORKSPACE/GITHUB_WORKSPACE set — nothing to wipe"
+  exit 0
+fi
+
+# Refuse to delete anything not clearly inside a runner _work tree, plus a
+# minimum-length guard against absurdly short paths.
+case "$ws" in
+  */_work/*) : ;;
+  *)
+    log "refusing to wipe '$ws' — not inside a runner _work tree"
+    exit 0
+    ;;
+esac
+if [ "${#ws}" -lt 12 ]; then
+  log "refusing to wipe suspiciously short path '$ws'"
+  exit 0
+fi
+
+if [ -d "$ws" ]; then
+  # Delete the contents but keep the directory itself; the runner expects it to
+  # exist for the next job.
+  find "$ws" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+  log "wiped workspace contents under $ws"
+else
+  log "workspace '$ws' does not exist — nothing to wipe"
+fi
+
+exit 0
