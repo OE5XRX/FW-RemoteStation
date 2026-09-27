@@ -11,6 +11,7 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
+#include "audio_route.h"
 #include "audio_stream.h"
 #include "feedback.h"
 
@@ -175,8 +176,9 @@ static void sa818_rx_data_cb(const struct device *dev, const uint8_t *buffer, si
   k_mutex_lock(&ctx->lock, K_FOREVER);
 #if IS_ENABLED(CONFIG_FM_TEST_LOOPBACK)
   /* SA818 bypass: while loopback is armed the RX ring carries the looped-back
-   * USB OUT audio, so drop the real SA818 capture to keep it from mixing in. */
-  if (ctx->loopback_enabled) {
+   * USB OUT audio, so drop the real SA818 capture to keep it from mixing in.
+   * The decision is the pure, native_sim-tested audio_route::classify_sa818_rx(). */
+  if (audio_route::classify_sa818_rx(ctx->loopback_enabled) == audio_route::Sa818RxRoute::DropLoopback) {
     k_mutex_unlock(&ctx->lock);
     return;
   }
@@ -328,12 +330,14 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal, void *
    * bypassing the SA818 TX path entirely. This is the single gated hook of the
    * bench loopback mode; the production build (CONFIG_FM_TEST_LOOPBACK=n) compiles
    * it out and the normal SA818 path below is unchanged. The flag is read under
-   * the same lock as the ring op (shell thread writes it, usbd_thread reads it). */
+   * the same lock as the ring op (shell thread writes it, usbd_thread reads it).
+   * The route is the pure, native_sim-tested audio_route::classify_out(). */
   if (ctx->loopback_enabled) {
-    /* Mirror the SA818 RX path: only buffer while the USB IN terminal is active.
-     * If the host opens OUT before IN, buffering here would fill the ring with
-     * stale audio that plays out (delayed) or overflows once IN comes up. */
-    if (!ctx->rx_enabled) {
+    /* classify_out mirrors the SA818 RX path: only buffer while the USB IN
+     * terminal is active. If the host opens OUT before IN, buffering would fill
+     * the ring with stale audio that plays out (delayed) or overflows once IN
+     * comes up -- so DropInInactive drops it. */
+    if (audio_route::classify_out(true, ctx->rx_enabled) == audio_route::OutRoute::DropInInactive) {
       k_mutex_unlock(&ctx->lock);
       return;
     }

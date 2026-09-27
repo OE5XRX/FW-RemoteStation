@@ -38,7 +38,7 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
     endif()
     # Test-only bench loopback shell command (SA818 bypass); default-off Kconfig.
     if(CONFIG_FM_TEST_LOOPBACK)
-        target_sources(app PRIVATE src/loopback_shell.cpp)
+        target_sources(app PRIVATE src/audio_shell.cpp)
     endif()
 else()
     target_sources(app PRIVATE src/main.cpp)

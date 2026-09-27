@@ -5,9 +5,11 @@
  * Unit tests for the UAC2 explicit-feedback regulator (native_sim).
  */
 #include "adc_pcm.h"
+#include "audio_route.h"
 #include "dac_pcm.h"
 #include "feedback.h"
 
+#include <zephyr/sys/ring_buffer.h>
 #include <zephyr/ztest.h>
 
 /* fm_board audio: 8 kHz, 16-bit mono => 8 samples/SOF, TX ring 256 samples. */
@@ -147,4 +149,118 @@ ZTEST(dac_pcm, test_roundtrip_with_adc) {
     int16_t pcm = adc_to_pcm16(code, 12);
     zassert_equal(pcm16_to_dac(pcm, 12), code, "code %u -> pcm %d -> %u", code, pcm, pcm16_to_dac(pcm, 12));
   }
+}
+
+/*
+ * audio_route: the pure routing decision for the test-mode UAC2 loopback
+ * (CONFIG_FM_TEST_LOOPBACK). usb_audio_bridge.cpp -- which only builds against
+ * the USB device stack (not native_sim) -- dispatches its OUT and SA818-RX taps
+ * on exactly these classifiers, so testing them here verifies the routing logic
+ * on native_sim without any USB/hardware ("simulation equals hardware").
+ */
+using audio_route::OutRoute;
+using audio_route::Sa818RxRoute;
+
+ZTEST_SUITE(audio_route, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(audio_route, test_out_route_truth_table) {
+  /* Loopback off: USB OUT always flows to the SA818 TX ring, regardless of the
+   * USB IN terminal state. This is the production path. */
+  zassert_equal(audio_route::classify_out(false, false), OutRoute::TxRing);
+  zassert_equal(audio_route::classify_out(false, true), OutRoute::TxRing);
+
+  /* Loopback on: OUT is looped into the RX ring only while USB IN is active;
+   * dropped otherwise so it cannot pool into stale/overflowing audio. */
+  zassert_equal(audio_route::classify_out(true, true), OutRoute::RxRingLoopback);
+  zassert_equal(audio_route::classify_out(true, false), OutRoute::DropInInactive);
+}
+
+ZTEST(audio_route, test_sa818_rx_route_truth_table) {
+  /* Loopback off: real SA818 capture flows to the RX ring (-> USB IN). */
+  zassert_equal(audio_route::classify_sa818_rx(false), Sa818RxRoute::RxRing);
+  /* Loopback on: SA818 capture is dropped so it cannot mix into the RX ring,
+   * which is carrying the looped-back USB OUT audio. */
+  zassert_equal(audio_route::classify_sa818_rx(true), Sa818RxRoute::DropLoopback);
+}
+
+/*
+ * Integration against real ring buffers: replicate the bridge's tap dispatch
+ * (classify_* -> ring_buf_put) and assert the bytes land in the right ring.
+ * This is the concrete "OUT lands in rx_ring, SA818 push suppressed" check.
+ */
+static void route_out(struct ring_buf *tx, struct ring_buf *rx, bool loopback, bool rx_enabled, const uint8_t *data, uint32_t len) {
+  switch (audio_route::classify_out(loopback, rx_enabled)) {
+  case OutRoute::TxRing:
+    ring_buf_put(tx, data, len);
+    break;
+  case OutRoute::RxRingLoopback:
+    ring_buf_put(rx, data, len);
+    break;
+  case OutRoute::DropInInactive:
+    break;
+  }
+}
+
+static void route_sa818_rx(struct ring_buf *rx, bool loopback, const uint8_t *data, uint32_t len) {
+  if (audio_route::classify_sa818_rx(loopback) == Sa818RxRoute::RxRing) {
+    ring_buf_put(rx, data, len);
+  }
+}
+
+ZTEST(audio_route, test_ring_dispatch_loopback_on) {
+  uint8_t tx_storage[64];
+  uint8_t rx_storage[64];
+  struct ring_buf tx, rx;
+  ring_buf_init(&tx, sizeof(tx_storage), tx_storage);
+  ring_buf_init(&rx, sizeof(rx_storage), rx_storage);
+
+  const uint8_t usb_out[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+  const uint8_t sa818[4] = {9, 9, 9, 9};
+
+  /* Loopback armed, USB IN active: USB OUT must land in RX (not TX), and the
+   * SA818 capture must be suppressed so it cannot mix in. */
+  route_out(&tx, &rx, /*loopback=*/true, /*rx_enabled=*/true, usb_out, sizeof(usb_out));
+  route_sa818_rx(&rx, /*loopback=*/true, sa818, sizeof(sa818));
+
+  zassert_equal(ring_buf_size_get(&tx), 0, "TX ring must stay empty in loopback");
+  zassert_equal(ring_buf_size_get(&rx), sizeof(usb_out), "RX ring must hold only the looped USB OUT bytes");
+
+  uint8_t out[16];
+  uint32_t n = ring_buf_get(&rx, out, sizeof(out));
+  zassert_equal(n, sizeof(usb_out));
+  zassert_mem_equal(out, usb_out, sizeof(usb_out), "looped bytes must be the USB OUT payload, not SA818 capture");
+}
+
+ZTEST(audio_route, test_ring_dispatch_loopback_off) {
+  uint8_t tx_storage[64];
+  uint8_t rx_storage[64];
+  struct ring_buf tx, rx;
+  ring_buf_init(&tx, sizeof(tx_storage), tx_storage);
+  ring_buf_init(&rx, sizeof(rx_storage), rx_storage);
+
+  const uint8_t usb_out[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+  const uint8_t sa818[4] = {9, 9, 9, 9};
+
+  /* Production path: USB OUT -> TX ring, SA818 capture -> RX ring. */
+  route_out(&tx, &rx, /*loopback=*/false, /*rx_enabled=*/true, usb_out, sizeof(usb_out));
+  route_sa818_rx(&rx, /*loopback=*/false, sa818, sizeof(sa818));
+
+  zassert_equal(ring_buf_size_get(&tx), sizeof(usb_out), "USB OUT must reach the SA818 TX ring");
+  zassert_equal(ring_buf_size_get(&rx), sizeof(sa818), "SA818 capture must reach the RX ring");
+}
+
+ZTEST(audio_route, test_loopback_drops_out_while_in_inactive) {
+  uint8_t tx_storage[64];
+  uint8_t rx_storage[64];
+  struct ring_buf tx, rx;
+  ring_buf_init(&tx, sizeof(tx_storage), tx_storage);
+  ring_buf_init(&rx, sizeof(rx_storage), rx_storage);
+
+  const uint8_t usb_out[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+
+  /* Loopback armed but USB IN not yet open: OUT is dropped (neither ring). */
+  route_out(&tx, &rx, /*loopback=*/true, /*rx_enabled=*/false, usb_out, sizeof(usb_out));
+
+  zassert_equal(ring_buf_size_get(&tx), 0, "no TX buffering in loopback");
+  zassert_equal(ring_buf_size_get(&rx), 0, "OUT must be dropped while USB IN is inactive");
 }

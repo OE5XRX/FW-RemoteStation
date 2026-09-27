@@ -20,8 +20,8 @@ config FM_TEST_LOOPBACK
 	help
 	  Bench test mode. When armed at runtime it bridges the UAC2 OUT stream
 	  (USB host -> device) straight back into the UAC2 IN stream
-	  (device -> USB host), bypassing the SA818 radio entirely. Adds a
-	  `loopback on|off|status` shell command to arm it. Intended for
+	  (device -> USB host), bypassing the SA818 radio entirely. Adds an
+	  `audio loopback on|off|status` shell command to arm it. Intended for
 	  hardware-in-the-loop verification of the host-side audio path without a
 	  working radio link. Default n; never enable in a production build.
 
