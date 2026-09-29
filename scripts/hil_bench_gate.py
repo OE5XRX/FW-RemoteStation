@@ -99,9 +99,16 @@ def main() -> int:
     # run_update_cycle re-flashes the same baseline (idempotent, ~15s), which is
     # acceptable. A recovery-flash failure is recorded as a clean failure so the
     # subsequent 'if not failures' guards short-circuit the remaining steps.
+    #
+    # flash_baseline() only programs flash; it does not boot the image — the
+    # validated run_update_cycle / run_revert_cycle both pair it with reset().
+    # Mirror that contract here so the target actually boots the recovered image
+    # before the USB assert inspects it; without the reset the pre-gate check
+    # could still observe the prior halted state and fail to recover the bench.
     print("\n=== Step 0: SWD baseline recovery flash ===")
     try:
         ops.flash_baseline(args.baseline_build_dir)
+        ops.reset()
         print("PASS")
     except Exception as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
