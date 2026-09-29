@@ -3,6 +3,7 @@
 """HIL bench gate for FW-RemoteStation.
 
 Orchestrates the bench gate:
+  0. SWD baseline flash    (recovery: force a known image over SWD, USB-independent)
   1. USB composite assert  (pre-gate sanity: board is alive and enumerates)
   2. DFU update cycle      (baseline → update → healthy image sticks)
   3. DFU revert cycle      (baseline → unhealthy → MCUboot reverts to baseline)
@@ -88,14 +89,33 @@ def main() -> int:
 
     failures: list[str] = []
 
-    # ── Step 1: USB composite assert (pre-gate) ──────────────────────────────
-    print("\n=== Step 1: USB composite assert (pre-gate) ===")
+    # ── Step 0: SWD baseline recovery flash ──────────────────────────────────
+    # Run an SWD (pyocd) baseline flash BEFORE the USB pre-gate assert. A board
+    # left in a DFU / unconfigured-USB state by an aborted prior run would fail
+    # assert_fm_board() below, which — being 'if not failures'-gated — would
+    # skip every later step, including run_update_cycle's own baseline flash,
+    # leaving the bench wedged. flash_baseline uses SWD and is independent of
+    # the USB state, so it restores a known-good image first. The later
+    # run_update_cycle re-flashes the same baseline (idempotent, ~15s), which is
+    # acceptable. A recovery-flash failure is recorded as a clean failure so the
+    # subsequent 'if not failures' guards short-circuit the remaining steps.
+    print("\n=== Step 0: SWD baseline recovery flash ===")
     try:
-        assert_fm_board()
+        ops.flash_baseline(args.baseline_build_dir)
         print("PASS")
     except Exception as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
-        failures.append(f"usb-enum-pre: {exc}")
+        failures.append(f"baseline-recovery-flash: {exc}")
+
+    # ── Step 1: USB composite assert (pre-gate) ──────────────────────────────
+    if not failures:
+        print("\n=== Step 1: USB composite assert (pre-gate) ===")
+        try:
+            assert_fm_board()
+            print("PASS")
+        except Exception as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            failures.append(f"usb-enum-pre: {exc}")
 
     # ── Step 2: DFU update cycle ──────────────────────────────────────────────
     # flash_baseline expects a west sysbuild build directory (not a raw .bin);
