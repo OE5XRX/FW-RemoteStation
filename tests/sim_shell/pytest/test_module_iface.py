@@ -477,11 +477,13 @@ def test_module_filter_independence(sa818_sim, shell):
     """Setting one filter must not disturb the other two."""
     shell.exec_command("sa818 power on")
     # Start: all on
-    shell.exec_command("module fm set filter_hpf off")
+    r = _payload(shell.exec_command("module fm set filter_hpf off"), "MODULE-RESULT")
+    assert r["ok"] is True
     assert sa818_sim.get_state().high_pass is False
     assert sa818_sim.get_state().pre_emphasis is True  # unchanged
     assert sa818_sim.get_state().low_pass is True       # unchanged
-    shell.exec_command("module fm set filter_lpf off")
+    r = _payload(shell.exec_command("module fm set filter_lpf off"), "MODULE-RESULT")
+    assert r["ok"] is True
     assert sa818_sim.get_state().low_pass is False
     assert sa818_sim.get_state().high_pass is False     # still off from above
     assert sa818_sim.get_state().pre_emphasis is True   # still unchanged
