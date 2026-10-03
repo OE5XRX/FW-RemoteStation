@@ -37,7 +37,7 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["uid_source"] == "synthetic"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band", "audio"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band", "audio", "filter_pre_emphasis", "filter_hpf", "filter_lpf"}
 
     # audio path is declared as a capability so the agent derives it from the schema
     assert caps["audio"]["kind"] == "audio"
@@ -406,13 +406,16 @@ def test_module_status_snapshot(sa818_sim, shell):
     # every advertised capability appears in the snapshot
     assert set(v) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level",
                       "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone",
-                      "band", "audio"}
+                      "band", "audio", "filter_pre_emphasis", "filter_hpf", "filter_lpf"}
     # types match the describe schema
     assert isinstance(v["frequency"], float)
     assert isinstance(v["ptt"], bool)
     assert isinstance(v["volume"], int)
     assert v["power_level"] in ("low", "high")
     assert v["audio"] == "uac2"
+    assert isinstance(v["filter_pre_emphasis"], bool)
+    assert isinstance(v["filter_hpf"], bool)
+    assert isinstance(v["filter_lpf"], bool)
 
 
 def test_module_status_reflects_live_state(sa818_sim, shell):
@@ -429,3 +432,74 @@ def test_module_status_unknown_module(shell):
     r = _payload(out, "MODULE-RESULT")
     assert r["ok"] is False and r["error"] == "unknown_module"
     assert r["op"] == "status"
+
+
+def test_module_filter_describe(shell):
+    out = shell.exec_command("module fm describe")
+    caps = {c["name"]: c for c in _payload(out, "MODULE-DESCRIBE")["capabilities"]}
+    for name in ("filter_pre_emphasis", "filter_hpf", "filter_lpf"):
+        assert caps[name]["kind"] == "setting"
+        assert caps[name]["type"] == "bool"
+        assert caps[name]["access"] == "operator"
+        assert "unit" not in caps[name]
+        assert "ranges" not in caps[name]
+        assert "values" not in caps[name]
+
+
+def test_module_filter_default_on(sa818_sim, shell):
+    """Boot default: all three filters enabled (matches SA818Simulator SA818State defaults)."""
+    shell.exec_command("sa818 power on")
+    for cap in ("filter_pre_emphasis", "filter_hpf", "filter_lpf"):
+        r = _payload(shell.exec_command(f"module fm get {cap}"), "MODULE-RESULT")
+        assert r["ok"] is True
+        assert r["value"] is True, f"{cap} should default to True"
+
+
+def test_module_filter_set_get_e2e(sa818_sim, shell):
+    """Set pre-emphasis off; simulator state reflects AT+SETFILTER; get returns updated value."""
+    shell.exec_command("sa818 power on")
+    r = _payload(shell.exec_command("module fm set filter_pre_emphasis off"), "MODULE-RESULT")
+    assert r["ok"] is True
+    assert r["cap"] == "filter_pre_emphasis"
+    assert r["op"] == "set"
+    assert r["value"] is False
+    assert sa818_sim.get_state().pre_emphasis is False
+    # get reads back from shadow
+    r = _payload(shell.exec_command("module fm get filter_pre_emphasis"), "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] is False
+    # re-enable
+    r = _payload(shell.exec_command("module fm set filter_pre_emphasis on"), "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] is True
+    assert sa818_sim.get_state().pre_emphasis is True
+
+
+def test_module_filter_independence(sa818_sim, shell):
+    """Setting one filter must not disturb the other two."""
+    shell.exec_command("sa818 power on")
+    # Start: all on
+    shell.exec_command("module fm set filter_hpf off")
+    assert sa818_sim.get_state().high_pass is False
+    assert sa818_sim.get_state().pre_emphasis is True  # unchanged
+    assert sa818_sim.get_state().low_pass is True       # unchanged
+    shell.exec_command("module fm set filter_lpf off")
+    assert sa818_sim.get_state().low_pass is False
+    assert sa818_sim.get_state().high_pass is False     # still off from above
+    assert sa818_sim.get_state().pre_emphasis is True   # still unchanged
+
+
+def test_module_filter_bad_value(shell):
+    """Non-bool values are rejected."""
+    shell.exec_command("sa818 power on")
+    for cap in ("filter_pre_emphasis", "filter_hpf", "filter_lpf"):
+        r = _payload(shell.exec_command(f"module fm set {cap} maybe"), "MODULE-RESULT")
+        assert r["ok"] is False and r["error"] == "bad_value", f"{cap}: expected bad_value"
+
+
+def test_module_filter_bool_forms(sa818_sim, shell):
+    """All accepted bool forms work: on/off, 1/0, true/false."""
+    shell.exec_command("sa818 power on")
+    for val_off, val_on in (("off", "on"), ("0", "1"), ("false", "true")):
+        r = _payload(shell.exec_command(f"module fm set filter_pre_emphasis {val_off}"), "MODULE-RESULT")
+        assert r["ok"] is True and r["value"] is False, f"val_off={val_off}"
+        r = _payload(shell.exec_command(f"module fm set filter_pre_emphasis {val_on}"), "MODULE-RESULT")
+        assert r["ok"] is True and r["value"] is True, f"val_on={val_on}"
