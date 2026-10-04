@@ -62,6 +62,7 @@ struct Sa818Context {
   sa818_tone_code tone_tx;
   sa818_tone_code tone_rx;
   sa818_squelch_level squelch;
+  sa818_filter_flags filters;
 
   bool ready() const { return dev != nullptr && device_is_ready(dev); }
 };
@@ -139,7 +140,7 @@ const Range SQUELCH_RANGES[] = {{nullptr, 0.0, 8.0}};
  * never be reentered — it is the correct place for these, not the stack. */
 constexpr size_t RESULT_BUF_SIZE = 768;
 constexpr size_t DESCRIBE_BUF_SIZE = 2048;
-constexpr size_t STATUS_BUF_SIZE = 768; // ~13 caps x key+value (longest values are %.4f floats); same headroom as RESULT_BUF_SIZE
+constexpr size_t STATUS_BUF_SIZE = 768; // ~16 caps x key+value (longest values are %.4f floats); same headroom as RESULT_BUF_SIZE
 
 /* Enum value strings: defined once, used for BOTH the descriptor tables below and the
  * parse/serialize logic in the capabilities, so the advertised enum and the accepted
@@ -165,6 +166,9 @@ const FieldSpec TXTONE_SPEC{"tx_tone", ValueType::String};
 const FieldSpec RXTONE_SPEC{"rx_tone", ValueType::String};
 const FieldSpec BAND_SPEC{"band", ValueType::String, nullptr, nullptr, 0, nullptr, 0, /*readonly=*/true};
 const FieldSpec AUDIO_SPEC{"audio", ValueType::Stream};
+const FieldSpec FILTER_PRE_EMPHASIS_SPEC{"filter_pre_emphasis", ValueType::Bool};
+const FieldSpec FILTER_HPF_SPEC{"filter_hpf", ValueType::Bool};
+const FieldSpec FILTER_LPF_SPEC{"filter_lpf", ValueType::Bool};
 
 class FrequencyCap : public Setting {
 public:
@@ -467,6 +471,108 @@ protected:
   Result onGet() override { return Result::okStr("uac2"); }
 };
 
+class FilterPreEmphasisCap : public Setting {
+public:
+  explicit FilterPreEmphasisCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return FILTER_PRE_EMPHASIS_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    std::optional<bool> v = parse_bool(value);
+    if (!v) {
+      return Result::err("bad_value");
+    }
+    sa818_filter_flags new_flags = *v ? static_cast<sa818_filter_flags>(ctx_.filters | SA818_FILTER_PRE_EMPHASIS)
+                                      : static_cast<sa818_filter_flags>(ctx_.filters & static_cast<uint8_t>(~SA818_FILTER_PRE_EMPHASIS));
+    if (sa818_at_set_filters(ctx_.dev, new_flags) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.filters = new_flags;
+    return Result::okBool(*v);
+  }
+
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okBool(!!(ctx_.filters & SA818_FILTER_PRE_EMPHASIS));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class FilterHpfCap : public Setting {
+public:
+  explicit FilterHpfCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return FILTER_HPF_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    std::optional<bool> v = parse_bool(value);
+    if (!v) {
+      return Result::err("bad_value");
+    }
+    sa818_filter_flags new_flags = *v ? static_cast<sa818_filter_flags>(ctx_.filters | SA818_FILTER_HIGH_PASS)
+                                      : static_cast<sa818_filter_flags>(ctx_.filters & static_cast<uint8_t>(~SA818_FILTER_HIGH_PASS));
+    if (sa818_at_set_filters(ctx_.dev, new_flags) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.filters = new_flags;
+    return Result::okBool(*v);
+  }
+
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okBool(!!(ctx_.filters & SA818_FILTER_HIGH_PASS));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+class FilterLpfCap : public Setting {
+public:
+  explicit FilterLpfCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return FILTER_LPF_SPEC; }
+
+protected:
+  Result onSet(const char *value) override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    std::optional<bool> v = parse_bool(value);
+    if (!v) {
+      return Result::err("bad_value");
+    }
+    sa818_filter_flags new_flags = *v ? static_cast<sa818_filter_flags>(ctx_.filters | SA818_FILTER_LOW_PASS)
+                                      : static_cast<sa818_filter_flags>(ctx_.filters & static_cast<uint8_t>(~SA818_FILTER_LOW_PASS));
+    if (sa818_at_set_filters(ctx_.dev, new_flags) != SA818_OK) {
+      return Result::err("driver_error");
+    }
+    ctx_.filters = new_flags;
+    return Result::okBool(*v);
+  }
+
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okBool(!!(ctx_.filters & SA818_FILTER_LOW_PASS));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
 /* "none"/"off" are the only strings that legitimately mean "no tone". Any other string
  * that parses to SA818_TONE_NONE is unrecognized (garbage / out-of-range code) and must be
  * rejected as bad_value rather than silently clearing the tone. */
@@ -581,8 +687,14 @@ private:
 };
 
 /* Registry: one shared context + one instance per capability, all statically allocated. */
-Sa818Context g_ctx{
-    DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)), SA818_BW_12_5_KHZ, BAND_DEFAULT_FREQ, BAND_DEFAULT_FREQ, SA818_TONE_NONE, SA818_TONE_NONE, SA818_SQL_LEVEL_4};
+Sa818Context g_ctx{DEVICE_DT_GET_OR_NULL(DT_NODELABEL(sa818)),
+                   SA818_BW_12_5_KHZ,
+                   BAND_DEFAULT_FREQ,
+                   BAND_DEFAULT_FREQ,
+                   SA818_TONE_NONE,
+                   SA818_TONE_NONE,
+                   SA818_SQL_LEVEL_4,
+                   SA818_FILTER_ALL};
 
 FrequencyCap g_freq{g_ctx};
 TxFrequencyCap g_txfreq{g_ctx};
@@ -597,9 +709,12 @@ TxToneCap g_txtone{g_ctx};
 RxToneCap g_rxtone{g_ctx};
 BandCap g_band{g_ctx};
 AudioCap g_audio;
+FilterPreEmphasisCap g_filter_pre{g_ctx};
+FilterHpfCap g_filter_hpf{g_ctx};
+FilterLpfCap g_filter_lpf{g_ctx};
 
-Capability *const g_caps[] = {&g_freq,      &g_txfreq,  &g_rxfreq, &g_ptt,    &g_power, &g_rssi, &g_volume,
-                              &g_bandwidth, &g_squelch, &g_txtone, &g_rxtone, &g_band,  &g_audio};
+Capability *const g_caps[] = {&g_freq,    &g_txfreq, &g_rxfreq, &g_ptt,  &g_power, &g_rssi,       &g_volume,     &g_bandwidth,
+                              &g_squelch, &g_txtone, &g_rxtone, &g_band, &g_audio, &g_filter_pre, &g_filter_hpf, &g_filter_lpf};
 
 /* Runtime identity fields. The Identity holds stable pointers into these static
  * buffers; Module snapshots the pointers at static-init while the buffers are
