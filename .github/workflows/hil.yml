@@ -76,7 +76,7 @@ jobs:
       # permissions; the subsequent build steps run PR-controlled code, so the
       # token must not be readable from the workspace.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
