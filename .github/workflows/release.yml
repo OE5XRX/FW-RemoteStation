@@ -177,15 +177,16 @@ jobs:
                 # dry_run → dev key (no SIGNING_KEY_FILE set, MCUboot's built-in
                 # root-ec-p256.pem is used automatically). Real release → the
                 # OE5XRX production key materialized above from the org secret.
-                # $keyarg is intentionally unquoted so it expands to nothing when
-                # empty (dry-run path) — word-splitting is the desired behaviour.
-                keyarg=""
+                # Kconfig string symbols need literal double quotes in the -D value
+                # (Zephyr doc form -DSB_CONFIG_...=\"<path>\"); without them Kconfig
+                # reports "malformed string literal" and aborts. Array keeps the
+                # quotes intact and expands to nothing on the dry-run path.
+                keyargs=()
                 if [ -n "${SIGNING_KEY_FILE:-}" ]; then
-                  keyarg="-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=${SIGNING_KEY_FILE}"
+                  keyargs=("-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"${SIGNING_KEY_FILE}\"")
                 fi
-                # shellcheck disable=SC2086  # $keyarg intentionally unquoted: empty on dry-run → no extra arg
                 west build -b "$board" --sysbuild app -p always -d build-signed -- \
-                  -Dapp_EXTRA_DTC_OVERLAY_FILE="$overlay" $keyarg
+                  -Dapp_EXTRA_DTC_OVERLAY_FILE="$overlay" "${keyargs[@]}"
                 cp build-signed/app/zephyr/zephyr.signed.bin "release/out/${name}.signed.bin"
                 cp build-signed/mcuboot/zephyr/zephyr.hex     "release/out/${name}.mcuboot.hex"
                 # Memory-usage overview: the "Memory region" table (FLASH/RAM/...)
