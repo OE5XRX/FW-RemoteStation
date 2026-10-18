@@ -53,11 +53,12 @@ jobs:
       # since ~2026-10-18) declares a pytest11 entry point to a module it does not
       # ship, so every pytest start under Twister dies with
       # "No module named 'platformdirs.pytest_plugin'". Newer releases ship it.
+      # TODO: drop this step once Zephyr's requirements no longer resolve to 4.11.15.
       - name: Work around broken platformdirs pytest plugin
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --upgrade 'platformdirs>=4.13'
+          python3 -m pip install --upgrade 'platformdirs>=4.13,<5'
 
       - name: West sanity
         shell: bash
@@ -95,16 +96,6 @@ jobs:
         run: |
           set -euo pipefail
           west twister -T tests/sim_shell -p native_sim/native/64 -v --inline-logs
-
-      - name: Dump sim_shell harness logs (on failure)
-        if: failure()
-        working-directory: fw
-        shell: bash
-        run: |
-          for f in $(find twister-out -path '*sim_shell*' \( -name 'twister_harness.log' -o -name 'handler.log' -o -name 'pytest*.log' \) 2>/dev/null); do
-            echo "::group::$f"; cat "$f"; echo "::endgroup::"
-          done
-          pip list 2>/dev/null | grep -iE "pytest|pluggy|setuptools|iniconfig|crcmod|platformdirs" || true
 
       - name: Twister ETL proof (tests/etl)
         working-directory: fw
