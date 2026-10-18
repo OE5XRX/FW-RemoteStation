@@ -49,6 +49,16 @@ jobs:
           app-path: fw
           toolchains: arm-zephyr-eabi
 
+      # platformdirs 4.11.15 (pulled in transitively by Zephyr's pip requirements
+      # since ~2026-10-18) declares a pytest11 entry point to a module it does not
+      # ship, so every pytest start under Twister dies with
+      # "No module named 'platformdirs.pytest_plugin'". Newer releases ship it.
+      - name: Work around broken platformdirs pytest plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade 'platformdirs>=4.13'
+
       - name: West sanity
         shell: bash
         run: |
