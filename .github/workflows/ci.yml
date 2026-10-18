@@ -86,6 +86,16 @@ jobs:
           set -euo pipefail
           west twister -T tests/sim_shell -p native_sim/native/64 -v --inline-logs
 
+      - name: Dump sim_shell harness logs (on failure)
+        if: failure()
+        working-directory: fw
+        shell: bash
+        run: |
+          for f in $(find twister-out -path '*sim_shell*' \( -name 'twister_harness.log' -o -name 'handler.log' -o -name 'pytest*.log' \) 2>/dev/null); do
+            echo "::group::$f"; cat "$f"; echo "::endgroup::"
+          done
+          pip list 2>/dev/null | grep -iE "pytest|pluggy|setuptools|iniconfig|crcmod|platformdirs" || true
+
       - name: Twister ETL proof (tests/etl)
         working-directory: fw
         shell: bash
