@@ -156,7 +156,7 @@ def test_module_describe_omits_boot_key_without_mcuboot(shell):
 **Interfaces:**
 - Consumes: Task 2 firmware; `imgtool dumpinfo` of the flashed artifact
 
-- [ ] **Step 1: Add the HW assertion** (runs in the `hil-ok`-gated workflow):
+- [x] **Step 1: Add the HW assertion** (runs in the `hil-ok`-gated workflow):
 
 ```python
 def test_describe_reports_boot_key_matching_image(...):
@@ -170,6 +170,8 @@ def test_describe_reports_boot_key_matching_image(...):
 - [ ] **Step 4: Bare build:** `west build -b fm_board app` and flash. Expected: `describe` has **no** `boot_key`, and the rest is unchanged.
 - [ ] **Step 5: Restore the bench** to `main` + pristine Zephyr pin. Paste the describe outputs (minus UID) and the imgtool KEYHASH line into the PR description.
 - [ ] **Step 6: Commit** — `test(hil): assert describe boot_key matches flashed image KEYHASH`
+
+> **Status (2026-11-03):** Step 1 code done — `scripts/mcuboot_keyhash.py` (Python twin of the C parser + `parse_describe`), new Step 5 in `scripts/hil_bench_gate.py` (`check_boot_key`), unit tests in `scripts/tests/test_mcuboot_keyhash.py`. Steps 2–5 (manual bench, OTA swap, bare build, restore) **pending — HIL bench down (2026-11-03)**.
 
 ---
 
