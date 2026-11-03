@@ -111,6 +111,13 @@ jobs:
           set -euo pipefail
           west twister -T tests/boot_confirm -p native_sim/native/64 -v --inline-logs
 
+      - name: Twister boot-key parser (tests/unit_boot_key)
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          west twister -T tests/unit_boot_key -p native_sim/native/64 -v --inline-logs
+
       - name: Build fm_board (USB composite)
         working-directory: fw
         shell: bash
