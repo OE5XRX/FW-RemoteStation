@@ -36,7 +36,11 @@ jobs:
           git diff --quiet || (echo "::error::clang-format produced changes"; git --no-pager diff --name-only; exit 1)
 
   build_and_tests:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04 (runner image 20261025), whose host
+    # glibc/g++ headers clash with Zephyr's `#define __unused` (toolchain/gcc.h)
+    # in the native_sim C++ build ("declaration does not declare anything").
+    # TODO: unpin once the Zephyr pin is bumped past a fix for the 26.04 host toolchain.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7

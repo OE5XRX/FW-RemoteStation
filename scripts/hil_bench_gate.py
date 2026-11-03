@@ -232,6 +232,10 @@ def main() -> int:
     # must equal the KEYHASH prefix of the baseline's signed app. The update
     # image is signed with the same key, so its prefix must match too (sanity:
     # catches a CI build accidentally switching keys between images).
+    # Limitation: every bench image is signed with the same (dev) key, so this
+    # step proves the field is present, well-formed and matches the signing key
+    # -- it cannot tell which slot the firmware read it from. Slot selection is
+    # covered by the swap-using-offset layout (running image at slot0 offset 0).
     if not failures:
         print("\n=== Step 5: describe boot_key vs flashed image KEYHASH ===")
         baseline_bin = os.path.join(args.baseline_build_dir, "app", "zephyr", "zephyr.signed.bin")
