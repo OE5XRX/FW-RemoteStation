@@ -77,17 +77,22 @@ def keyhash_prefix(data: bytes) -> str | None:
 
     end = off + total
     off += _TLV_HDR_LEN
-    while _fits(off, _TLV_HDR_LEN, end):
+    # Walk the whole area: entries must tile it exactly and carry exactly one
+    # KEYHASH, else the key is ambiguous -> None (mirrors boot_key.cpp).
+    prefix = None
+    while off != end:
+        if not _fits(off, _TLV_HDR_LEN, end):
+            return None
         tlv_type, length = struct.unpack_from("<HH", data, off)
         off += _TLV_HDR_LEN
         if not _fits(off, length, end):
             return None
         if tlv_type == TLV_KEYHASH:
-            if length != KEYHASH_LEN:
+            if prefix is not None or length != KEYHASH_LEN:
                 return None
-            return data[off : off + BOOT_KEY_HEX_LEN // 2].hex()
+            prefix = data[off : off + BOOT_KEY_HEX_LEN // 2].hex()
         off += length
-    return None
+    return prefix
 
 
 def keyhash_prefix_file(path: str) -> str | None:

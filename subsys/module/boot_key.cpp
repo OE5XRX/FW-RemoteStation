@@ -14,8 +14,9 @@
  *   [unprotected area] info{u16 0x6907, u16 total_len (incl. info)} + entries
  *   entry: u16 type, u16 len, len bytes data
  *
- * KEYHASH (type 0x0001, len 32) lives in the unprotected area. Every offset is
- * checked against @p size with non-wrapping arithmetic; any doubt -> absent.
+ * KEYHASH (type 0x0001, len 32) lives in the unprotected area; exactly one is
+ * required and the entries must tile the area exactly. Every offset is checked
+ * against @p size with non-wrapping arithmetic; any doubt -> absent.
  */
 #include "boot_key.h"
 
@@ -106,11 +107,14 @@ bool find_keyhash_prefix(ImageReadFn read, void *ctx, size_t size, uint8_t prefi
 
   const size_t end = off + total; // fits() above: no wrap, end <= size.
   off += kTlvHdrLen;
+  // Walk the whole area (not just up to the KEYHASH): entries must tile it
+  // exactly and carry exactly one KEYHASH, else the key is ambiguous -> absent.
   // Each iteration advances by >= kTlvHdrLen, so the walk is bounded by total.
-  while (fits(off, kTlvHdrLen, end)) {
+  bool found = false;
+  while (off != end) {
     uint16_t type = 0;
     uint16_t len = 0;
-    if (!read_pair(read, ctx, size, off, type, len)) {
+    if (!fits(off, kTlvHdrLen, end) || !read_pair(read, ctx, size, off, type, len)) {
       return false;
     }
     off += kTlvHdrLen;
@@ -118,11 +122,14 @@ bool find_keyhash_prefix(ImageReadFn read, void *ctx, size_t size, uint8_t prefi
       return false;
     }
     if (type == kTlvKeyHash) {
-      return len == kKeyHashLen && read_at(read, ctx, size, off, prefix, kPrefixBytes);
+      if (found || len != kKeyHashLen || !read_at(read, ctx, size, off, prefix, kPrefixBytes)) {
+        return false;
+      }
+      found = true;
     }
     off += len;
   }
-  return false;
+  return found;
 }
 
 } // namespace

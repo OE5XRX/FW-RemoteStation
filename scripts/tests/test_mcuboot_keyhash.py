@@ -33,17 +33,21 @@ def _tlv_info_off(img) -> int:
     return hdr_size + img_size + protect
 
 
-def _keyhash_entry_off(img) -> int:
-    """Independent walk (same as the ztest helper) to the KEYHASH entry header."""
+def _entry_off(img, tlv_type: int) -> int:
+    """Independent walk (same as the ztest helper) to the first entry of tlv_type."""
     info = _tlv_info_off(img)
     assert _le16(img, info) == 0x6907
     end = info + _le16(img, info + 2)
     off = info + 4
     while off + 4 <= end:
-        if _le16(img, off) == 0x0001:
+        if _le16(img, off) == tlv_type:
             return off
         off += 4 + _le16(img, off + 2)
-    raise AssertionError("fixture has no KEYHASH")
+    raise AssertionError(f"fixture has no TLV of type {tlv_type:#x}")
+
+
+def _keyhash_entry_off(img) -> int:
+    return _entry_off(img, 0x0001)
 
 
 def _put16(img: bytearray, off: int, v: int) -> None:
@@ -140,6 +144,32 @@ def test_keyhash_type_patched_returns_none():
 def test_keyhash_wrong_len_returns_none():
     img = bytearray(_fixture("dev-signed.bin"))
     _put16(img, _keyhash_entry_off(img) + 2, 0x0010)
+    assert keyhash_prefix(bytes(img)) is None
+
+
+def test_duplicate_keyhash_returns_none():
+    # SHA256 TLV (len 32) retyped as a KEYHASH ahead of the real one: ambiguous.
+    img = bytearray(_fixture("dev-signed.bin"))
+    sha = _entry_off(img, 0x0010)
+    assert sha < _keyhash_entry_off(img)
+    assert _le16(img, sha + 2) == 32
+    _put16(img, sha, 0x0001)
+    assert keyhash_prefix(bytes(img)) is None
+
+
+def test_corrupt_entry_after_keyhash_returns_none():
+    img = bytearray(_fixture("dev-signed.bin"))
+    nxt = _keyhash_entry_off(img) + 4 + 32
+    info = _tlv_info_off(img)
+    assert nxt + 4 <= info + _le16(img, info + 2)
+    _put16(img, nxt + 2, 0xFFF0)
+    assert keyhash_prefix(bytes(img)) is None
+
+
+def test_trailing_garbage_in_tlv_area_returns_none():
+    img = bytearray(_fixture("dev-signed.bin")) + b"\x00\x00"
+    info = _tlv_info_off(img)
+    _put16(img, info + 2, _le16(img, info + 2) + 2)
     assert keyhash_prefix(bytes(img)) is None
 
 

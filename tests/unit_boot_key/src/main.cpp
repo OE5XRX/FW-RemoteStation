@@ -81,18 +81,22 @@ size_t tlv_info_off(const uint8_t *img) {
   return le16(img + 8) + le32(img + 12) + le16(img + 10);
 }
 
-// Independent walk: offset of the KEYHASH entry header in a fixture.
-size_t keyhash_entry_off(const uint8_t *img) {
+// Independent walk: offset of the first TLV entry header of @p type in a fixture.
+size_t entry_off(const uint8_t *img, uint16_t type) {
   size_t info = tlv_info_off(img);
   zassert_equal(le16(img + info), 0x6907);
   size_t end = info + le16(img + info + 2);
   for (size_t off = info + 4; off + 4 <= end; off += 4 + le16(img + off + 2)) {
-    if (le16(img + off) == 0x0001) {
+    if (le16(img + off) == type) {
       return off;
     }
   }
-  zassert_unreachable("fixture has no KEYHASH");
+  zassert_unreachable("fixture has no TLV of the requested type");
   return 0;
+}
+
+size_t keyhash_entry_off(const uint8_t *img) {
+  return entry_off(img, 0x0001);
 }
 
 bool run(const uint8_t *data, size_t len, size_t size, char *out) {
@@ -189,6 +193,40 @@ ZTEST(boot_key, test_keyhash_wrong_len_returns_absent) {
   size_t n = copy(kDevSigned, sizeof(kDevSigned));
   put16(s_img + keyhash_entry_off(s_img) + 2, 0x0010);
   expect_absent(s_img, n, n);
+}
+
+ZTEST(boot_key, test_duplicate_keyhash_returns_absent) {
+  // A second (here: preceding) 32-byte KEYHASH makes the key ambiguous: the
+  // SHA256 TLV (type 0x10, len 32) is retyped as KEYHASH ahead of the real one.
+  size_t n = copy(kDevSigned, sizeof(kDevSigned));
+  size_t sha = entry_off(s_img, 0x0010);
+  zassert_true(sha < keyhash_entry_off(s_img), "fixture order: SHA256 before KEYHASH");
+  zassert_equal(le16(s_img + sha + 2), 32);
+  put16(s_img + sha, 0x0001);
+  expect_absent(s_img, n, n);
+}
+
+ZTEST(boot_key, test_corrupt_entry_after_keyhash_returns_absent) {
+  // The area is validated through its exact end, not just up to the KEYHASH:
+  // an entry after it whose length overruns the area -> absent.
+  size_t n = copy(kDevSigned, sizeof(kDevSigned));
+  size_t kh = keyhash_entry_off(s_img);
+  size_t next = kh + 4 + 32;
+  zassert_true(next + 4 <= tlv_info_off(s_img) + le16(s_img + tlv_info_off(s_img) + 2), "fixture: entry after KEYHASH");
+  put16(s_img + next + 2, 0xFFF0);
+  expect_absent(s_img, n, n);
+}
+
+ZTEST(boot_key, test_trailing_garbage_in_tlv_area_returns_absent) {
+  // Entries must tile the area exactly; a short tail (< one entry header) that
+  // is left over after the last entry -> absent. Grow the declared area by 2
+  // bytes and give the buffer 2 more bytes so the area still fits in size.
+  size_t n = copy(kDevSigned, sizeof(kDevSigned));
+  size_t info = tlv_info_off(s_img);
+  put16(s_img + info + 2, static_cast<uint16_t>(le16(s_img + info + 2) + 2));
+  s_img[n] = 0;
+  s_img[n + 1] = 0;
+  expect_absent(s_img, n + 2, n + 2);
 }
 
 ZTEST(boot_key, test_wrong_magic_returns_absent) {
