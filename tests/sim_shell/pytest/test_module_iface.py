@@ -90,6 +90,14 @@ def test_module_identity_uid_stable(shell):
     assert d1["identity"]["uid_source"] == d2["identity"]["uid_source"] == "synthetic"
 
 
+def test_module_describe_omits_boot_key_without_mcuboot(shell):
+    """native_sim has no MCUboot image, so identity.boot_key must be omitted
+    (never an empty string or null) and the schema stays 2 (additive field)."""
+    d = _payload(shell.exec_command("module fm describe"), "MODULE-DESCRIBE")
+    assert "boot_key" not in d["identity"]
+    assert d["schema"] == 2
+
+
 def test_module_set_frequency_e2e(sa818_sim, shell):
     """The §8 datapoint: typed set flows through the real driver to the module."""
     shell.exec_command("sa818 power on")

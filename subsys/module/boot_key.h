@@ -25,3 +25,11 @@ inline constexpr size_t kBootKeyHexLen = 16;
 [[nodiscard]] bool boot_key_from_image(ImageReadFn read, void *ctx, size_t size, char *out);
 
 } // namespace mod
+
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+/** MCUboot builds only (boot_key_flash.cpp): fill @p out (mod::kBootKeyHexLen + 1 bytes)
+ *  with the boot key of the running image, read from slot0_partition via the flash map.
+ *  Never faults: on any error (flash not ready, no MCUboot header / KEYHASH) out[0] = '\0',
+ *  so identity.boot_key is simply omitted and boot continues. */
+void mod_boot_key_init(char *out);
+#endif

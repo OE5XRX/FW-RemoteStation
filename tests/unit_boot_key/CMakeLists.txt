@@ -9,6 +9,8 @@ project(boot_key_test)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../subsys/module)
 target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/describe.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/../../app/src/etl_error_handler.cpp
   ${CMAKE_CURRENT_LIST_DIR}/../../subsys/module/boot_key.cpp
 )
 

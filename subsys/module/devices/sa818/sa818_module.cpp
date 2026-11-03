@@ -14,6 +14,7 @@
 
 #ifdef CONFIG_MODULE_SA818
 
+#include "boot_key.h"
 #include "device_uid.h"
 
 #include <etl/string_view.h>
@@ -722,10 +723,12 @@ Capability *const g_caps[] = {&g_freq,    &g_txfreq, &g_rxfreq, &g_ptt,  &g_powe
  * before the shell can serve `module fm describe`. Filling in a SYS_INIT hook
  * (rather than calling the providers in the aggregate initializer) keeps hwinfo
  * / entropy access off the C++ static-init path, where driver readiness is not
- * guaranteed. */
+ * guaranteed. s_boot_key (MCUboot KEYHASH prefix) is filled only on MCUboot
+ * builds; elsewhere it stays "" and describe omits identity.boot_key. */
 char s_fw_version[16];
 char s_uid[25];
 char s_uid_source[16];
+char s_boot_key[mod::kBootKeyHexLen + 1];
 
 int module_identity_init(void) {
   // Mirror version_shell.cpp's APP-VERSION formatting exactly (YY.MM.DD-NN).
@@ -734,13 +737,16 @@ int module_identity_init(void) {
   s_uid[sizeof(s_uid) - 1] = '\0';
   strncpy(s_uid_source, mod_uid_source(), sizeof(s_uid_source) - 1);
   s_uid_source[sizeof(s_uid_source) - 1] = '\0';
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+  mod_boot_key_init(s_boot_key);
+#endif
   return 0;
 }
 SYS_INIT(module_identity_init, APPLICATION, 0);
 
-// variant == BAND_NAME ("vhf"/"uhf"); model == BAND_MODEL; version/uid/uid_source
-// point into the buffers filled by module_identity_init at APPLICATION init.
-const Identity g_identity{"fm_transceiver", BAND_MODEL, s_fw_version, BAND_NAME, s_uid, s_uid_source};
+// variant == BAND_NAME ("vhf"/"uhf"); model == BAND_MODEL; version/uid/uid_source/
+// boot_key point into the buffers filled by module_identity_init at APPLICATION init.
+const Identity g_identity{"fm_transceiver", BAND_MODEL, s_fw_version, BAND_NAME, s_uid, s_uid_source, s_boot_key};
 Module g_module{g_identity, "fm", g_caps};
 Module *const g_modules[] = {&g_module};
 ModuleRegistry g_registry{g_modules};
