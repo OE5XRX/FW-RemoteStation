@@ -8,6 +8,7 @@ Orchestrates the bench gate:
   2. DFU update cycle      (baseline → update → healthy image sticks)
   3. DFU revert cycle      (baseline → unhealthy → MCUboot reverts to baseline)
   4. USB composite assert  (post-gate: board still enumerates after the cycles)
+  5. describe boot_key     (identity.boot_key == KEYHASH prefix of the running image)
 
 Called by .github/workflows/hil.yml on the [self-hosted, hil, fm_board] runner.
 Requires fw_hil pre-installed in /opt/fw-hil-venv (FW-HIL ansible/site.yml).
@@ -19,6 +20,12 @@ import argparse
 import os
 import re
 import sys
+import time
+
+# `python scripts/hil_bench_gate.py` runs from the repo root; make the sibling
+# pure-stdlib helper importable regardless of cwd.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from mcuboot_keyhash import BOOT_KEY_RE, keyhash_prefix_file, parse_describe
 
 
 def _parse_version(fw_repo_dir: str, tweak_override: int | None = None) -> str:
@@ -42,6 +49,56 @@ def _parse_version(fw_repo_dir: str, tweak_override: int | None = None) -> str:
         f"{fields['PATCHLEVEL']:02d}-"
         f"{tweak:02d}"
     )
+
+
+def check_boot_key(describe: dict | None, expected: str | None) -> str | None:
+    """Compare describe identity.boot_key against the expected KEYHASH prefix.
+
+    Returns an error message, or None if boot_key is well-formed and matches.
+    """
+    if expected is None or not BOOT_KEY_RE.fullmatch(expected):
+        return f"expected KEYHASH prefix unavailable/malformed: {expected!r}"
+    if not isinstance(describe, dict):
+        return "no parseable MODULE-DESCRIBE line on the CDC shell"
+    identity = describe.get("identity")
+    if not isinstance(identity, dict):
+        return f"MODULE-DESCRIBE has no identity object: {describe!r}"
+    if "boot_key" not in identity:
+        return "identity.boot_key missing (MCUboot build must report it)"
+    boot_key = identity["boot_key"]
+    if not isinstance(boot_key, str) or not BOOT_KEY_RE.fullmatch(boot_key):
+        return f"identity.boot_key malformed: {boot_key!r} (want 16 lowercase hex)"
+    if boot_key != expected:
+        return f"identity.boot_key {boot_key!r} != flashed image KEYHASH prefix {expected!r}"
+    return None
+
+
+def read_describe(cdc_path: str, timeout: float = 20.0) -> dict | None:  # pragma: no cover
+    """Run `module fm describe` on the CDC shell; return the parsed JSON or None.
+
+    Mirrors fw_hil's LiveDfuOps.read_app_version: open at 115200, settle,
+    flush, send, wait, read — retried until timeout (the CDC port may still be
+    re-enumerating after the revert cycle).
+    """
+    import serial  # pyserial (fw-hil venv); imported lazily so unit tests don't need it
+
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with serial.Serial(cdc_path, 115200, timeout=1) as port:
+                time.sleep(0.3)
+                port.reset_input_buffer()
+                port.write(b"module fm describe\r\n")
+                time.sleep(1.0)
+                text = port.read(8000).decode("utf-8", errors="replace")
+            describe = parse_describe(text)
+            if describe is not None:
+                return describe
+        except (OSError, serial.SerialException):
+            pass
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(1.0)
 
 
 def main() -> int:
@@ -169,6 +226,38 @@ def main() -> int:
         except Exception as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             failures.append(f"usb-enum-post: {exc}")
+
+    # ── Step 5: describe boot_key == running image KEYHASH ───────────────────
+    # After the revert cycle the baseline image runs again, so identity.boot_key
+    # must equal the KEYHASH prefix of the baseline's signed app. The update
+    # image is signed with the same key, so its prefix must match too (sanity:
+    # catches a CI build accidentally switching keys between images).
+    # Limitation: every bench image is signed with the same (dev) key, so this
+    # step proves the field is present, well-formed and matches the signing key
+    # -- it cannot tell which slot the firmware read it from. Slot selection is
+    # covered by the swap-using-offset layout (running image at slot0 offset 0).
+    if not failures:
+        print("\n=== Step 5: describe boot_key vs flashed image KEYHASH ===")
+        baseline_bin = os.path.join(args.baseline_build_dir, "app", "zephyr", "zephyr.signed.bin")
+        expected = keyhash_prefix_file(baseline_bin)
+        new_prefix = keyhash_prefix_file(args.new_image)
+        print(f"Baseline KEYHASH prefix: {expected!r} ({baseline_bin})")
+        print(f"Update   KEYHASH prefix: {new_prefix!r} ({args.new_image})")
+        err = None
+        if new_prefix != expected:
+            err = f"update image KEYHASH prefix {new_prefix!r} != baseline {expected!r} (different signing key?)"
+        else:
+            describe = read_describe(args.cdc)
+            identity = describe.get("identity") if isinstance(describe, dict) else None
+            identity = identity if isinstance(identity, dict) else {}
+            # Log boot_key + version only: the board UID stays out of CI logs.
+            print(f"describe: boot_key={identity.get('boot_key')!r} version={identity.get('version')!r}")
+            err = check_boot_key(describe, expected)
+        if err is None:
+            print(f"PASS: boot_key={expected}")
+        else:
+            print(f"FAIL: {err}", file=sys.stderr)
+            failures.append(f"describe-boot-key: {err}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     if not failures:

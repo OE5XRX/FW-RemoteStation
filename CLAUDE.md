@@ -176,7 +176,7 @@ west twister -T tests/etl -p native_sim/native/64 -v
 
 Three jobs must be green for every PR and push to `main`:
 - **`clang_format`** — clang-format-18 over `app/`, `boards/`, `tests/`; fails on any diff.
-- **`build_and_tests`** — builds `native_sim`, then runs Twister on `app --integration`, `tests/sim_shell`, `tests/etl`, `tests/boot_confirm`, `tests/usb_audio` (build-only), and `tests/unit_audio`.
+- **`build_and_tests`** — builds `native_sim`, then runs Twister on `app --integration`, `tests/sim_shell`, `tests/etl`, `tests/boot_confirm`, `tests/unit_boot_key`, `tests/usb_audio` (build-only), `tests/unit_audio`, and `tests/unit_device_uid`.
 - **`prod_build`** — installs MCUboot pip requirements, applies patches, builds `fm_board --sysbuild app` (dev key), and asserts `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` exist.
 
 CI uses `zephyrproject-rtos/action-zephyr-setup@v1`, not the devcontainer.
@@ -209,4 +209,4 @@ No regressions. New code must include or reference tests.
 - **Driver result codes are `[[nodiscard]]`.** The compiler will warn if you discard the return value of any `sa818_*` function; treat the warning as an error.
 - **DT `band` is a build-time constant.** It selects the SA818 model string, the default frequency, and the valid frequency ranges at compile time via `DT_ENUM_IDX`. Do not attempt to change the band at runtime.
 - **Keep platform/access/persistence out of FW.** The firmware is thin by design. Do not add capability persistence, user/role models, or platform configuration to the firmware.
-- **Real test dirs are `tests/boot_confirm`, `tests/etl`, `tests/sim_shell`, `tests/unit_audio`, `tests/usb_audio`.** Do not invent or reference test directory names not listed here. Check `.github/workflows/ci.yml` for the exact set wired into CI — all five directories are currently gated.
+- **Real test dirs are `tests/boot_confirm`, `tests/etl`, `tests/sim_shell`, `tests/unit_audio`, `tests/unit_boot_key`, `tests/unit_device_uid`, `tests/usb_audio`.** Do not invent or reference test directory names not listed here. Check `.github/workflows/ci.yml` for the exact set wired into CI — all seven directories are currently gated.

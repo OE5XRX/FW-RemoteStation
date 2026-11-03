@@ -12,6 +12,13 @@ zephyr_library_sources_ifdef(CONFIG_MODULE_SA818 devices/sa818/sa818_module.cpp)
 # Consumed by the SA818 module identity; kept module-agnostic for reuse.
 zephyr_library_sources_ifdef(CONFIG_MODULE_SA818 device_uid.cpp)
 
+# Pure MCUboot KEYHASH-prefix parser (identity.boot_key); no device deps.
+zephyr_library_sources_ifdef(CONFIG_MODULE_SA818 boot_key.cpp)
+# Flash-map glue (reads slot0_partition); only an MCUboot build has an image header there.
+if(CONFIG_MODULE_SA818 AND CONFIG_BOOTLOADER_MCUBOOT)
+  zephyr_library_sources(boot_key_flash.cpp)
+endif()
+
 # Compile-time stack-frame guard for the module shell handlers.
 #
 # The `module` shell commands run on the shell thread, whose stack is only
