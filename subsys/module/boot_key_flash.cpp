@@ -4,8 +4,8 @@
  *
  * Flash-map glue for identity.boot_key (MCUboot builds only): runs the pure
  * KEYHASH parser over slot0_partition, where MCUboot keeps the running image
- * header at offset 0 (swap / overwrite modes; direct-XIP and RAM-load report
- * absent). Every failure degrades to "absent" -- no assert, no panic:
+ * header at offset 0 (swap / overwrite / single-app modes; every other MCUboot
+ * mode reports absent). Every failure degrades to "absent" -- no assert, no panic:
  * a missing boot key must never affect boot or the boot-confirm health gate.
  */
 #include "boot_key.h"
@@ -13,10 +13,12 @@
 #include <sys/types.h>
 #include <zephyr/storage/flash_map.h>
 
-#if defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP) || defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP_WITH_REVERT) ||                                    \
-    defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_RAM_LOAD) || defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_RAM_LOAD_WITH_REVERT)
-// In these modes the running image may live in either slot; reading slot0
-// could report the *other* image's key. Absent beats wrong.
+#if !(defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET) || defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_MOVE) ||                                  \
+      defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH) || defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_OVERWRITE_ONLY) ||                                        \
+      defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP))
+// Allow-list: only in these modes is the running image guaranteed to sit at
+// slot0 offset 0. Elsewhere (direct-XIP, RAM-load, firmware-updater, future
+// modes) reading slot0 could report another image's key. Absent beats wrong.
 void mod_boot_key_init(char *out) {
   out[0] = '\0';
 }

@@ -43,4 +43,4 @@ $IMG sign --key "$other_key" "${common[@]}" "$payload" other-signed.bin
 $IMG sign --key "$DEV_KEY" "${common[@]}" --security-counter 7 "$payload" prot-signed.bin
 
 echo "other-signed.bin KEYHASH prefix (update kOtherPrefix / OTHER_PREFIX):"
-$IMG dumpinfo other-signed.bin | grep -A3 "KEYHASH" | grep -m1 "data:"
+python3 ../../../scripts/mcuboot_keyhash.py other-signed.bin
