@@ -22,7 +22,11 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04 (runner image 20261025), whose host
+    # glibc/g++ headers clash with Zephyr's `#define __unused` (toolchain/gcc.h)
+    # in the native_sim C++ build ("declaration does not declare anything").
+    # TODO: unpin once the Zephyr pin is bumped past a fix for the 26.04 host toolchain.
+    runs-on: ubuntu-24.04
     steps:
       - name: Guard — real release only on the default branch
         if: ${{ !inputs.dry_run }}
