@@ -20,9 +20,19 @@ GateOutcome run_health_gate(const GateConfig &cfg, const GateHooks &hooks, const
   int64_t healthy_since = -1; // -1 == not currently in a healthy streak
 
   for (;;) {
+    const bool healthy = all_healthy(criteria, n_criteria);
+    // Sample time after the sweep: probes may block (SA818 AT timeout), and the
+    // deadline must be judged against when the sweep actually finished.
     const int64_t now = hooks.now_ms(hooks.ctx);
 
-    if (all_healthy(criteria, n_criteria)) {
+    // A completed sweep proves the gate thread is alive, however long a
+    // (legitimately slow) probe blocked. Feeding here rather than around the
+    // sleep keeps the watchdog's worst-case gap at one sweep + one poll.
+    if (hooks.feed != nullptr) {
+      hooks.feed(hooks.ctx);
+    }
+
+    if (healthy) {
       if (healthy_since < 0) {
         healthy_since = now;
       }
