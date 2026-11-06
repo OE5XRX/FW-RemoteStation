@@ -31,7 +31,7 @@ static int cmd_sa818_status(const struct shell *shell, size_t, char **) {
   }
 
   sa818_status st = sa818_get_status(dev);
-  shell_print(shell, "powered=%d ptt=%d high_power=%d squelch=%d volume=%d", st.device_power, st.ptt_state, st.power_level, st.squelch_state, st.volume);
+  shell_print(shell, "powered=%d ptt=%d high_power=%d carrier=%d volume=%d", st.device_power, st.ptt_state, st.power_level, st.carrier, st.volume);
   return 0;
 }
 
@@ -128,9 +128,9 @@ static int cmd_sa818_powerlevel(const struct shell *shell, size_t argc, char **a
   return 0;
 }
 
-static int cmd_sa818_squelch_sim(const struct shell *shell, size_t argc, char **argv) {
+static int cmd_sa818_carrier_sim(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 2) {
-    shell_error(shell, "usage: sa818 sim_squelch open|closed");
+    shell_error(shell, "usage: sa818 sim_carrier on|off");
     return -EINVAL;
   }
 
@@ -142,17 +142,17 @@ static int cmd_sa818_squelch_sim(const struct shell *shell, size_t argc, char **
   }
 
   // nsquelch is on pin 3, active LOW
-  // Physical 0 = squelch closed (carrier detected)
-  // Physical 1 = squelch open (no carrier)
+  // Physical 0 = carrier detected
+  // Physical 1 = no carrier
   int pin_value;
-  if (!strcmp(argv[1], "open")) {
+  if (!strcmp(argv[1], "off")) {
     pin_value = 1; // No carrier
-    shell_print(shell, "Simulating squelch OPEN (no carrier)");
-  } else if (!strcmp(argv[1], "closed")) {
+    shell_print(shell, "Simulating no carrier");
+  } else if (!strcmp(argv[1], "on")) {
     pin_value = 0; // Carrier detected
-    shell_print(shell, "Simulating squelch CLOSED (carrier detected)");
+    shell_print(shell, "Simulating carrier detected");
   } else {
-    shell_error(shell, "invalid arg - use 'open' or 'closed'");
+    shell_error(shell, "invalid arg - use 'on' or 'off'");
     return -EINVAL;
   }
 
@@ -384,7 +384,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     SHELL_CMD(power, NULL, "Power on/off", cmd_sa818_power),
     SHELL_CMD(ptt, NULL, "PTT on/off", cmd_sa818_ptt),
     SHELL_CMD(powerlevel, NULL, "Power level", cmd_sa818_powerlevel),
-    SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_squelch, NULL, "Simulate squelch (sim only)", cmd_sa818_squelch_sim),
+    SHELL_COND_CMD(CONFIG_GPIO_EMUL, sim_carrier, NULL, "Simulate carrier detect (sim only)", cmd_sa818_carrier_sim),
     SHELL_CMD(at, &sa818_at_cmds, "AT commands", NULL),
     SHELL_SUBCMD_SET_END);
 // clang-format on

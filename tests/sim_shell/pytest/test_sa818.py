@@ -5,7 +5,7 @@
 SA818 Driver Shell Command Tests
 
 Pytest-based integration tests for SA818 radio driver shell interface.
-Tests power control, PTT, power level, and squelch simulation commands.
+Tests power control, PTT, power level, and carrier simulation commands.
 """
 import re
 import time
@@ -38,15 +38,15 @@ def _as_text(out) -> str:
 def _parse_sa818_status(out) -> dict:
     """Parse sa818 status output into a dictionary."""
     text = _as_text(out)
-    # Expected format: "powered=1 ptt=0 high_power=1 squelch=1 volume=5"
-    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+squelch=(\d+)\s+volume=(\d+)", text)
+    # Expected format: "powered=1 ptt=0 high_power=1 carrier=1 volume=5"
+    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+carrier=(\d+)\s+volume=(\d+)", text)
     assert m, f"Could not parse sa818 status from output:\n{text}"
     
     return {
         "powered": int(m.group(1)),
         "ptt": int(m.group(2)),
         "high_power": int(m.group(3)),
-        "squelch": int(m.group(4)),
+        "carrier": int(m.group(4)),
         "volume": int(m.group(5)),
     }
 
@@ -60,7 +60,7 @@ def test_sa818_status(shell):
     assert status["powered"] in [0, 1]
     assert status["ptt"] in [0, 1]
     assert status["high_power"] in [0, 1]
-    assert status["squelch"] in [0, 1]
+    assert status["carrier"] in [0, 1]
     assert 1 <= status["volume"] <= 8, f"Volume out of range: {status['volume']}"
 
 
@@ -138,37 +138,37 @@ def test_sa818_power_level(shell):
     assert status["high_power"] == 1, "Power level should be high"
 
 
-def test_sa818_sim_squelch(shell):
-    """Test sa818 squelch simulation (only available in simulator)."""
+def test_sa818_sim_carrier(shell):
+    """Test sa818 carrier simulation (only available in simulator)."""
     # Ensure powered on
     shell.exec_command("sa818 power on")
     
-    # Try to run sim_squelch command
-    out = shell.exec_command("sa818 sim_squelch open")
+    # Try to run sim_carrier command
+    out = shell.exec_command("sa818 sim_carrier off")
     text = _as_text(out)
     
     # If command is not available (real hardware), skip this test
     if "unknown parameter" in text.lower() or "command not found" in text.lower():
-        print("sim_squelch not available (likely running on real hardware) - skipping test")
+        print("sim_carrier not available (likely running on real hardware) - skipping test")
         return
     
-    # Squelch open (no carrier)
+    # No carrier
     assert "error" not in text.lower() or "sa818 not ready" not in text.lower()
     
     time.sleep(0.01)  # Small delay for simulation
     
     status = _parse_sa818_status(shell.exec_command("sa818 status"))
-    assert status["squelch"] == 1, "Squelch should be open (no carrier)"
+    assert status["carrier"] == 0, "No carrier expected"
     
-    # Squelch closed (carrier detected)
-    out = shell.exec_command("sa818 sim_squelch closed")
+    # Carrier detected
+    out = shell.exec_command("sa818 sim_carrier on")
     text = _as_text(out)
     assert "error" not in text.lower() or "sa818 not ready" not in text.lower()
     
     time.sleep(0.01)  # Small delay for simulation
     
     status = _parse_sa818_status(shell.exec_command("sa818 status"))
-    assert status["squelch"] == 0, "Squelch should be closed (carrier detected)"
+    assert status["carrier"] == 1, "Carrier should be detected"
 
 
 def test_sa818_invalid_commands(shell):

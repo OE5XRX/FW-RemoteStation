@@ -136,10 +136,10 @@ def test_module_set_frequency_bad_value(sa818_sim, shell):
 def _status(shell):
     out = shell.exec_command("sa818 status")
     text = "\n".join(_lines(out))
-    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+squelch=(\d+)\s+volume=(\d+)", text)
+    m = re.search(r"powered=(\d+)\s+ptt=(\d+)\s+high_power=(\d+)\s+carrier=(\d+)\s+volume=(\d+)", text)
     assert m, f"could not parse sa818 status: {text}"
     return {"powered": int(m[1]), "ptt": int(m[2]), "high_power": int(m[3]),
-            "squelch": int(m[4]), "volume": int(m[5])}
+            "carrier": int(m[4]), "volume": int(m[5])}
 
 
 def test_module_do_ptt(shell):
@@ -518,13 +518,13 @@ def test_module_filter_bool_forms(sa818_sim, shell):
 
 
 def test_module_carrier_telemetry(sa818_sim, shell):
-    """`carrier` mirrors the SQL pin: squelch closed = carrier present."""
+    """`carrier` mirrors the SQL pin (true = signal present)."""
     shell.exec_command("sa818 power on")
-    out = shell.exec_command("sa818 sim_squelch closed")
+    out = shell.exec_command("sa818 sim_carrier on")
     if "unknown parameter" in str(out).lower() or "command not found" in str(out).lower():
-        pytest.skip("sim_squelch needs CONFIG_GPIO_EMUL (native_sim only)")
+        pytest.skip("sim_carrier needs CONFIG_GPIO_EMUL (native_sim only)")
     r = _payload(shell.exec_command("module fm get carrier"), "MODULE-RESULT")
     assert r["ok"] is True and r["cap"] == "carrier" and r["value"] is True
-    shell.exec_command("sa818 sim_squelch open")
+    shell.exec_command("sa818 sim_carrier off")
     r = _payload(shell.exec_command("module fm get carrier"), "MODULE-RESULT")
     assert r["ok"] is True and r["value"] is False

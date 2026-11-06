@@ -438,8 +438,7 @@ private:
   Sa818Context &ctx_;
 };
 
-// Carrier-detect from the SA818 SQL pin. Note the naming inversion: a *closed* squelch means a
-// carrier is present, so carrier == (squelch state is CLOSED).
+// Carrier-detect from the SA818 SQL pin (true = signal present).
 class CarrierCap : public Telemetry {
 public:
   explicit CarrierCap(Sa818Context &ctx) : ctx_(ctx) {}
@@ -450,7 +449,7 @@ protected:
     if (!ctx_.ready()) {
       return Result::err("driver_error");
     }
-    return Result::okBool(sa818_get_squelch(ctx_.dev) == SA818_SQUELCH_CLOSED);
+    return Result::okBool(sa818_carrier_detected(ctx_.dev));
   }
 
 private:
