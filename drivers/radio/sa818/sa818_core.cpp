@@ -165,12 +165,13 @@ sa818_result sa818_set_power_level(const struct device *dev, sa818_power_level p
   return SA818_OK;
 }
 
-/* Squelch Status */
-sa818_squelch_state sa818_get_squelch(const struct device *dev) {
+/* Carrier Detect */
+bool sa818_carrier_detected(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   int val = gpio_pin_get_dt(&cfg->nsquelch);
-  // SQL pin is active HIGH when squelch is open (no signal)
-  return (val > 0) ? SA818_SQUELCH_OPEN : SA818_SQUELCH_CLOSED;
+  // nsquelch-gpios is GPIO_ACTIVE_LOW, so gpio_pin_get_dt() returns 1 (logical active) when the
+  // physical SQL pin is LOW, i.e. when a carrier is detected. A read error (val < 0) counts as "no carrier".
+  return val > 0;
 }
 
 /* Status Query */
@@ -182,7 +183,7 @@ sa818_status sa818_get_status(const struct device *dev) {
   status.device_power = data->device_power;
   status.ptt_state = data->ptt_state;
   status.power_level = data->power_level;
-  status.squelch_state = sa818_get_squelch(dev);
+  status.carrier = sa818_carrier_detected(dev);
   status.volume = data->current_volume;
   k_mutex_unlock(&data->lock);
 

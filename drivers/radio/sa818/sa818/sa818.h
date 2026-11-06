@@ -143,30 +143,18 @@ enum sa818_power_level {
 [[nodiscard]] enum sa818_result sa818_set_power_level(const struct device *dev, enum sa818_power_level power_level);
 
 /**
- * @brief Squelch states
+ * @brief Get carrier-detect status
  *
- * Indicates whether the squelch is open (no carrier) or closed (carrier detected).
+ * Reads the SQL pin to determine whether a carrier signal is being received.
  * The squelch threshold is configured via AT commands.
- */
-enum sa818_squelch_state {
-  SA818_SQUELCH_CLOSED = 0, /**< Carrier detected (signal present, SQL pin LOW) */
-  SA818_SQUELCH_OPEN = 1,   /**< No carrier detected (squelch open, SQL pin HIGH) */
-};
-
-/**
- * @brief Get squelch status
- *
- * Reads the squelch (SQL) pin to determine if a carrier signal
- * is being received. Squelch threshold is configured via AT commands.
  *
  * @param dev Pointer to the SA818 device structure
  *
- * @return SA818_SQUELCH_OPEN if no carrier detected
- * @return SA818_SQUELCH_CLOSED if carrier detected
+ * @return true if a carrier is detected, false if not (or if the GPIO read failed)
  *
- * @note SQL pin is active HIGH when squelch is open (no signal)
+ * @note The physical SQL pin is LOW when a carrier is detected and HIGH otherwise.
  */
-[[nodiscard]] enum sa818_squelch_state sa818_get_squelch(const struct device *dev);
+[[nodiscard]] bool sa818_carrier_detected(const struct device *dev);
 
 /**
  * @brief Device status structure
@@ -175,18 +163,18 @@ enum sa818_squelch_state {
  * and monitored signals.
  */
 struct sa818_status {
-  enum sa818_device_power device_power;   /**< Current power state */
-  enum sa818_ptt_state ptt_state;         /**< Current PTT state */
-  enum sa818_power_level power_level;     /**< Current TX power level */
-  enum sa818_squelch_state squelch_state; /**< Current squelch state */
-  uint8_t volume;                         /**< Current volume level (1-8) */
+  enum sa818_device_power device_power; /**< Current power state */
+  enum sa818_ptt_state ptt_state;       /**< Current PTT state */
+  enum sa818_power_level power_level;   /**< Current TX power level */
+  bool carrier;                         /**< true if a carrier is detected */
+  uint8_t volume;                       /**< Current volume level (1-8) */
 };
 
 /**
  * @brief Get current device status
  *
  * Retrieves the current state of all device parameters in a single call.
- * Status includes power state, PTT state, power level, and squelch status.
+ * Status includes power state, PTT state, power level, and carrier-detect status.
  *
  * @param dev Pointer to the SA818 device structure
  *
