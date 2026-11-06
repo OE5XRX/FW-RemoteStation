@@ -164,7 +164,8 @@ enum sa818_squelch_state {
  * @return SA818_SQUELCH_OPEN if no carrier detected
  * @return SA818_SQUELCH_CLOSED if carrier detected
  *
- * @note SQL pin is active HIGH when squelch is open (no signal)
+ * @note The physical SQL pin is HIGH when squelch is open (no signal) and LOW when a carrier
+ *       is detected. A GPIO read error is reported as SA818_SQUELCH_OPEN (no carrier).
  */
 [[nodiscard]] enum sa818_squelch_state sa818_get_squelch(const struct device *dev);
 

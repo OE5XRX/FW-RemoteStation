@@ -171,6 +171,7 @@ sa818_squelch_state sa818_get_squelch(const struct device *dev) {
   int val = gpio_pin_get_dt(&cfg->nsquelch);
   // nsquelch-gpios is GPIO_ACTIVE_LOW, so gpio_pin_get_dt() returns 1 (logical active) when the
   // physical SQL pin is LOW, i.e. when a carrier is detected (squelch closed).
+  // A read error (val < 0) is treated as "no carrier" (OPEN).
   return (val > 0) ? SA818_SQUELCH_CLOSED : SA818_SQUELCH_OPEN;
 }
 

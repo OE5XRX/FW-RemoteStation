@@ -4,6 +4,8 @@
 import json
 import re
 
+import pytest
+
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -520,7 +522,7 @@ def test_module_carrier_telemetry(sa818_sim, shell):
     shell.exec_command("sa818 power on")
     out = shell.exec_command("sa818 sim_squelch closed")
     if "unknown parameter" in str(out).lower() or "command not found" in str(out).lower():
-        return  # sim_squelch needs CONFIG_GPIO_EMUL (native_sim only)
+        pytest.skip("sim_squelch needs CONFIG_GPIO_EMUL (native_sim only)")
     r = _payload(shell.exec_command("module fm get carrier"), "MODULE-RESULT")
     assert r["ok"] is True and r["cap"] == "carrier" and r["value"] is True
     shell.exec_command("sa818 sim_squelch open")
