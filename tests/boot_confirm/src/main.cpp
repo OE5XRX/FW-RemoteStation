@@ -240,6 +240,48 @@ ZTEST(health_gate, test_slow_but_answering_sa818_confirms) {
   zassert_true(e.now < CFG.deadline_ms);
 }
 
+ZTEST(health_gate, test_dwell_met_on_slow_sweep_crossing_deadline_confirms) {
+  // Radio healthy from 26 s on, each round-trip slow (2 s): the sweep that
+  // completes the dwell also ends past the deadline. Confirm is evaluated
+  // before the deadline check, so a healthy image is kept, not reverted.
+  FakeEnv e;
+  Blocking b{&e, SA818_AT_TIMEOUT_MS, 26000};
+  HealthCriterion crit{"sa818", probe_blocking, &b};
+  auto out = run_health_gate(CFG, make_hooks(e), &crit, 1);
+  zassert_equal(out, GateOutcome::Confirmed);
+  zassert_equal(e.reboot_calls, 0);
+  zassert_true(e.now >= CFG.deadline_ms, "now %lld", (long long)e.now);
+  zassert_true(e.max_feed_gap < boot::timing::WDT_PERIOD_MS);
+}
+
+ZTEST(health_gate, test_confirm_failing_during_slow_sweeps_reverts_at_deadline) {
+  // Healthy but slow radio and a confirm write that never succeeds: the gate
+  // keeps retrying without tripping the watchdog and reverts at the deadline.
+  FakeEnv e;
+  e.confirm_fail_count = -1;
+  Blocking b{&e, SA818_AT_TIMEOUT_MS, 0};
+  HealthCriterion crit{"sa818", probe_blocking, &b};
+  auto out = run_health_gate(CFG, make_hooks(e), &crit, 1);
+  zassert_equal(out, GateOutcome::RevertRebooted);
+  zassert_equal(e.reboot_calls, 1);
+  zassert_true(e.confirm_calls > 1);
+  zassert_true(e.reboot_at >= CFG.deadline_ms);
+  zassert_true(e.max_feed_gap < boot::timing::WDT_PERIOD_MS);
+}
+
+ZTEST(health_gate, test_blocking_probe_skipped_when_earlier_criterion_fails) {
+  // Mirrors the fm_board order (usb, shell, sa818): while USB is unconfigured
+  // the blocking SA818 probe is never reached, so sweeps stay fast.
+  FakeEnv e;
+  Thresh usb{&e, 999999};
+  Blocking sa{&e, SA818_AT_TIMEOUT_MS, 0};
+  HealthCriterion crit[] = {{"usb", probe_after, &usb}, {"sa818", probe_blocking, &sa}};
+  auto out = run_health_gate(CFG, make_hooks(e), crit, 2);
+  zassert_equal(out, GateOutcome::RevertRebooted);
+  zassert_equal(e.max_feed_gap, CFG.poll_interval_ms);
+  zassert_equal(e.reboot_at, CFG.deadline_ms);
+}
+
 ZTEST(health_gate, test_feed_called_every_sweep) {
   // Fast probes: one feed per loop iteration, gap == poll interval.
   FakeEnv e;

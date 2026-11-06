@@ -29,9 +29,16 @@ inline constexpr int64_t GATE_POLL_MS = 250;       /* probe sweep interval */
 
 /* Worst-case blocking time of one probe sweep. usb/shell probes are
  * non-blocking; probe_sa818 calls sa818_at_connect(), which may first wait on
- * the driver's AT mutex behind one in-flight command from another thread
- * (e.g. the shell; <= one AT timeout) and then block for its own
- * AT+DMOCONNECT up to the AT timeout. */
+ * the driver's AT mutex behind one in-flight command from another thread and
+ * then block for its own AT+DMOCONNECT up to the AT timeout.
+ *
+ * Invariant this budget relies on: during the gate window the only other
+ * SA818 AT user is the shell (one command at a time; driver init/main finish
+ * their AT traffic before the gate starts). The AT mutex wait queue is
+ * priority-ordered and the gate runs at the lowest application priority, so
+ * a second concurrent AT user could queue more than one command ahead of the
+ * probe and exceed this budget. If one is ever added, raise this bound (or
+ * give the probe a bounded mutex wait). */
 inline constexpr int64_t PROBE_SWEEP_WORST_MS = 2 * static_cast<int64_t>(SA818_AT_TIMEOUT_MS);
 
 /* Headroom on top of the worst case for scheduling jitter (gate thread runs at

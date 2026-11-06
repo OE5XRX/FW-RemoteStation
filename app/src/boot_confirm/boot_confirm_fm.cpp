@@ -54,6 +54,8 @@
 #include "health_gate.h"
 
 #include <atomic>
+#include <climits>
+#include <cstdint>
 #include <errno.h>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
@@ -81,16 +83,21 @@ using namespace boot::timing;
 
 namespace {
 
+/* sa818_last_rc before the first probe_sa818 call. all_healthy() short-circuits,
+ * so with USB never configured the SA818 probe never runs. */
+constexpr int SA818_RC_NOT_PROBED = INT32_MIN;
+
 struct Env {
   const struct device *sa818;
   std::atomic<bool> usb_configured{false}; /* written from USBD callback; read from gate thread */
-  int sa818_last_rc = SA818_OK;            /* last probe_sa818 result (gate thread only); -ENODEV = not ready */
+  int sa818_last_rc = SA818_RC_NOT_PROBED; /* last probe_sa818 result (gate thread only); -ENODEV = not ready */
 };
 
 Env g_env;
 
 #if defined(CONFIG_TASK_WDT)
-static int g_wdt_channel = -1; /* task_wdt channel id; -1 = not initialised */
+static int g_wdt_channel = -1;                 /* task_wdt channel id; -1 = not initialised */
+static std::atomic<bool> g_wdt_expired{false}; /* set by wdt_cb; stops further feeds */
 #endif
 
 /* ---- probes ---------------------------------------------------------------- */
@@ -139,7 +146,10 @@ void h_feed(void *) {
 #if defined(CONFIG_TASK_WDT)
   /* Called by run_health_gate after every completed probe sweep to prove the
    * gate thread is alive.  No-op if the channel could not be added. */
-  if (g_wdt_channel >= 0) {
+  /* Once wdt_cb fired the reset is committed: a late feed from a starved-but-
+   * not-hung gate thread would re-feed the IWDG and leave the reset to the
+   * backstop (logged as SOFTWARE instead of WATCHDOG). */
+  if (g_wdt_channel >= 0 && !g_wdt_expired.load()) {
     (void)task_wdt_feed(g_wdt_channel);
   }
 #endif
@@ -170,9 +180,14 @@ int h_confirm(void *) {
 void h_reboot(void *c) {
   const Env *env = static_cast<const Env *>(c);
   LOG_WRN("health-gate deadline (%d ms) exceeded — rebooting for MCUboot revert", static_cast<int>(GATE_DEADLINE_MS));
-  LOG_WRN("health-gate state: usb_configured=%d shell=%d", env->usb_configured.load() ? 1 : 0, IS_ENABLED(CONFIG_SHELL) ? 1 : 0);
+  /* The shell criterion is compile-time (IS_ENABLED(CONFIG_SHELL)), so it is not logged. */
+  LOG_WRN("health-gate state: usb_configured=%d", env->usb_configured.load() ? 1 : 0);
 #if !IS_ENABLED(CONFIG_FM_BOOT_CONFIRM_SKIP_SA818)
-  LOG_WRN("health-gate state: sa818 last AT+DMOCONNECT rc=%d", env->sa818_last_rc);
+  if (env->sa818_last_rc == SA818_RC_NOT_PROBED) {
+    LOG_WRN("health-gate state: sa818 not probed (an earlier criterion never passed)");
+  } else {
+    LOG_WRN("health-gate state: sa818 last AT+DMOCONNECT rc=%d", env->sa818_last_rc);
+  }
 #endif
   /* Thread context: drain the deferred log buffer and give the CDC-ACM
    * transport a moment, so the revert is not silent.  Bounded: the task_wdt
@@ -186,6 +201,13 @@ void h_reboot(void *c) {
 /* ---- task_wdt callback ----------------------------------------------------- */
 
 #if defined(CONFIG_TASK_WDT)
+#if defined(CONFIG_TASK_WDT_HW_FALLBACK)
+/* The armed IWDG must bite before the software backstop, or a hung gate is
+ * reported as a SOFTWARE reset (indistinguishable from the deadline revert). */
+static_assert(WDT_REBOOT_BACKSTOP_MS > CONFIG_TASK_WDT_MIN_TIMEOUT + CONFIG_TASK_WDT_HW_FALLBACK_DELAY,
+              "wdt_cb backstop must be longer than the task_wdt hardware-fallback window");
+#endif
+
 void wdt_backstop_expiry(struct k_timer *) {
   sys_reboot(SYS_REBOOT_COLD);
 }
@@ -208,6 +230,7 @@ static void wdt_cb(int channel_id, void *user_data) {
    * NULL hw_wdt), the one-shot backstop timer reboots instead.  Either way the
    * image is unconfirmed and MCUboot reverts on the next boot.  The log line
    * is best-effort: ISR context cannot flush the deferred log. */
+  g_wdt_expired.store(true);
   LOG_ERR("task_wdt timeout on boot-confirm gate thread — resetting for MCUboot revert");
   k_timer_start(&g_wdt_backstop, K_MSEC(WDT_REBOOT_BACKSTOP_MS), K_NO_WAIT);
 }
@@ -220,11 +243,20 @@ void log_reset_cause() {
   if (hwinfo_get_reset_cause(&cause) != 0) {
     return; /* not supported on this target */
   }
-  (void)hwinfo_clear_reset_cause(); /* flags are sticky across resets; report each reset once */
+  /* RCC_CSR flags are sticky until cleared, so they accumulate over every reset
+   * since the last clear (on STM32U5 a power-on typically shows as BROWNOUT|PIN,
+   * there is no separate POR flag).  We clear on every boot, so from the second
+   * boot of an image carrying this code on, the value describes exactly the
+   * preceding reset; the very first report after an upgrade may be cumulative. */
+  (void)hwinfo_clear_reset_cause();
   if (cause & RESET_WATCHDOG) {
     LOG_WRN("reset cause 0x%08x: WATCHDOG (IWDG — e.g. hung boot-confirm gate thread)", cause);
   } else if (cause & RESET_SOFTWARE) {
     LOG_INF("reset cause 0x%08x: SOFTWARE (sys_reboot — e.g. health-gate deadline revert, DFU, shell reboot)", cause);
+  } else if (cause & (RESET_POR | RESET_BROWNOUT)) {
+    LOG_INF("reset cause 0x%08x: POWER (power-on / brown-out)", cause);
+  } else if (cause & RESET_PIN) {
+    LOG_INF("reset cause 0x%08x: PIN (NRST)", cause);
   } else {
     LOG_INF("reset cause 0x%08x", cause);
   }
