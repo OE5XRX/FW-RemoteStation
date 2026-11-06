@@ -174,7 +174,7 @@ struct sa818_status {
  * @brief Get current device status
  *
  * Retrieves the current state of all device parameters in a single call.
- * Status includes power state, PTT state, power level, and squelch status.
+ * Status includes power state, PTT state, power level, and carrier-detect status.
  *
  * @param dev Pointer to the SA818 device structure
  *

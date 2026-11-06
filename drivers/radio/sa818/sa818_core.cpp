@@ -165,7 +165,7 @@ sa818_result sa818_set_power_level(const struct device *dev, sa818_power_level p
   return SA818_OK;
 }
 
-/* Squelch Status */
+/* Carrier Detect */
 bool sa818_carrier_detected(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   int val = gpio_pin_get_dt(&cfg->nsquelch);
