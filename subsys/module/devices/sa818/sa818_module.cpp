@@ -165,6 +165,7 @@ const FieldSpec BW_SPEC{"bandwidth", ValueType::Enum, "kHz", nullptr, 0, BANDWID
 const FieldSpec SQUELCH_SPEC{"squelch", ValueType::Int, nullptr, SQUELCH_RANGES, 1};
 const FieldSpec TXTONE_SPEC{"tx_tone", ValueType::String};
 const FieldSpec RXTONE_SPEC{"rx_tone", ValueType::String};
+const FieldSpec CARRIER_SPEC{"carrier", ValueType::Bool, nullptr, nullptr, 0, nullptr, 0, /*readonly=*/true};
 const FieldSpec BAND_SPEC{"band", ValueType::String, nullptr, nullptr, 0, nullptr, 0, /*readonly=*/true};
 const FieldSpec AUDIO_SPEC{"audio", ValueType::Stream};
 const FieldSpec FILTER_PRE_EMPHASIS_SPEC{"filter_pre_emphasis", ValueType::Bool};
@@ -431,6 +432,25 @@ protected:
       return Result::err("driver_error");
     }
     return Result::okInt(static_cast<int>(rssi));
+  }
+
+private:
+  Sa818Context &ctx_;
+};
+
+// Carrier-detect from the SA818 SQL pin. Note the naming inversion: a *closed* squelch means a
+// carrier is present, so carrier == (squelch state is CLOSED).
+class CarrierCap : public Telemetry {
+public:
+  explicit CarrierCap(Sa818Context &ctx) : ctx_(ctx) {}
+  const FieldSpec &spec() const override { return CARRIER_SPEC; }
+
+protected:
+  Result onGet() override {
+    if (!ctx_.ready()) {
+      return Result::err("driver_error");
+    }
+    return Result::okBool(sa818_get_squelch(ctx_.dev) == SA818_SQUELCH_CLOSED);
   }
 
 private:
@@ -709,13 +729,14 @@ SquelchCap g_squelch{g_ctx};
 TxToneCap g_txtone{g_ctx};
 RxToneCap g_rxtone{g_ctx};
 BandCap g_band{g_ctx};
+CarrierCap g_carrier{g_ctx};
 AudioCap g_audio;
 FilterPreEmphasisCap g_filter_pre{g_ctx};
 FilterHpfCap g_filter_hpf{g_ctx};
 FilterLpfCap g_filter_lpf{g_ctx};
 
-Capability *const g_caps[] = {&g_freq,    &g_txfreq, &g_rxfreq, &g_ptt,  &g_power, &g_rssi,       &g_volume,     &g_bandwidth,
-                              &g_squelch, &g_txtone, &g_rxtone, &g_band, &g_audio, &g_filter_pre, &g_filter_hpf, &g_filter_lpf};
+Capability *const g_caps[] = {&g_freq,   &g_txfreq, &g_rxfreq, &g_ptt,     &g_power, &g_rssi,       &g_volume,     &g_bandwidth, &g_squelch,
+                              &g_txtone, &g_rxtone, &g_band,   &g_carrier, &g_audio, &g_filter_pre, &g_filter_hpf, &g_filter_lpf};
 
 /* Runtime identity fields. The Identity holds stable pointers into these static
  * buffers; Module snapshots the pointers at static-init while the buffers are

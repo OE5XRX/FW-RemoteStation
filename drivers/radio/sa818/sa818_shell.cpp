@@ -130,7 +130,7 @@ static int cmd_sa818_powerlevel(const struct shell *shell, size_t argc, char **a
 
 static int cmd_sa818_squelch_sim(const struct shell *shell, size_t argc, char **argv) {
   if (argc < 2) {
-    shell_error(shell, "usage: sa818 squelch_sim open|closed");
+    shell_error(shell, "usage: sa818 sim_squelch open|closed");
     return -EINVAL;
   }
 

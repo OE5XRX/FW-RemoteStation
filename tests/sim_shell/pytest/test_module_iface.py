@@ -37,7 +37,7 @@ def test_module_describe_valid_json(shell):
     assert d["identity"]["uid_source"] == "synthetic"
 
     caps = {c["name"]: c for c in d["capabilities"]}
-    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band", "audio", "filter_pre_emphasis", "filter_hpf", "filter_lpf"}
+    assert set(caps) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level", "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone", "band", "carrier", "audio", "filter_pre_emphasis", "filter_hpf", "filter_lpf"}
 
     # audio path is declared as a capability so the agent derives it from the schema
     assert caps["audio"]["kind"] == "audio"
@@ -414,7 +414,7 @@ def test_module_status_snapshot(sa818_sim, shell):
     # every advertised capability appears in the snapshot
     assert set(v) == {"frequency", "tx_frequency", "rx_frequency", "ptt", "power_level",
                       "rssi", "volume", "bandwidth", "squelch", "tx_tone", "rx_tone",
-                      "band", "audio", "filter_pre_emphasis", "filter_hpf", "filter_lpf"}
+                      "band", "carrier", "audio", "filter_pre_emphasis", "filter_hpf", "filter_lpf"}
     # types match the describe schema
     assert isinstance(v["frequency"], float)
     assert isinstance(v["ptt"], bool)
@@ -513,3 +513,16 @@ def test_module_filter_bool_forms(sa818_sim, shell):
         assert r["ok"] is True and r["value"] is False, f"val_off={val_off}"
         r = _payload(shell.exec_command(f"module fm set filter_pre_emphasis {val_on}"), "MODULE-RESULT")
         assert r["ok"] is True and r["value"] is True, f"val_on={val_on}"
+
+
+def test_module_carrier_telemetry(sa818_sim, shell):
+    """`carrier` mirrors the SQL pin: squelch closed = carrier present."""
+    shell.exec_command("sa818 power on")
+    out = shell.exec_command("sa818 sim_squelch closed")
+    if "unknown parameter" in str(out).lower() or "command not found" in str(out).lower():
+        return  # sim_squelch needs CONFIG_GPIO_EMUL (native_sim only)
+    r = _payload(shell.exec_command("module fm get carrier"), "MODULE-RESULT")
+    assert r["ok"] is True and r["cap"] == "carrier" and r["value"] is True
+    shell.exec_command("sa818 sim_squelch open")
+    r = _payload(shell.exec_command("module fm get carrier"), "MODULE-RESULT")
+    assert r["ok"] is True and r["value"] is False

@@ -158,7 +158,7 @@ def test_sa818_sim_squelch(shell):
     time.sleep(0.01)  # Small delay for simulation
     
     status = _parse_sa818_status(shell.exec_command("sa818 status"))
-    assert status["squelch"] == 0, "Squelch should be open (no carrier)"
+    assert status["squelch"] == 1, "Squelch should be open (no carrier)"
     
     # Squelch closed (carrier detected)
     out = shell.exec_command("sa818 sim_squelch closed")
@@ -168,7 +168,7 @@ def test_sa818_sim_squelch(shell):
     time.sleep(0.01)  # Small delay for simulation
     
     status = _parse_sa818_status(shell.exec_command("sa818 status"))
-    assert status["squelch"] == 1, "Squelch should be closed (carrier detected)"
+    assert status["squelch"] == 0, "Squelch should be closed (carrier detected)"
 
 
 def test_sa818_invalid_commands(shell):

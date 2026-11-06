@@ -169,8 +169,9 @@ sa818_result sa818_set_power_level(const struct device *dev, sa818_power_level p
 sa818_squelch_state sa818_get_squelch(const struct device *dev) {
   const struct sa818_config *cfg = static_cast<const struct sa818_config *>(dev->config);
   int val = gpio_pin_get_dt(&cfg->nsquelch);
-  // SQL pin is active HIGH when squelch is open (no signal)
-  return (val > 0) ? SA818_SQUELCH_OPEN : SA818_SQUELCH_CLOSED;
+  // nsquelch-gpios is GPIO_ACTIVE_LOW, so gpio_pin_get_dt() returns 1 (logical active) when the
+  // physical SQL pin is LOW, i.e. when a carrier is detected (squelch closed).
+  return (val > 0) ? SA818_SQUELCH_CLOSED : SA818_SQUELCH_OPEN;
 }
 
 /* Status Query */
