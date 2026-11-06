@@ -21,6 +21,7 @@ struct GateHooks {
   bool (*already_confirmed)(void *ctx); // wraps boot_is_img_confirmed()
   int (*confirm)(void *ctx);            // wraps boot_write_img_confirmed(); 0 = ok
   void (*reboot)(void *ctx);            // wraps sys_reboot(SYS_REBOOT_COLD)
+  void (*feed)(void *ctx);              // liveness signal after every probe sweep (task_wdt_feed); may be null
   void *ctx;
 };
 

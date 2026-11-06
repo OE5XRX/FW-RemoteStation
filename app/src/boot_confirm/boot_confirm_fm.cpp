@@ -17,13 +17,23 @@
  *
  * IWDG / task_wdt: task_wdt is initialised with the hardware IWDG as its
  * fallback.  The gate thread registers one channel with a period of
- * GATE_POLL_MS * 4, and feeds it on every probe sweep.  If the gate thread
- * stalls (e.g. blocked in sa818_at_connect), the task_wdt kernel-timer fires
- * wdt_cb, which calls sys_reboot(SYS_REBOOT_COLD) directly.  On the next boot
- * MCUboot detects the image was never confirmed and reverts to the previous
- * slot.  The software deadline in run_health_gate (h_reboot) is the other
- * backstop: it fires when the gate is schedulable but all probes stay unhealthy
- * past the deadline.
+ * boot::timing::WDT_PERIOD_MS and feeds it after every probe sweep (GateHooks
+ * feed hook).  The period is derived from the SA818 AT timeout (see
+ * boot_confirm_timing.h): a probe that merely waits out an unanswered
+ * AT+DMOCONNECT is slow, not hung, and must not trip the watchdog — otherwise
+ * a trial boot without a responding radio reverts after ~2.5 s instead of at
+ * the 30-s deadline.  Only a genuinely hung gate thread lets the channel
+ * expire; wdt_cb then lets the IWDG bite (reset cause WATCHDOG) with a
+ * software-reboot backstop.  On the next boot MCUboot detects the image was
+ * never confirmed and reverts to the previous slot.  The software deadline in
+ * run_health_gate (h_reboot) is the normal revert path: it fires when the gate
+ * is schedulable but the probes stay unhealthy past the deadline, and logs
+ * which criteria failed before resetting (reset cause SOFTWARE).
+ *
+ * Diagnostics: every boot logs (and clears) the hardware reset cause, so a
+ * revert is attributable from the log of the next boot of an image carrying
+ * this code: SOFTWARE = health-gate deadline (or any sys_reboot), WATCHDOG =
+ * stalled gate thread / IWDG.
  *
  * task_wdt is compiled in only when CONFIG_TASK_WDT is set (prod/sysbuild
  * build).  In the bare build CONFIG_TASK_WDT is not set, so the watchdog block
@@ -40,14 +50,20 @@
  * @spdx-license-identifier LGPL-3.0-or-later
  */
 
+#include "boot_confirm_timing.h"
 #include "health_gate.h"
 
 #include <atomic>
+#include <climits>
+#include <cstdint>
+#include <errno.h>
 #include <sa818/sa818.h>
 #include <sa818/sa818_at.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/usb/usbd.h>
 
@@ -61,27 +77,27 @@
 
 LOG_MODULE_REGISTER(boot_confirm, LOG_LEVEL_INF);
 
-/* Timing constants (milliseconds) */
-static constexpr int64_t GATE_DEADLINE_MS = 30000; /* revert if not healthy within 30 s */
-static constexpr int64_t GATE_DWELL_MS = 3000;     /* require 3 s continuous health */
-static constexpr int32_t GATE_POLL_MS = 250;       /* probe sweep interval */
-
-#if defined(CONFIG_TASK_WDT)
-/* task_wdt channel period: 4x poll so one missed sweep is not fatal */
-static constexpr uint32_t WDT_PERIOD_MS = static_cast<uint32_t>(GATE_POLL_MS) * 4u;
-#endif
+/* Timing budget (deadline/dwell/poll + task_wdt period) lives in
+ * boot_confirm_timing.h, shared with tests/boot_confirm. */
+using namespace boot::timing;
 
 namespace {
+
+/* sa818_last_rc before the first probe_sa818 call. all_healthy() short-circuits,
+ * so with USB never configured the SA818 probe never runs. */
+constexpr int SA818_RC_NOT_PROBED = INT32_MIN;
 
 struct Env {
   const struct device *sa818;
   std::atomic<bool> usb_configured{false}; /* written from USBD callback; read from gate thread */
+  int sa818_last_rc = SA818_RC_NOT_PROBED; /* last probe_sa818 result (gate thread only); -ENODEV = not ready */
 };
 
 Env g_env;
 
 #if defined(CONFIG_TASK_WDT)
-static int g_wdt_channel = -1; /* task_wdt channel id; -1 = not initialised */
+static int g_wdt_channel = -1;                 /* task_wdt channel id; -1 = not initialised */
+static std::atomic<bool> g_wdt_expired{false}; /* set by wdt_cb; stops further feeds */
 #endif
 
 /* ---- probes ---------------------------------------------------------------- */
@@ -102,12 +118,16 @@ bool probe_shell(void *c) {
 
 #if !IS_ENABLED(CONFIG_FM_BOOT_CONFIRM_SKIP_SA818)
 bool probe_sa818(void *c) {
-  const struct device *d = static_cast<Env *>(c)->sa818;
-  if (!device_is_ready(d)) {
+  Env *env = static_cast<Env *>(c);
+  if (!device_is_ready(env->sa818)) {
+    env->sa818_last_rc = -ENODEV;
     return false;
   }
-  /* AT+DMOCONNECT round-trip; [[nodiscard]] — result must not be discarded. */
-  enum sa818_result rc = sa818_at_connect(d);
+  /* AT+DMOCONNECT round-trip; [[nodiscard]] — result must not be discarded.
+   * Blocks up to SA818_AT_TIMEOUT_MS (plus a wait on the driver's AT mutex)
+   * when the radio does not answer — accounted for in WDT_PERIOD_MS. */
+  enum sa818_result rc = sa818_at_connect(env->sa818);
+  env->sa818_last_rc = rc;
   return rc == SA818_OK;
 }
 #endif /* !CONFIG_FM_BOOT_CONFIRM_SKIP_SA818 */
@@ -119,15 +139,20 @@ int64_t h_now(void *) {
 }
 
 void h_sleep(void *, int64_t ms) {
+  k_msleep(static_cast<int32_t>(ms));
+}
+
+void h_feed(void *) {
 #if defined(CONFIG_TASK_WDT)
-  /* Feed the task_wdt on every sleep (i.e., every poll interval) to prove the
-   * gate thread is alive.  If g_wdt_channel is not yet initialised (race at
-   * startup) the feed is a no-op. */
-  if (g_wdt_channel >= 0) {
+  /* Called by run_health_gate after every completed probe sweep to prove the
+   * gate thread is alive.  No-op if the channel could not be added. */
+  /* Once wdt_cb fired the reset is committed: a late feed from a starved-but-
+   * not-hung gate thread would re-feed the IWDG and leave the reset to the
+   * backstop (logged as SOFTWARE instead of WATCHDOG). */
+  if (g_wdt_channel >= 0 && !g_wdt_expired.load()) {
     (void)task_wdt_feed(g_wdt_channel);
   }
 #endif
-  k_msleep(static_cast<int32_t>(ms));
 }
 
 bool h_confd(void *) {
@@ -152,8 +177,23 @@ int h_confirm(void *) {
 #endif
 }
 
-void h_reboot(void *) {
-  LOG_WRN("health-gate deadline exceeded — rebooting for MCUboot revert");
+void h_reboot(void *c) {
+  const Env *env = static_cast<const Env *>(c);
+  LOG_WRN("health-gate deadline (%d ms) exceeded — rebooting for MCUboot revert", static_cast<int>(GATE_DEADLINE_MS));
+  /* The shell criterion is compile-time (IS_ENABLED(CONFIG_SHELL)), so it is not logged. */
+  LOG_WRN("health-gate state: usb_configured=%d", env->usb_configured.load() ? 1 : 0);
+#if !IS_ENABLED(CONFIG_FM_BOOT_CONFIRM_SKIP_SA818)
+  if (env->sa818_last_rc == SA818_RC_NOT_PROBED) {
+    LOG_WRN("health-gate state: sa818 not probed (an earlier criterion never passed)");
+  } else {
+    LOG_WRN("health-gate state: sa818 last AT+DMOCONNECT rc=%d", env->sa818_last_rc);
+  }
+#endif
+  /* Thread context: drain the deferred log buffer and give the CDC-ACM
+   * transport a moment, so the revert is not silent.  Bounded: the task_wdt
+   * channel is still armed and fed just before this hook ran. */
+  log_flush();
+  k_msleep(REBOOT_LOG_DRAIN_MS);
   sys_reboot(SYS_REBOOT_COLD);
   k_sleep(K_FOREVER); /* prevent thread from touching state during reset window */
 }
@@ -161,21 +201,66 @@ void h_reboot(void *) {
 /* ---- task_wdt callback ----------------------------------------------------- */
 
 #if defined(CONFIG_TASK_WDT)
+#if defined(CONFIG_TASK_WDT_HW_FALLBACK)
+/* The armed IWDG must bite before the software backstop, or a hung gate is
+ * reported as a SOFTWARE reset (indistinguishable from the deadline revert). */
+static_assert(WDT_REBOOT_BACKSTOP_MS > CONFIG_TASK_WDT_MIN_TIMEOUT + CONFIG_TASK_WDT_HW_FALLBACK_DELAY,
+              "wdt_cb backstop must be longer than the task_wdt hardware-fallback window");
+#endif
+
+void wdt_backstop_expiry(struct k_timer *) {
+  sys_reboot(SYS_REBOOT_COLD);
+}
+
+struct k_timer g_wdt_backstop; /* initialised in gate_thread before the channel is added */
+
 static void wdt_cb(int channel_id, void *user_data) {
   (void)channel_id;
   (void)user_data;
-  /* Called from the task_wdt kernel-timer context when the channel has not
-   * been fed in time (gate thread stalled, e.g. hung inside sa818_at_connect).
-   * Real reboot path: task_wdt channel timeout → wdt_cb → sys_reboot(COLD) →
-   * MCUboot reverts on next boot (image was never confirmed).
-   * We must reboot here directly; relying on the hw IWDG alone would require
-   * the IWDG to be independently armed, which is only guaranteed when
-   * task_wdt_init() succeeds with a non-NULL hw_wdt.  Calling sys_reboot()
-   * unconditionally closes the gap. */
-  LOG_ERR("task_wdt timeout on boot-confirm gate thread — rebooting for MCUboot revert");
-  sys_reboot(SYS_REBOOT_COLD);
+  /* Called from the task_wdt kernel-timer (ISR) context when the channel was
+   * not fed within WDT_PERIOD_MS — i.e. the gate thread is genuinely hung, not
+   * just waiting out an AT timeout (that is inside the budget).
+   *
+   * After a channel with a callback expires, task_wdt stops feeding the
+   * hardware IWDG, so with the IWDG armed it bites within
+   * CONFIG_TASK_WDT_MIN_TIMEOUT + CONFIG_TASK_WDT_HW_FALLBACK_DELAY.  Letting
+   * it do so (instead of sys_reboot() here) leaves RESET_WATCHDOG as the reset
+   * cause, which the next boot logs — distinguishable from the deadline
+   * revert (RESET_SOFTWARE).  If the IWDG is not armed (task_wdt_init with a
+   * NULL hw_wdt), the one-shot backstop timer reboots instead.  Either way the
+   * image is unconfirmed and MCUboot reverts on the next boot.  The log line
+   * is best-effort: ISR context cannot flush the deferred log. */
+  g_wdt_expired.store(true);
+  LOG_ERR("task_wdt timeout on boot-confirm gate thread — resetting for MCUboot revert");
+  k_timer_start(&g_wdt_backstop, K_MSEC(WDT_REBOOT_BACKSTOP_MS), K_NO_WAIT);
 }
 #endif
+
+/* ---- reset-cause diagnostics ----------------------------------------------- */
+
+void log_reset_cause() {
+  uint32_t cause = 0;
+  if (hwinfo_get_reset_cause(&cause) != 0) {
+    return; /* not supported on this target */
+  }
+  /* RCC_CSR flags are sticky until cleared, so they accumulate over every reset
+   * since the last clear (on STM32U5 a power-on typically shows as BROWNOUT|PIN,
+   * there is no separate POR flag).  We clear on every boot, so from the second
+   * boot of an image carrying this code on, the value describes exactly the
+   * preceding reset; the very first report after an upgrade may be cumulative. */
+  (void)hwinfo_clear_reset_cause();
+  if (cause & RESET_WATCHDOG) {
+    LOG_WRN("reset cause 0x%08x: WATCHDOG (IWDG — e.g. hung boot-confirm gate thread)", cause);
+  } else if (cause & RESET_SOFTWARE) {
+    LOG_INF("reset cause 0x%08x: SOFTWARE (sys_reboot — e.g. health-gate deadline revert, DFU, shell reboot)", cause);
+  } else if (cause & (RESET_POR | RESET_BROWNOUT)) {
+    LOG_INF("reset cause 0x%08x: POWER (power-on / brown-out)", cause);
+  } else if (cause & RESET_PIN) {
+    LOG_INF("reset cause 0x%08x: PIN (NRST)", cause);
+  } else {
+    LOG_INF("reset cause 0x%08x", cause);
+  }
+}
 
 /* ---- thread ---------------------------------------------------------------- */
 
@@ -183,6 +268,8 @@ K_THREAD_STACK_DEFINE(g_stack, 2048);
 struct k_thread g_thread;
 
 void gate_thread(void *, void *, void *) {
+  log_reset_cause();
+
 #if defined(CONFIG_TASK_WDT)
   /* Initialise task_wdt with the hw IWDG as fallback so it actually resets
    * the chip if we stall.  The IWDG node must have status = "okay" in the
@@ -203,6 +290,7 @@ void gate_thread(void *, void *, void *) {
 #endif
     /* Already-confirmed image or bare build: no watchdog revert risk; keep running. */
   } else {
+    k_timer_init(&g_wdt_backstop, wdt_backstop_expiry, NULL);
     g_wdt_channel = task_wdt_add(WDT_PERIOD_MS, wdt_cb, NULL);
     if (g_wdt_channel < 0) {
       LOG_ERR("task_wdt_add rc=%d; HW watchdog NOT armed", g_wdt_channel);
@@ -227,7 +315,7 @@ void gate_thread(void *, void *, void *) {
       {"sa818", probe_sa818, &g_env},
 #endif
   };
-  const GateHooks hooks{h_now, h_sleep, h_confd, h_confirm, h_reboot, nullptr};
+  const GateHooks hooks{h_now, h_sleep, h_confd, h_confirm, h_reboot, h_feed, &g_env};
   const GateConfig cfg{GATE_DEADLINE_MS, GATE_DWELL_MS, GATE_POLL_MS};
 
   GateOutcome outcome = boot::run_health_gate(cfg, hooks, crit, ARRAY_SIZE(crit));

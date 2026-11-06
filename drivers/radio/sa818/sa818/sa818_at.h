@@ -13,6 +13,20 @@
 #ifndef ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AT_H_
 #define ZEPHYR_DRIVERS_SA818_INCLUDE_SA818_SA818_AT_H_
 
+/**
+ * @brief Response timeout of one SA818 AT command, in milliseconds.
+ *
+ * The SA818 answers AT commands within ~1 s; 2000 ms is ample. (The 5000 ms
+ * value was bumped during bring-up while chasing the swapped-PD-GPIO issue and
+ * only served to blow the native_sim test wall-clock, since commands issued
+ * without the AT simulator attached block for the full timeout.)
+ *
+ * Public (and outside the CONFIG_SA818 guard) because callers that poll the
+ * radio from a watchdog-guarded thread must size their watchdog against it —
+ * see app/src/boot_confirm/boot_confirm_timing.h.
+ */
+#define SA818_AT_TIMEOUT_MS 2000
+
 #ifdef CONFIG_SA818
 
 #include <sa818/sa818.h>
