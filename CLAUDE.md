@@ -187,7 +187,7 @@ west twister -T tests/etl -p native_sim/native/64 -v
 Three jobs must be green for every PR and push to `main`:
 - **`clang_format`** — clang-format-18 over `app/`, `boards/`, `tests/`; fails on any diff.
 - **`build_and_tests`** — builds `native_sim`, then runs Twister on `app --integration`, `tests/sim_shell`, `tests/etl`, `tests/boot_confirm`, `tests/unit_boot_key`, `tests/usb_audio` (build-only), `tests/unit_audio`, and `tests/unit_device_uid`.
-- **`prod_build`** — installs MCUboot pip requirements, applies patches, builds `fm_board --sysbuild app` (dev key), and asserts `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` exist.
+- **`prod_build`** — installs MCUboot pip requirements, applies patches, builds `fm_board --sysbuild app` (dev key), and asserts `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` exist, plus the clock split / boot watchdog (app PLL1 ← `clk_hse`, MCUboot PLL1 ← `clk_msis`, MCUboot `BOOT_WATCHDOG_TIMEOUT_MS=10000` + `BOOT_WATCHDOG_FEED=y`, and the `subsys/mcuboot_wdt` override linked instead of MCUboot's weak default).
 
 CI uses `zephyrproject-rtos/action-zephyr-setup@v1`, not the devcontainer.
 
