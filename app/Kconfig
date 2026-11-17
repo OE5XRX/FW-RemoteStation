@@ -25,6 +25,21 @@ config FM_TEST_LOOPBACK
 	  hardware-in-the-loop verification of the host-side audio path without a
 	  working radio link. Default n; never enable in a production build.
 
+config FM_TEST_HANG_BEFORE_MAIN
+	bool "Test-only: hang during boot, before main() (IWDG revert test)"
+	default n
+	depends on BOOTLOADER_MCUBOOT
+	help
+	  Bench test image for the MCUboot boot watchdog. Spins forever in a
+	  PRE_KERNEL_2 init hook — right after the clock driver, before main()
+	  and before the boot-confirm gate arms task_wdt — which is exactly where
+	  a non-starting HSE crystal would leave the app. Loaded as a DFU trial
+	  image it must be reset by the IWDG MCUboot armed
+	  (CONFIG_BOOT_WATCHDOG_TIMEOUT_MS) and reverted to the previous slot.
+	  Never flash it directly into slot0 over SWD: there is no older image
+	  to revert to, so it would reset-loop until reflashed.
+	  Default n; never enable in a production build.
+
 module = APP
 module-str = APP
 source "subsys/logging/Kconfig.template.log_config"

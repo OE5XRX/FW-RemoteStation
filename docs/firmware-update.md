@@ -52,6 +52,13 @@ If the checks don't all pass within the deadline, the firmware deliberately rebo
 image was never confirmed, MCUboot reverts. An independent watchdog (IWDG, via `task_wdt`) covers
 the case where the image hangs before it can even reach the deadline.
 
+MCUboot itself starts that IWDG (10 s, `app/sysbuild/mcuboot.conf`; paused while a debugger halts
+the core) before it jumps to the application, and feeds it during hash/swap. An image that hangs
+before its health-gate thread takes the watchdog over — e.g. in early clock init because the HSE
+crystal does not start (the app runs from HSE, MCUboot from MSIS) — is therefore also reset and
+reverted. A trial image is never confirmed without the gate, so this covers every hang from the
+jump to `main()` onwards.
+
 ---
 
 ## 2. Operator view — manual update over USB

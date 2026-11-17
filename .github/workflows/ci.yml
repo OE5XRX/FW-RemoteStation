@@ -209,3 +209,21 @@ jobs:
           set -euo pipefail
           test -f build/app/zephyr/zephyr.signed.bin
           test -f build/mcuboot/zephyr/zephyr.hex
+
+      - name: Assert clock split + MCUboot boot watchdog
+        # The app image runs PLL1 from the HSE crystal (app/boards/fm_board.overlay)
+        # while MCUboot must stay on MSIS, so a board whose crystal does not start
+        # still reaches MCUboot. MCUboot arms the IWDG (app/sysbuild/mcuboot.conf)
+        # through the fm_board override in subsys/mcuboot_wdt, which must win over
+        # MCUboot's weak default at link time.
+        working-directory: fw
+        shell: bash
+        run: |
+          set -euo pipefail
+          pll1_src() { awk '/^\t\tpll1: pll: pll \{/{f=1} f&&/clocks = /{print; exit}' "$1"; }
+          pll1_src build/app/zephyr/zephyr.dts | grep -q '&clk_hse'
+          pll1_src build/mcuboot/zephyr/zephyr.dts | grep -q '&clk_msis'
+          grep -qx 'CONFIG_BOOT_WATCHDOG_TIMEOUT_MS=10000' build/mcuboot/zephyr/.config
+          grep -qx 'CONFIG_BOOT_WATCHDOG_FEED=y' build/mcuboot/zephyr/.config
+          awk '/^ \.text\.mcuboot_watchdog_setup$/{getline; if ($1 != "0x00000000" && /mcuboot_watchdog\.c\.obj/) found=1} END{exit !found}' \
+            build/mcuboot/zephyr/zephyr.map

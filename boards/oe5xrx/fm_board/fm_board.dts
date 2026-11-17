@@ -60,6 +60,8 @@
 
   aliases {
     sa818 = &sa818;
+    /* MCUboot arms this IWDG before jumping to the app (app/sysbuild/mcuboot.conf). */
+    watchdog0 = &iwdg;
   };
 
 	/*

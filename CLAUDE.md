@@ -104,7 +104,7 @@ This repo carries downstream fixes to west modules under `zephyr/patches/` (inde
 west patch apply
 ```
 
-Currently one patch: the STM32 OTG UDC static TxFIFO allocation
+Currently two patches. First, the STM32 OTG UDC static TxFIFO allocation
 (`drivers/usb/udc/udc_stm32.c`) — **required for UAC2 full-duplex on fm_board**. The
 upstream driver sizes each IN-endpoint TxFIFO dynamically per `ep_enable` and frees it on
 `ep_disable`; because `HAL_PCDEx_SetTxFiFo()` derives a FIFO's offset from the live sizes of
@@ -116,6 +116,14 @@ layout — reservations are recorded per index, grown monotonically, never relea
 and re-programmed in strict index order — so offsets can never shift or overlap. Keeps explicit
 feedback working (no TX clock drift). `west update` resets the module, so re-run `west patch
 apply` afterwards (CI does this automatically after `action-zephyr-setup`).
+
+Second, the STM32U5 clock driver's PLL1 reconfiguration
+(`drivers/clock_control/clock_stm32_ll_u5.c`) — **required for the app's HSE clock**. The app
+image runs PLL1 from the 8 MHz HSE crystal (`app/boards/fm_board.overlay`; MCUboot stays on
+MSIS), so it re-programs a PLL1 that MCUboot left running from MSIS. Upstream rewrote the PLL1
+config right after clearing PLL1ON (RM0456 requires PLL1RDY = 0 first) and left the EPOD booster
+off for HSE <= 16 MHz at 160 MHz; the patch waits for PLL1RDY = 0 and enables the booster for
+HSE/HSI sources too.
 
 (The earlier iso-OUT-incomplete recovery, `HAL_PCD_ISOOUTIncompleteCallback` / zephyr#113622,
 is now upstream at the pinned SHA and no longer carried here.)

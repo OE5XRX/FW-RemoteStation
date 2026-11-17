@@ -15,8 +15,13 @@
  *     CONFIG_FM_BOOT_CONFIRM_SKIP_SA818 is set (bench/HIL builds without a
  *     working radio); production builds always keep this criterion.
  *
- * IWDG / task_wdt: task_wdt is initialised with the hardware IWDG as its
- * fallback.  The gate thread registers one channel with a period of
+ * IWDG / task_wdt: MCUboot already starts the IWDG before jumping here
+ * (CONFIG_BOOT_WATCHDOG_TIMEOUT_MS, app/sysbuild/mcuboot.conf) so a hang
+ * before this thread exists — e.g. the clock driver waiting for an HSE crystal
+ * that never starts — also ends in a reset and a revert.  task_wdt is
+ * initialised with the hardware IWDG as its fallback; its first channel
+ * re-programs the running IWDG to the task_wdt period and from then on the
+ * task_wdt timer keeps it fed.  The gate thread registers one channel with a period of
  * boot::timing::WDT_PERIOD_MS and feeds it after every probe sweep (GateHooks
  * feed hook).  The period is derived from the SA818 AT timeout (see
  * boot_confirm_timing.h): a probe that merely waits out an unanswered
@@ -61,6 +66,7 @@
 #include <sa818/sa818_at.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/hwinfo.h>
+#include <zephyr/drivers/watchdog.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -214,6 +220,38 @@ void wdt_backstop_expiry(struct k_timer *) {
 
 struct k_timer g_wdt_backstop; /* initialised in gate_thread before the channel is added */
 
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+/* Keeps feeding the IWDG MCUboot started when task_wdt could not take it over
+ * (see wdt_arm_failed); well inside CONFIG_BOOT_WATCHDOG_TIMEOUT_MS. */
+constexpr int32_t IWDG_KEEPALIVE_MS = 1000;
+
+void iwdg_keepalive_expiry(struct k_timer *) {
+  (void)wdt_feed(DEVICE_DT_GET(DT_NODELABEL(iwdg)), 0);
+}
+
+K_TIMER_DEFINE(g_iwdg_keepalive, iwdg_keepalive_expiry, NULL);
+#endif
+
+/* task_wdt could not arm the IWDG for the gate thread.  On a trial boot the
+ * watchdog is the only backstop against a hung probe blocking the gate thread
+ * indefinitely; without it the image would stay unconfirmed with no
+ * deterministic revert path, so reboot now and let MCUboot revert.  An
+ * already-confirmed image (or the bare build) keeps running unwatched — but
+ * MCUboot has already started the IWDG, which nobody would feed any more, so a
+ * keep-alive timer feeds it instead of resetting a good image every few
+ * seconds. */
+static void wdt_arm_failed(void) {
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+  if (!boot_is_img_confirmed()) {
+    LOG_ERR("trial boot — rebooting for deterministic MCUboot revert");
+    sys_reboot(SYS_REBOOT_COLD);
+  }
+  if (device_is_ready(DEVICE_DT_GET(DT_NODELABEL(iwdg)))) {
+    k_timer_start(&g_iwdg_keepalive, K_NO_WAIT, K_MSEC(IWDG_KEEPALIVE_MS));
+  }
+#endif
+}
+
 static void wdt_cb(int channel_id, void *user_data) {
   (void)channel_id;
   (void)user_data;
@@ -278,29 +316,14 @@ void gate_thread(void *, void *, void *) {
   int init_rc = task_wdt_init(device_is_ready(hw_wdt) ? hw_wdt : NULL);
   if (init_rc != 0) {
     LOG_ERR("task_wdt_init rc=%d; HW watchdog NOT armed", init_rc);
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
-    /* On a trial boot the watchdog is the only backstop against a hung probe
-     * blocking the gate thread indefinitely.  Without it the image would stay
-     * unconfirmed with no deterministic revert path.  Reboot now so MCUboot
-     * reverts to the previous slot rather than leaving the device stranded. */
-    if (!boot_is_img_confirmed()) {
-      LOG_ERR("trial boot — rebooting for deterministic MCUboot revert");
-      sys_reboot(SYS_REBOOT_COLD);
-    }
-#endif
-    /* Already-confirmed image or bare build: no watchdog revert risk; keep running. */
+    wdt_arm_failed();
   } else {
     k_timer_init(&g_wdt_backstop, wdt_backstop_expiry, NULL);
     g_wdt_channel = task_wdt_add(WDT_PERIOD_MS, wdt_cb, NULL);
     if (g_wdt_channel < 0) {
       LOG_ERR("task_wdt_add rc=%d; HW watchdog NOT armed", g_wdt_channel);
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
-      if (!boot_is_img_confirmed()) {
-        LOG_ERR("trial boot — rebooting for deterministic MCUboot revert");
-        sys_reboot(SYS_REBOOT_COLD);
-      }
-#endif
       g_wdt_channel = -1;
+      wdt_arm_failed();
     }
   }
 #endif /* CONFIG_TASK_WDT */

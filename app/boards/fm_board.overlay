@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) 2026 OE5XRX
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ *
+ * fm_board application clock tree: SYSCLK from the 8 MHz HSE crystal.
+ *
+ * The board DTS (boards/oe5xrx/fm_board/fm_board.dts) runs PLL1 from MSIS
+ * 4 MHz. MSIS is uncalibrated without LSE (it is ~0.65 % fast on the real
+ * board), and every audio sample clock is derived from SYSCLK: TIM6 (ADC
+ * capture trigger) and TIM7 (DAC playback trigger) divide 160 MHz down to
+ * 8 kHz. The UAC2 IN stream therefore delivered ~8052 instead of 8000
+ * samples/s, which the host-side PipeWire graph inherits.
+ *
+ * Y201 (8 MHz, CL 20 pF, two-pin crystal on PH0/PH1 with C203/C205 load caps)
+ * is populated, so the application switches PLL1 to HSE:
+ *   8 MHz / M=1 = 8 MHz VCO input (8..16 MHz range)
+ *   x N=40       = 320 MHz VCO (same VCO frequency as the MSIS setup)
+ *   / R=2        = 160 MHz SYSCLK, / Q=2 = 160 MHz PLL1Q (both unchanged)
+ * so every bus and timer clock stays exactly where it was — only the
+ * reference changes from MSIS to the crystal.
+ *
+ * This overlay is app-only on purpose: sysbuild picks up app/boards/ only for
+ * the application image, so MCUboot keeps booting from MSIS. A board whose
+ * crystal does not start then still reaches MCUboot, which arms the IWDG
+ * before jumping (app/sysbuild/mcuboot.conf); the app hangs in the clock
+ * driver's HSERDY wait, the IWDG resets the chip and MCUboot reverts the
+ * unconfirmed trial image.
+ *
+ * USB keeps its own 48 MHz kernel clock (HSI48), unaffected by this change.
+ */
+
+&clk_hse {
+	clock-frequency = <DT_FREQ_M(8)>;
+	status = "okay";
+};
+
+&pll1 {
+	div-m = <1>;
+	mul-n = <40>;
+	div-q = <2>;
+	div-r = <2>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
