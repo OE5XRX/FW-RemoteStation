@@ -278,7 +278,9 @@ enum sa818_filter_flags : uint8_t {
  * @brief Configure audio filters
  *
  * @param dev SA818 device
- * @param filters Filter flags (OR'ed combination of sa818_filter_flags)
+ * @param filters Filter flags (OR'ed combination of sa818_filter_flags); a set flag means the
+ *                filter is active. The driver translates to the SA818 wire polarity
+ *                (0 = normal/active, 1 = bypass).
  * @return SA818_OK on success, error code on failure
  */
 [[nodiscard]] enum sa818_result sa818_at_set_filters(const struct device *dev, enum sa818_filter_flags filters);

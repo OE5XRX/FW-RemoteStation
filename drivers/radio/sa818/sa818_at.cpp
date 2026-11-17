@@ -337,7 +337,8 @@ sa818_result sa818_at_set_volume(const struct device *dev, sa818_volume_level vo
 /**
  * @brief Configure audio filters
  *
- * AT+SETFILTER=PRE,HPF,LPF where each is 0 or 1
+ * AT+SETFILTER=PRE,HPF,LPF. Wire polarity is inverted w.r.t. the flags: per field
+ * 0 = filter normal (active), 1 = filter bypass (NiceRF SA818 Programming Manual §3.5).
  */
 sa818_result sa818_at_set_filters(const struct device *dev, sa818_filter_flags filters) {
   char cmd[64];
@@ -352,7 +353,7 @@ sa818_result sa818_at_set_filters(const struct device *dev, sa818_filter_flags f
   bool high_pass = (filters & SA818_FILTER_HIGH_PASS) != 0;
   bool low_pass = (filters & SA818_FILTER_LOW_PASS) != 0;
 
-  snprintf(cmd, sizeof(cmd), "AT+SETFILTER=%d,%d,%d", pre_emphasis ? 1 : 0, high_pass ? 1 : 0, low_pass ? 1 : 0);
+  snprintf(cmd, sizeof(cmd), "AT+SETFILTER=%d,%d,%d", pre_emphasis ? 0 : 1, high_pass ? 0 : 1, low_pass ? 0 : 1);
 
   sa818_result ret = sa818_at_send_command(dev, cmd, response, sizeof(response), SA818_AT_TIMEOUT_MS);
   if (ret != SA818_OK) {
