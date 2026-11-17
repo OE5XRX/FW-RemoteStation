@@ -63,6 +63,17 @@ def test_setfilter_ack(sim):
     assert sim._process_command("AT+SETFILTER=1,1,1") == "+DMOSETFILTER:0"
 
 
+def test_setfilter_wire_polarity_matches_datasheet(sim):
+    # NiceRF SA818 Programming Manual §3.5: per field 0 = filter normal (active),
+    # 1 = filter bypass. The simulator state models "filter active".
+    sim._process_command("AT+SETFILTER=1,1,1")
+    assert (sim.state.pre_emphasis, sim.state.high_pass, sim.state.low_pass) == (False, False, False)
+    sim._process_command("AT+SETFILTER=0,0,0")
+    assert (sim.state.pre_emphasis, sim.state.high_pass, sim.state.low_pass) == (True, True, True)
+    sim._process_command("AT+SETFILTER=1,0,1")
+    assert (sim.state.pre_emphasis, sim.state.high_pass, sim.state.low_pass) == (False, True, False)
+
+
 def test_dmoconnect_and_at(sim):
     assert sim._process_command("AT+DMOCONNECT") == "+DMOCONNECT:0"
     assert sim._process_command("AT") == "+DMOCONNECT:0"

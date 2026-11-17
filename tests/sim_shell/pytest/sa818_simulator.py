@@ -172,12 +172,13 @@ class SA818Simulator:
                 return "+DMOSETVOLUME:1"  # Error
         
         # SETFILTER: Set audio filters
-        # Format: AT+SETFILTER=PRE,HPF,LPF
+        # Format: AT+SETFILTER=PRE,HPF,LPF -- per field 0 = filter normal (active),
+        # 1 = bypass (NiceRF SA818 Programming Manual §3.5). State stores "active".
         m = re.match(r'AT\+SETFILTER=(\d+),(\d+),(\d+)', cmd, re.IGNORECASE)
         if m:
-            self.state.pre_emphasis = bool(int(m.group(1)))
-            self.state.high_pass = bool(int(m.group(2)))
-            self.state.low_pass = bool(int(m.group(3)))
+            self.state.pre_emphasis = int(m.group(1)) == 0
+            self.state.high_pass = int(m.group(2)) == 0
+            self.state.low_pass = int(m.group(3)) == 0
             return "+DMOSETFILTER:0"
         
         # RSSI?: Read signal strength
