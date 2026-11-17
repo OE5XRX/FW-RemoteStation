@@ -38,7 +38,8 @@
  * Diagnostics: every boot logs (and clears) the hardware reset cause, so a
  * revert is attributable from the log of the next boot of an image carrying
  * this code: SOFTWARE = health-gate deadline (or any sys_reboot), WATCHDOG =
- * stalled gate thread / IWDG.
+ * stalled gate thread, or a hang before the gate took the IWDG over (e.g. HSE
+ * start-up — MCUboot arms the IWDG before the jump).
  *
  * task_wdt is compiled in only when CONFIG_TASK_WDT is set (prod/sysbuild
  * build).  In the bare build CONFIG_TASK_WDT is not set, so the watchdog block
@@ -288,7 +289,7 @@ void log_reset_cause() {
    * preceding reset; the very first report after an upgrade may be cumulative. */
   (void)hwinfo_clear_reset_cause();
   if (cause & RESET_WATCHDOG) {
-    LOG_WRN("reset cause 0x%08x: WATCHDOG (IWDG — e.g. hung boot-confirm gate thread)", cause);
+    LOG_WRN("reset cause 0x%08x: WATCHDOG (IWDG — hung boot-confirm gate thread, or a hang before the gate started, e.g. HSE start-up)", cause);
   } else if (cause & RESET_SOFTWARE) {
     LOG_INF("reset cause 0x%08x: SOFTWARE (sys_reboot — e.g. health-gate deadline revert, DFU, shell reboot)", cause);
   } else if (cause & (RESET_POR | RESET_BROWNOUT)) {
