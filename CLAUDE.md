@@ -114,8 +114,10 @@ endpoints (iso-OUT playback + iso-IN explicit feedback 0x83 + iso-IN capture 0x8
 wedges the OTG core: every IN endpoint (incl. CDC-ACM) stops, no reboot. The patch freezes the
 layout — reservations are recorded per index, grown monotonically, never released on disable,
 and re-programmed in strict index order — so offsets can never shift or overlap. Keeps explicit
-feedback working (no TX clock drift). `west update` resets the module, so re-run `west patch
-apply` afterwards (CI does this automatically after `action-zephyr-setup`).
+feedback working (no TX clock drift). `west patch apply` fails on an already-patched tree, and
+`west update` does **not** revert local modifications while the pin is unchanged — so use
+`west patch clean && west patch apply` after `west update` (CI applies them on a fresh checkout
+after `action-zephyr-setup`).
 
 Second, the STM32U5 clock driver's PLL1 reconfiguration
 (`drivers/clock_control/clock_stm32_ll_u5.c`) — **required for the app's HSE clock**. The app

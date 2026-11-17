@@ -26,6 +26,12 @@
  * driver's HSERDY wait, the IWDG resets the chip and MCUboot reverts the
  * unconfirmed trial image.
  *
+ * Rollout order: that safety net lives in MCUboot, which DFU never updates.
+ * A board still running an MCUboot from before this change has no IWDG until
+ * the app's task_wdt starts, so an HSE hang there would sit until a power
+ * cycle. Re-flash MCUboot over SWD before the first HSE app reaches a board
+ * (docs/firmware-update.md, "Rollout order"; SWD flash in §2a).
+ *
  * USB keeps its own 48 MHz kernel clock (HSI48), unaffected by this change.
  */
 

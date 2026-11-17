@@ -52,14 +52,29 @@ const char *pll1_src_name(uint32_t src) {
   }
 }
 
+/* SYSCLK as programmed in the RCC (not the driver's SystemCoreClock, which is
+ * the configured value): PLL1 input / M * N / R, AHB prescaler 1. */
+uint32_t pll1r_hz_from_hse() {
+  const uint32_t m = LL_RCC_PLL1_GetDivider();
+  const uint32_t r = LL_RCC_PLL1_GetR();
+  if (m == 0U || r == 0U) {
+    return 0U;
+  }
+  return static_cast<uint32_t>(static_cast<uint64_t>(DT_PROP(DT_NODELABEL(clk_hse), clock_frequency)) / m * LL_RCC_PLL1_GetN() / r);
+}
+
 int cmd_sysclk(const struct shell *sh, size_t argc, char **argv) {
   ARG_UNUSED(argc);
   ARG_UNUSED(argv);
   const uint32_t sws = LL_RCC_GetSysClkSource();
   const uint32_t pll1_src = LL_RCC_PLL1_GetMainSource();
-  const bool ok = sws == LL_RCC_SYS_CLKSOURCE_STATUS_PLL1 && pll1_src == LL_RCC_PLL1SOURCE_HSE && LL_RCC_HSE_IsReady() != 0U;
-  shell_print(sh, "SYSCLK %s pll1=%s hse_ready=%u epod_boost=%u hclk=%u %s", sysclk_name(sws), pll1_src_name(pll1_src), LL_RCC_HSE_IsReady(),
-              LL_PWR_IsEnabledEPODBooster(), static_cast<unsigned int>(SystemCoreClock), ok ? "OK" : "NOT-ON-HSE");
+  const uint32_t hse_ready = LL_RCC_HSE_IsReady();
+  const uint32_t boost = LL_PWR_IsEnabledEPODBooster();
+  const bool on_hse = sws == LL_RCC_SYS_CLKSOURCE_STATUS_PLL1 && pll1_src == LL_RCC_PLL1SOURCE_HSE && hse_ready != 0U;
+  const uint32_t sysclk_hz = on_hse ? pll1r_hz_from_hse() : 0U;
+  const bool ok = on_hse && sysclk_hz == DT_PROP(DT_NODELABEL(rcc), clock_frequency) && boost != 0U;
+  shell_print(sh, "SYSCLK %s pll1=%s hse_ready=%u epod_boost=%u sysclk=%u %s", sysclk_name(sws), pll1_src_name(pll1_src), hse_ready, boost,
+              static_cast<unsigned int>(sysclk_hz), ok ? "OK" : "NOT-ON-HSE");
   return ok ? 0 : -EIO;
 }
 

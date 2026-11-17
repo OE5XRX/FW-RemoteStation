@@ -59,6 +59,11 @@ crystal does not start (the app runs from HSE, MCUboot from MSIS) — is therefo
 reverted. A trial image is never confirmed without the gate, so this covers every hang from the
 jump to `main()` onwards.
 
+**Rollout order:** the boot watchdog is part of MCUboot, and DFU only ever replaces the app. A
+board whose MCUboot predates it (no IWDG before the app's task_wdt) must get the new MCUboot over
+SWD (§2a) **before** it receives an app that runs from the HSE crystal. Otherwise a crystal that
+fails to start leaves the board hanging until a power cycle, not reverting.
+
 ---
 
 ## 2. Operator view — manual update over USB
