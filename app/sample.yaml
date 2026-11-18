@@ -34,3 +34,19 @@ tests:
       - fm_board
     integration_platforms:
       - fm_board
+  fm.app.test_hang_before_main.build:
+    # Build-only: the IWDG revert test image (CONFIG_FM_TEST_HANG_BEFORE_MAIN=y)
+    # compiles. It depends on BOOTLOADER_MCUBOOT, so this mirrors the sysbuild
+    # app image (prod fragment app/sysbuild/app.conf) without building MCUboot
+    # or signing. The runtime check (IWDG reset + MCUboot revert) is a HIL-bench
+    # step, see docs/firmware-update.md.
+    build_only: true
+    extra_args:
+      - EXTRA_CONF_FILE=sysbuild/app.conf
+    extra_configs:
+      - CONFIG_BOOTLOADER_MCUBOOT=y
+      - CONFIG_FM_TEST_HANG_BEFORE_MAIN=y
+    platform_allow:
+      - fm_board
+    integration_platforms:
+      - fm_board

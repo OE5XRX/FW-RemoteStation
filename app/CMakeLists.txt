@@ -30,11 +30,16 @@ elseif (CONFIG_USB_DEVICE_STACK_NEXT)
         src/feedback.cpp
         src/boot_confirm/health_gate.cpp
         src/boot_confirm/boot_confirm_fm.cpp
+        src/sysclk_shell.cpp
     )
     target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/boot_confirm)
     # DFU runtime->DFU-mode switch is prod-only (MCUboot); guard so the bare build never compiles it.
     if(CONFIG_BOOTLOADER_MCUBOOT)
         target_sources(app PRIVATE src/dfu_mode.cpp)
+    endif()
+    # Test-only boot hang for the MCUboot IWDG revert test; default-off Kconfig.
+    if(CONFIG_FM_TEST_HANG_BEFORE_MAIN)
+        target_sources(app PRIVATE src/test_hang_before_main.cpp)
     endif()
     # Test-only bench loopback shell command (SA818 bypass); default-off Kconfig.
     if(CONFIG_FM_TEST_LOOPBACK)

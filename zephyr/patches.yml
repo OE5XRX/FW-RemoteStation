@@ -29,3 +29,29 @@ patches:
       order endpoints are enabled or how often an alternate setting is toggled.
       Keeps explicit feedback (three iso EPs) working without drift. Fixes the
       UAC2 full-duplex wedge on fm_board (STM32U575, OTG_FS).
+  - path: zephyr/0002-clock-stm32-u5-pll1-reconfig-hse.patch
+    sha256sum: 17f4fbcac9d496941c45d7b973dcb741224737eb362a9e207417cc861630d98f
+    module: zephyr
+    author: Peter Buchegger
+    email: peter.buchegger7@gmail.com
+    date: 2026-11-17
+    upstreamable: true
+    issue: https://github.com/zephyrproject-rtos/zephyr/issues
+    comments: >
+      Two fixes in the STM32U5 clock driver's PLL1 (re)configuration, both hit
+      when fm_board's app image moves PLL1 from MSIS (left running by MCUboot)
+      to its 8 MHz HSE crystal (M=1, N=40, R=2 -> 160 MHz).
+      (1) set_up_plls() cleared PLL1ON and immediately rewrote PLL1CFGR/DIVR.
+      RM0456 only allows those writes once PLL1ON = 0 and PLL1RDY = 0 (the ST
+      HAL waits for PLL1RDY to clear); a write that lands while PLL1RDY is still
+      set may be ignored, leaving the PLL on its old source. Harmless while
+      bootloader and app used identical settings, not once the source changes.
+      The patch waits for PLL1RDY = 0 before reprogramming.
+      (2) set_epod_booster() only enabled the EPOD booster (PWR_VOSR.BOOSTEN)
+      for MSIS or an HSE above 16 MHz; for HSE <= 16 MHz and HSI16 it returned
+      with the booster cleared, so SYSCLK was raised to 160 MHz in range 1
+      without it. RM0456 requires BOOSTEN in range 1/2 before SYSCLK exceeds
+      55 MHz and the ST HAL always sets it. The patch derives the booster
+      prescaler from the PLL1 input for HSE and HSI16 too (8 MHz HSE -> div1,
+      EPOD clock 8 MHz, inside the 4..16 MHz window). The MSIS path is
+      unchanged.

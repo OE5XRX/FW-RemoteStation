@@ -104,7 +104,7 @@ This repo carries downstream fixes to west modules under `zephyr/patches/` (inde
 west patch apply
 ```
 
-Currently one patch: the STM32 OTG UDC static TxFIFO allocation
+Currently two patches. First, the STM32 OTG UDC static TxFIFO allocation
 (`drivers/usb/udc/udc_stm32.c`) — **required for UAC2 full-duplex on fm_board**. The
 upstream driver sizes each IN-endpoint TxFIFO dynamically per `ep_enable` and frees it on
 `ep_disable`; because `HAL_PCDEx_SetTxFiFo()` derives a FIFO's offset from the live sizes of
@@ -114,8 +114,18 @@ endpoints (iso-OUT playback + iso-IN explicit feedback 0x83 + iso-IN capture 0x8
 wedges the OTG core: every IN endpoint (incl. CDC-ACM) stops, no reboot. The patch freezes the
 layout — reservations are recorded per index, grown monotonically, never released on disable,
 and re-programmed in strict index order — so offsets can never shift or overlap. Keeps explicit
-feedback working (no TX clock drift). `west update` resets the module, so re-run `west patch
-apply` afterwards (CI does this automatically after `action-zephyr-setup`).
+feedback working (no TX clock drift). `west patch apply` fails on an already-patched tree, and
+`west update` does **not** revert local modifications while the pin is unchanged — so use
+`west patch clean && west patch apply` after `west update` (CI applies them on a fresh checkout
+after `action-zephyr-setup`).
+
+Second, the STM32U5 clock driver's PLL1 reconfiguration
+(`drivers/clock_control/clock_stm32_ll_u5.c`) — **required for the app's HSE clock**. The app
+image runs PLL1 from the 8 MHz HSE crystal (`app/boards/fm_board.overlay`; MCUboot stays on
+MSIS), so it re-programs a PLL1 that MCUboot left running from MSIS. Upstream rewrote the PLL1
+config right after clearing PLL1ON (RM0456 requires PLL1RDY = 0 first) and left the EPOD booster
+off for HSE <= 16 MHz at 160 MHz; the patch waits for PLL1RDY = 0 and enables the booster for
+HSE/HSI sources too.
 
 (The earlier iso-OUT-incomplete recovery, `HAL_PCD_ISOOUTIncompleteCallback` / zephyr#113622,
 is now upstream at the pinned SHA and no longer carried here.)
@@ -177,7 +187,7 @@ west twister -T tests/etl -p native_sim/native/64 -v
 Three jobs must be green for every PR and push to `main`:
 - **`clang_format`** — clang-format-18 over `app/`, `boards/`, `tests/`; fails on any diff.
 - **`build_and_tests`** — builds `native_sim`, then runs Twister on `app --integration`, `tests/sim_shell`, `tests/etl`, `tests/boot_confirm`, `tests/unit_boot_key`, `tests/usb_audio` (build-only), `tests/unit_audio`, and `tests/unit_device_uid`.
-- **`prod_build`** — installs MCUboot pip requirements, applies patches, builds `fm_board --sysbuild app` (dev key), and asserts `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` exist.
+- **`prod_build`** — installs MCUboot pip requirements, applies patches, builds `fm_board --sysbuild app` (dev key), and asserts `build/app/zephyr/zephyr.signed.bin` + `build/mcuboot/zephyr/zephyr.hex` exist, plus the clock split / boot watchdog (app PLL1 ← `clk_hse`, MCUboot PLL1 ← `clk_msis`, MCUboot `BOOT_WATCHDOG_TIMEOUT_MS=10000` + `BOOT_WATCHDOG_FEED=y`, and the `subsys/mcuboot_wdt` override linked instead of MCUboot's weak default).
 
 CI uses `zephyrproject-rtos/action-zephyr-setup@v1`, not the devcontainer.
 

@@ -1,0 +1,47 @@
+diff --git a/drivers/clock_control/clock_stm32_ll_u5.c b/drivers/clock_control/clock_stm32_ll_u5.c
+index 9eeab61b417..8492cf64f55 100644
+--- a/drivers/clock_control/clock_stm32_ll_u5.c
++++ b/drivers/clock_control/clock_stm32_ll_u5.c
+@@ -493,11 +493,12 @@ static void set_regu_voltage(uint32_t hclk_freq, uint32_t wanted_scale)
+ /*
+  * Dynamic voltage scaling:
+  * Enable the Booster mode before enabling then PLL for sysclock above 55MHz
++ * (PWR_VOSR.BOOSTEN must be set in range 1 and 2 before raising SYSCLK above
++ * 55 MHz, whatever the PLL1 source).
+  * The goal of this function is to set the epod prescaler, so that epod clock freq
+  * is between 4MHz and 16MHz.
+- * Up to now only MSI as PLL1 source clock can be > 16MHz, requiring a epod prescaler > 1
+- * For HSI16, epod prescaler is default (div1, not divided).
+- * Once HSE is > 16MHz, the epod prescaler would also be also required.
++ * The prescaler is derived from the PLL1 input frequency for every source
++ * (MSIS, HSE or HSI16), targeting ~8 MHz.
+  */
+ static void set_epod_booster(void)
+ {
+@@ -525,8 +526,10 @@ static void set_epod_booster(void)
+ 		if (IS_ENABLED(STM32_PLL_SRC_MSIS)) {
+ 			tmp = __LL_RCC_CALC_MSIS_FREQ(LL_RCC_MSIRANGESEL_RUN,
+ 			 STM32_MSIS_RANGE << RCC_ICSCR1_MSISRANGE_Pos);
+-		} else if (IS_ENABLED(STM32_PLL_SRC_HSE) && (MHZ(16) < STM32_HSE_FREQ)) {
++		} else if (IS_ENABLED(STM32_PLL_SRC_HSE)) {
+ 			tmp = STM32_HSE_FREQ;
++		} else if (IS_ENABLED(STM32_PLL_SRC_HSI)) {
++			tmp = STM32_HSI_FREQ;
+ 		} else {
+ 			return;
+ 		}
+@@ -586,6 +589,14 @@ static int set_up_plls(void)
+ 	}
+ 
+ 	LL_RCC_PLL1_Disable();
++	/*
++	 * PLL1CFGR/PLL1DIVR fields (source, M, N, R, ...) can only be written
++	 * once the PLL is fully stopped (PLL1ON = 0 and PLL1RDY = 0); writes
++	 * issued while PLL1RDY is still set may be ignored. This matters when a
++	 * bootloader left PLL1 running from a different source.
++	 */
++	while (LL_RCC_PLL1_IsReady() != 0U) {
++	}
+ 
+ 	/* Configure PLL source : Can be HSE, HSI, MSIS */
+ 	if (IS_ENABLED(STM32_PLL_SRC_HSE)) {
